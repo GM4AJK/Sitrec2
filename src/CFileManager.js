@@ -1,8 +1,11 @@
 import {
     areArrayBuffersEqual,
-    cleanCSVText, disableAllInput, enableAllInput,
+    cleanCSVText,
+    disableAllInput,
+    enableAllInput,
     getFileExtension,
-    isHttpOrHttps, parseBoolean, radians,
+    isHttpOrHttps,
+    parseBoolean,
     versionString
 } from "./utils";
 import JSZip from "jszip";
@@ -25,6 +28,7 @@ import {isCustom1, isFR24CSV, parseCustom1CSV, parseCustomFLLCSV, parseFR24CSV} 
 import {stripDuplicateTimes} from "./ParseUtils";
 import {isConsole, isLocal, SITREC_APP, SITREC_DOMAIN, SITREC_SERVER} from "./configUtils";
 import {resetGlobalOrigin} from "./ResetOrigin";
+import {TSParser} from "./TSParser";
 
 
 // The file manager is a singleton that manages all the files
@@ -932,6 +936,14 @@ export class CFileManager extends CManager {
     parseAsset(filename, id, buffer) {
 
 //        console.log("parseAsset(" + filename + "," + id + ",<buffer>)")
+        
+        // Check if it's a TS file first
+        if (filename.toLowerCase().endsWith('.ts')) {
+            return TSParser.parseTSFile(filename, id, buffer, (streamFilename, streamId, streamData) => {
+                return this.parseAsset(streamFilename, streamId, streamData);
+            });
+        }
+        
         // if it's a zip file, then we need to extract the file
         // and then parse that.
 
