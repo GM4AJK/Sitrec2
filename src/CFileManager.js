@@ -28,7 +28,7 @@ import {isCustom1, isFR24CSV, parseCustom1CSV, parseCustomFLLCSV, parseFR24CSV} 
 import {stripDuplicateTimes} from "./ParseUtils";
 import {isConsole, isLocal, SITREC_APP, SITREC_DOMAIN, SITREC_SERVER} from "./configUtils";
 import {resetGlobalOrigin} from "./ResetOrigin";
-import {TSParser} from "./TSParser";
+import {probeTransportStreamBufferDetailed, TSParser} from "./TSParser";
 
 
 // The file manager is a singleton that manages all the files
@@ -939,6 +939,15 @@ export class CFileManager extends CManager {
         
         // Check if it's a TS file first
         if (filename.toLowerCase().endsWith('.ts')) {
+
+          //  const probe = probeTransportStreamBuffer(buffer);
+            const probe = probeTransportStreamBufferDetailed(buffer);
+            // and as JSON, pretty formatted
+            console.log(JSON.stringify(probe, null, 2));
+
+            debugger;
+
+
             return TSParser.parseTSFile(filename, id, buffer, (streamFilename, streamId, streamData) => {
                 return this.parseAsset(streamFilename, streamId, streamData);
             });
