@@ -1,4 +1,3 @@
-import {debugLog} from "./Globals";
 
 /**
  * Transport Stream (TS) Parser
@@ -38,228 +37,155 @@ export class TSParser {
     }
 
     /**
-     * Extract streams from TS buffer
+     * Extract streams from TS buffer using proper PSI parsing
      * @param {ArrayBuffer} buffer - The TS file buffer
      * @returns {Array} Array of extracted streams
      */
     static extractTSStreams(buffer) {
-        const streams = [];
-        const uint8Array = new Uint8Array(buffer);
-        const packetSize = 188; // Standard TS packet size
-        const streamData = new Map(); // PID -> accumulated data
-        const streamTypes = new Map(); // PID -> stream type info
-        const pmtPids = new Set(); // PMT PIDs from PAT
-        const elementaryPids = new Set(); // Elementary stream PIDs from PMT
+        try {
+            // Use the new detailed analysis to get stream information
+            const analysis = TSParser.probeTransportStreamBufferDetailed(buffer);
+            
+            if (!analysis.programs || analysis.programs.length === 0) {
+                console.log('extractTSStreams: No programs found in transport stream');
+                return [];
+            }
 
-        let packetCount = 0;
-        let syncErrors = 0;
-        const pidCounts = new Map(); // Track packet counts per PID
-
-        // Parse TS packets
-        for (let offset = 0; offset < uint8Array.length - packetSize; offset += packetSize) {
-            packetCount++;
-            // Check for sync byte (0x47)
-            if (uint8Array[offset] !== 0x47) {
-                syncErrors++;
-                // Try to find next sync byte
-                let found = false;
-                for (let i = offset + 1; i < uint8Array.length - packetSize; i++) {
-                    if (uint8Array[i] === 0x47) {
-                        offset = i;
-                        found = true;
-                        break;
-                    }
-                }
-                if (!found) {
-                    break;
+            const streams = [];
+            const uint8Array = new Uint8Array(buffer);
+            const streamData = new Map(); // PID -> accumulated data
+            
+            // Get elementary stream PIDs and their types from analysis
+            const elementaryStreams = new Map(); // PID -> stream info
+            for (const program of analysis.programs) {
+                for (const stream of program.streams) {
+                    const pid = parseInt(stream.id, 16);
+                    elementaryStreams.set(pid, {
+                        codec_name: stream.codec_name,
+                        codec_type: stream.codec_type,
+                        stream_type: stream.stream_type,
+                        descriptors: stream.descriptors
+                    });
                 }
             }
 
-            // Parse TS header
-            const header1 = uint8Array[offset + 1];
-            const header2 = uint8Array[offset + 2];
-            const header3 = uint8Array[offset + 3];
+            console.log(`extractTSStreams: Found ${elementaryStreams.size} elementary streams to extract`);
 
-            const transportErrorIndicator = (header1 & 0x80) !== 0;
-            const payloadUnitStartIndicator = (header1 & 0x40) !== 0;
-            const transportPriority = (header1 & 0x20) !== 0;
-            const pid = ((header1 & 0x1F) << 8) | header2;
-            const scramblingControl = (header3 & 0xC0) >> 6;
-            const adaptationFieldControl = (header3 & 0x30) >> 4;
-            const continuityCounter = header3 & 0x0F;
-
-            // Track PID counts
-            pidCounts.set(pid, (pidCounts.get(pid) || 0) + 1);
-
-            // Skip error packets
-            if (transportErrorIndicator) {
-                continue;
-            }
-
-            // Skip null packets (PID 0x1FFF)
-            if (pid === 0x1FFF) continue;
-
-            let payloadStart = 4;
-
-            // Handle adaptation field
-            if (adaptationFieldControl === 2 || adaptationFieldControl === 3) {
-                const adaptationFieldLength = uint8Array[offset + 4];
-                payloadStart += 1 + adaptationFieldLength;
-            }
-
-            // Skip if no payload
-            if (adaptationFieldControl === 2) continue;
-
-            // Handle PAT (Program Association Table) - PID 0
-            if (pid === 0) {
-                if (payloadUnitStartIndicator && payloadStart < packetSize) {
-                    let pos = offset + payloadStart;
-                    const pointer = uint8Array[pos];
-                    pos += 1 + pointer;
-
-                    const table_id = uint8Array[pos];
-                    if (table_id !== 0) continue;
-
-                    const section_syntax = (uint8Array[pos + 1] & 0x80) >> 7;
-                    if (section_syntax !== 1) continue;
-
-                    const section_length = ((uint8Array[pos + 1] & 0x0F) << 8) | uint8Array[pos + 2];
-                    pos += 3;
-                    pos += 5; // Skip transport_stream_id (2), version (1), current_next/section_num/last_section (3)
-
-                    let remaining = section_length - 9;
-                    while (remaining >= 4) {
-                        const program_num = (uint8Array[pos] << 8) | uint8Array[pos + 1];
-                        pos += 2;
-                        const program_pid = ((uint8Array[pos] & 0x1F) << 8) | uint8Array[pos + 1];
-                        pos += 2;
-                        remaining -= 4;
-
-                        if (program_num !== 0) {
-                            pmtPids.add(program_pid);
+            // Extract payload data for each elementary stream
+            const packetSize = 188;
+            for (let offset = 0; offset < uint8Array.length - packetSize; offset += packetSize) {
+                // Check for sync byte (0x47)
+                if (uint8Array[offset] !== 0x47) {
+                    // Try to find next sync byte
+                    let found = false;
+                    for (let i = offset + 1; i < uint8Array.length - packetSize; i++) {
+                        if (uint8Array[i] === 0x47) {
+                            offset = i;
+                            found = true;
+                            break;
                         }
                     }
+                    if (!found) break;
                 }
-                continue;
-            }
 
-            // Handle PMT (Program Map Table)
-            if (pmtPids.has(pid)) {
-                if (payloadUnitStartIndicator && payloadStart < packetSize) {
-                    let pos = offset + payloadStart;
-                    const pointer = uint8Array[pos];
-                    pos += 1 + pointer;
+                // Parse TS header
+                const header1 = uint8Array[offset + 1];
+                const header2 = uint8Array[offset + 2];
+                const header3 = uint8Array[offset + 3];
 
-                    const table_id = uint8Array[pos];
-                    if (table_id !== 2) continue;
+                const transportErrorIndicator = (header1 & 0x80) !== 0;
+                const pid = ((header1 & 0x1F) << 8) | header2;
+                const adaptationFieldControl = (header3 & 0x30) >> 4;
 
-                    const section_syntax = (uint8Array[pos + 1] & 0x80) >> 7;
-                    if (section_syntax !== 1) continue;
+                // Skip error packets and null packets
+                if (transportErrorIndicator || pid === 0x1FFF) continue;
 
-                    const section_length = ((uint8Array[pos + 1] & 0x0F) << 8) | uint8Array[pos + 2];
-                    pos += 3;
-                    pos += 2; // program_num
-                    pos += 2; // reserved + pcr_pid
-                    const program_info_length = ((uint8Array[pos] & 0x0F) << 8) | uint8Array[pos + 1];
-                    pos += 2;
-                    pos += program_info_length; // Skip program descriptors
+                // Only process elementary stream PIDs
+                if (!elementaryStreams.has(pid)) continue;
 
-                    let remaining = section_length - 9 - program_info_length;
-                    while (remaining >= 5) {
-                        const stream_type = uint8Array[pos];
-                        pos++;
-                        const elem_pid = ((uint8Array[pos] & 0x1F) << 8) | uint8Array[pos + 1];
-                        pos += 2;
-                        const es_info_length = ((uint8Array[pos] & 0x0F) << 8) | uint8Array[pos + 1];
-                        pos += 2;
-                        pos += es_info_length; // Skip ES descriptors (could check for KLV registration here)
-                        remaining -= 5 + es_info_length;
+                let payloadStart = 4;
 
-                        elementaryPids.add(elem_pid);
-                        let typeInfo;
-                        if (stream_type === 0x1B) {
-                            typeInfo = { type: 'video', extension: 'h264' };
-                        } else if (stream_type === 0x0F) {
-                            typeInfo = { type: 'audio', extension: 'aac' };
-                        } else if (stream_type === 0x06 || stream_type === 0x15) {
-                            typeInfo = { type: 'data', extension: 'bin' }; // Heuristics may override to 'klv'
-                        } else {
-                            typeInfo = { type: 'unknown', extension: 'bin' };
-                        }
-                        streamTypes.set(elem_pid, typeInfo);
-                    }
+                // Handle adaptation field
+                if (adaptationFieldControl === 2 || adaptationFieldControl === 3) {
+                    const adaptationFieldLength = uint8Array[offset + 4];
+                    payloadStart += 1 + adaptationFieldLength;
                 }
-                continue;
-            }
 
-            // Heuristic detection for stream types (fallback or override)
-            if (payloadUnitStartIndicator && payloadStart < packetSize) {
+                // Skip if no payload
+                if (adaptationFieldControl === 2 || payloadStart >= packetSize) continue;
+
+                // Extract payload data
                 const payloadData = uint8Array.slice(offset + payloadStart, offset + packetSize);
-
-                // Try to detect stream type based on payload
-                const streamType = TSParser.detectStreamType(payloadData, pid);
-                if (streamType) {
-                    // Only log KLV stream detection
-                    if (streamType.type === 'klv') {
-                        console.log(`extractTSStreams: Detected KLV stream for PID ${pid}:`, streamType);
+                if (payloadData.length > 0) {
+                    if (!streamData.has(pid)) {
+                        streamData.set(pid, []);
                     }
-                    streamTypes.set(pid, streamType);
+                    streamData.get(pid).push(payloadData);
                 }
             }
 
-            // Accumulate payload data for this PID
-            if (payloadStart < packetSize) {
-                const payloadData = uint8Array.slice(offset + payloadStart, offset + packetSize);
+            // Convert accumulated data to streams
+            for (const [pid, dataChunks] of streamData.entries()) {
+                if (dataChunks.length === 0) continue;
 
-                if (!streamData.has(pid)) {
-                    streamData.set(pid, []);
+                const streamInfo = elementaryStreams.get(pid);
+                if (!streamInfo) continue;
+
+                // Concatenate all data chunks for this PID
+                const totalLength = dataChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+                const concatenatedData = new Uint8Array(totalLength);
+                let offset = 0;
+
+                for (const chunk of dataChunks) {
+                    concatenatedData.set(chunk, offset);
+                    offset += chunk.length;
                 }
-                streamData.get(pid).push(payloadData);
-            }
-        }
 
-        // Convert accumulated data to streams, but only for elementary PIDs
-        for (const [pid, dataChunks] of streamData.entries()) {
-            if (dataChunks.length === 0 || !elementaryPids.has(pid)) continue;
-
-            // Concatenate all data chunks for this PID
-            const totalLength = dataChunks.reduce((sum, chunk) => sum + chunk.length, 0);
-            const concatenatedData = new Uint8Array(totalLength);
-            let offset = 0;
-
-            for (const chunk of dataChunks) {
-                concatenatedData.set(chunk, offset);
-                offset += chunk.length;
-            }
-
-            // Get stream type info
-            let streamInfo = streamTypes.get(pid) || { type: 'unknown', extension: 'bin' };
-
-            // Fallback scan for KLV if type is data or unknown
-            if (streamInfo.type === 'data' || streamInfo.type === 'unknown') {
-                const dataView = concatenatedData;
-                for (let i = 0; i < Math.min(dataView.length - 16, 100); i++) {
-                    if (dataView[i] === 0x06 && dataView[i + 1] === 0x0E &&
-                        dataView[i + 2] === 0x2B && dataView[i + 3] === 0x34) {
-                        console.log(`extractTSStreams: Fallback detected KLV stream for PID ${pid}`);
-                        streamInfo = { type: 'klv', extension: 'klv' };
+                // Determine file extension based on codec
+                let extension;
+                switch (streamInfo.codec_name) {
+                    case 'h264':
+                        extension = 'h264';
                         break;
-                    }
+                    case 'hevc':
+                        extension = 'h265';
+                        break;
+                    case 'aac':
+                        extension = 'aac';
+                        break;
+                    case 'mp3':
+                        extension = 'mp3';
+                        break;
+                    case 'klv':
+                        extension = 'klv';
+                        break;
+                    case 'timed_id3':
+                        extension = 'id3';
+                        break;
+                    default:
+                        extension = 'bin';
                 }
+
+                console.log(`extractTSStreams: Extracted ${streamInfo.codec_name} stream (PID ${pid}): ${totalLength} bytes`);
+
+                streams.push({
+                    pid: pid,
+                    type: streamInfo.codec_name,
+                    extension: extension,
+                    data: concatenatedData.buffer,
+                    codec_type: streamInfo.codec_type,
+                    stream_type: streamInfo.stream_type,
+                    descriptors: streamInfo.descriptors
+                });
             }
 
-            streams.push({
-                pid: pid,
-                type: streamInfo.type,
-                extension: streamInfo.extension,
-                data: concatenatedData.buffer
-            });
+            console.log(`extractTSStreams: Successfully extracted ${streams.length} streams`);
+            return streams;
+
+        } catch (error) {
+            console.error('extractTSStreams: Error extracting streams:', error);
+            return [];
         }
-
-        // Note: This parser does not yet handle KLV embedded in video SEI messages (e.g., MISB async metadata in H.264 NAL units).
-        // For that, additional parsing of the video stream would be required after extraction.
-
-        return streams;
     }
 
     /**
@@ -335,7 +261,6 @@ export class TSParser {
 
             // get the first 24 bytes as a hex string
             const labelHex = payloadData.slice(0, 24).reduce((acc, val) => acc + ('0' + val.toString(16)).slice(-2), '');
-            debugLog(`detectStreamType: PID ${pid} identified as potential KLV data (labelHex=${labelHex}`)
 
             // MISB KLV Universal Labels typically start with 0x060E2B34
             if (payloadData[0] === 0x06 && payloadData[1] === 0x0E &&
@@ -523,11 +448,18 @@ function parsePMT(section) {
             } else if (tag === 0x0A) { // ISO_639_language_descriptor
                 const lang = String.fromCharCode(...body.subarray(0, 3));
                 descs.push({ tag, name: "language", lang });
-            } else if (tag === 0x26 && len >= 4) { // Check if tag 38 contains KLVA registration
-                const fourCC = String.fromCharCode(...body.subarray(0, 4));
-                if (fourCC === "KLVA") {
-                    descs.push({ tag, name: "registration", format_identifier: fourCC });
-                } else {
+            } else if (tag === 0x26 && len >= 7) { // Check if tag 38 contains KLVA registration
+                // Look for KLVA at different positions in the descriptor
+                let foundKLVA = false;
+                for (let i = 0; i <= len - 4; i++) {
+                    const fourCC = String.fromCharCode(...body.subarray(i, i + 4));
+                    if (fourCC === "KLVA") {
+                        descs.push({ tag, name: "registration", format_identifier: fourCC });
+                        foundKLVA = true;
+                        break;
+                    }
+                }
+                if (!foundKLVA) {
                     descs.push({ tag, length: len, data: Array.from(body) });
                 }
             } else {
