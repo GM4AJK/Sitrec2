@@ -4,7 +4,7 @@ import {makeDraggable} from "./DragResizeUtils";
 import {
     addGUIFolder,
     addGUIMenu,
-    CustomManager, debugLog,
+    CustomManager,
     FileManager,
     GlobalDateTimeNode,
     Globals,
@@ -21,7 +21,8 @@ import {
     setInfoDiv,
     setNodeFactory,
     setNodeMan,
-    setNullNode, setRenderOne,
+    setNullNode,
+    setRenderOne,
     setSit,
     setSitchMan,
     setUnits,
@@ -44,7 +45,8 @@ import {CommonJetStuff, initJetStuff, initJetStuffOverlays, initJetVariables, up
 import {
     GlobalDaySkyScene,
     GlobalNightSkyScene,
-    GlobalScene, GlobalSunSkyScene,
+    GlobalScene,
+    GlobalSunSkyScene,
     LocalFrame,
     setupDaySkyScene,
     setupLocalFrame,
@@ -81,7 +83,7 @@ import {CCustomManager} from "./CustomSupport";
 import {EventManager} from "./CEventManager";
 import {checkLocal} from "./configUtils";
 import {CNodeView3D} from "./nodes/CNodeView3D";
-import { getApproximateLocationFromIP } from "./GeoLocation";
+import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
 
 
@@ -206,6 +208,11 @@ if (customSitch !== null) {
 
         // when loading a custom sitch, we don't want to show the initial drop zone animation
         Sit.initialDropZoneAnimation = false;
+        
+        // Expose Sit to window for testing purposes
+        if (typeof window !== 'undefined') {
+            window.Sit = Sit;
+        }
 
 
     });
@@ -473,6 +480,7 @@ async function newSitch(situation, customSetup = false ) {
 }
 
 async function initializeOnce() {
+    console.log('initializeOnce() function called');
 
     // check to see if the url has a ignoreunload parameter
     // if it does, then we don't ask the user if they want to leave the page
@@ -499,9 +507,46 @@ async function initializeOnce() {
 
     await checkLogin();
 
+    console.log('About to initialize NodeMan and DragDropHandler');
     setNodeMan(new CNodeManager())
     setNodeFactory(new CNodeFactory(NodeMan))
     setSitchMan(new CSitchFactory())
+    
+    // Expose objects to window for testing purposes
+    if (typeof window !== 'undefined') {
+        window.NodeMan = NodeMan;
+        window.DragDropHandler = DragDropHandler;
+        
+        // Set a flag to indicate that these objects are ready
+        window.SITREC_OBJECTS_READY = {
+            NodeMan: true,
+            DragDropHandler: true,
+            timestamp: Date.now()
+        };
+        
+        // Also create a DOM element as a signal for Puppeteer
+        const readyElement = document.createElement('div');
+        readyElement.id = 'sitrec-objects-ready';
+        readyElement.setAttribute('data-ready', 'partial');
+        readyElement.style.display = 'none';
+        document.body.appendChild(readyElement);
+        
+        console.log('Exposed to window:', { NodeMan: !!window.NodeMan, DragDropHandler: !!window.DragDropHandler });
+        console.log('Set SITREC_OBJECTS_READY flag:', window.SITREC_OBJECTS_READY);
+        console.log('Created DOM ready signal element');
+        
+        // Also expose Sit when it's available
+        if (typeof Sit !== 'undefined') {
+            window.Sit = Sit;
+            window.SITREC_OBJECTS_READY.Sit = true;
+            readyElement.setAttribute('data-ready', 'complete');
+            console.log('Also exposed Sit to window:', !!window.Sit);
+        } else {
+            console.log('Sit is not yet defined, will expose later');
+        }
+    } else {
+        console.log('Window is not defined, cannot expose objects');
+    }
 
     // Some metacode to find the node types and sitches (and common setup fragments)
 
@@ -1313,6 +1358,45 @@ function selectInitialSitch(force) {
     console.log("");
 
     setSit(new CSituation(startSitch))
+    
+    // Expose Sit to window for testing purposes
+    if (typeof window !== 'undefined') {
+        window.Sit = Sit;
+        
+        // Update the ready flag to include Sit
+        if (window.SITREC_OBJECTS_READY) {
+            window.SITREC_OBJECTS_READY.Sit = true;
+            window.SITREC_OBJECTS_READY.allReady = true;
+            window.SITREC_OBJECTS_READY.timestamp = Date.now();
+        } else {
+            window.SITREC_OBJECTS_READY = {
+                NodeMan: !!window.NodeMan,
+                DragDropHandler: !!window.DragDropHandler,
+                Sit: true,
+                allReady: true,
+                timestamp: Date.now()
+            };
+        }
+        
+        // Update the DOM ready signal
+        const readyElement = document.getElementById('sitrec-objects-ready');
+        if (readyElement) {
+            readyElement.setAttribute('data-ready', 'complete');
+            readyElement.setAttribute('data-timestamp', Date.now().toString());
+        } else {
+            // Create the element if it doesn't exist
+            const newReadyElement = document.createElement('div');
+            newReadyElement.id = 'sitrec-objects-ready';
+            newReadyElement.setAttribute('data-ready', 'complete');
+            newReadyElement.setAttribute('data-timestamp', Date.now().toString());
+            newReadyElement.style.display = 'none';
+            document.body.appendChild(newReadyElement);
+        }
+        
+        console.log('Exposed Sit to window in selectInitialSitch:', !!window.Sit);
+        console.log('Updated SITREC_OBJECTS_READY flag:', window.SITREC_OBJECTS_READY);
+        console.log('Updated DOM ready signal to complete');
+    }
 }
 
 
