@@ -9,7 +9,6 @@ import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {getLocalSouthVector, getLocalUpVector} from "./SphericalMath";
 import {SITREC_DEV_DOMAIN, SITREC_DOMAIN} from "./configUtils";
 import {doesKMLContainTrack, extractKMLObjects} from "./KMLUtils";
-import {assert} from "./assert";
 import {findColumn} from "./ParseUtils";
 import {EventManager} from "./CEventManager";
 
@@ -524,6 +523,27 @@ class CDragDropHandler {
             if (fileExt === "kml") {
                 console.log("KML file detected, adding anything else in the file")
                 extractKMLObjects(parsedFile)
+                return;
+            }
+
+            // is it a video file (like H.264 streams from TS files)?
+            if (fileManagerEntry.dataType === "video") {
+                console.log("Video data detected: " + filename);
+                if (!NodeMan.exists("video")) {
+                    console.warn("No video node found to load video data");
+                    return;
+                }
+                
+                // Check if it's an H.264 stream
+                if (fileExt === "h264") {
+                    console.log("H.264 stream detected, attempting to load with specialized handler");
+                    // Create a File-like object from the buffer for the video node
+                    const blob = new Blob([parsedFile], { type: 'video/h264' });
+                    const file = new File([blob], filename, { type: 'video/h264' });
+                    NodeMan.get("video").uploadFile(file);
+                } else {
+                    console.warn("Unknown video format for: " + filename);
+                }
                 return;
             }
 

@@ -1125,6 +1125,15 @@ export class CFileManager extends CManager {
                         parsed = buffer;
                     }
                     break;
+                case "h264":
+                    // Raw H.264 elementary stream from TS file
+                    // These need special handling as they lack MP4 container structure
+                    // For now, treat as video data and let the video system handle it
+                    dataType = "video";
+                    parsed = buffer;
+                    console.log("Parsed H.264 stream: " + filename + " (" + buffer.byteLength + " bytes)");
+                    console.warn("H.264 streams require MP4 container - raw H.264 playback not yet implemented");
+                    break;
 
                 default:
                     // theoretically we could inspect the file contents and then reload it...

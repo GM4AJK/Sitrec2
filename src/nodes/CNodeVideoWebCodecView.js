@@ -1,11 +1,10 @@
 import {CNodeVideoView} from "./CNodeVideoView";
 import {par} from "../par";
-import {FileManager, Sit} from "../Globals";
-import {CNodeViewUI} from "./CNodeViewUI";
+import {FileManager} from "../Globals";
 
 import {SITREC_APP} from "../configUtils";
-import {CVideoWebCodecData} from "../CVideoWebCodecData";
 import {CVideoWebCodecDataRaw} from "../CVideoWebCodecDataRaw";
+import {CVideoH264Data} from "../CVideoH264Data";
 
 export class CNodeVideoWebCodecView extends CNodeVideoView {
     constructor(v) {
@@ -113,8 +112,18 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
         this.stopStreaming()
         this.addLoadingMessage()
         this.disposeVideoData()
-        this.videoData = new CVideoWebCodecDataRaw({id: this.id + "_data", dropFile: file},
-            this.loadedCallback.bind(this), this.errorCallback.bind(this))
+        
+        // Check if it's an H.264 file and use specialized handler
+        if (file.name.toLowerCase().endsWith('.h264') || file.type === 'video/h264') {
+            console.log("Using H.264 specialized handler for: " + file.name);
+            this.videoData = new CVideoH264Data({id: this.id + "_data", dropFile: file},
+                this.loadedCallback.bind(this), this.errorCallback.bind(this));
+        } else {
+            // Use the standard WebCodec handler for regular video files
+            this.videoData = new CVideoWebCodecDataRaw({id: this.id + "_data", dropFile: file},
+                this.loadedCallback.bind(this), this.errorCallback.bind(this));
+        }
+        
         par.frame = 0;
         par.paused = false; // unpause, otherwise we see nothing.
     }
