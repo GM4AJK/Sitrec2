@@ -1,6 +1,5 @@
 import {CNodeViewText} from "./CNodeViewText.js";
 import {guiMenus} from "../Globals";
-import {isLocal} from "../configUtils";
 
 class CNodeViewDebug extends CNodeViewText {
     constructor(v) {
@@ -9,8 +8,8 @@ class CNodeViewDebug extends CNodeViewText {
         v.idPrefix = 'debug-view';
         v.hideOnFileDrop = false; // Debug console should stay visible when files are dropped
 
-        if (isLocal)
-            v.visible = true;
+        // if (isLocal)
+        //     v.visible = true;
 
         super(v);
 
