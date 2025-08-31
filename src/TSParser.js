@@ -144,6 +144,12 @@ export class TSParser {
                 // Determine file extension based on codec
                 let extension;
                 switch (streamInfo.codec_name) {
+                    case 'mpeg1video':
+                        extension = 'm1v';
+                        break;
+                    case 'mpeg2video':
+                        extension = 'm2v';
+                        break;
                     case 'h264':
                         extension = 'h264';
                         break;
@@ -155,6 +161,18 @@ export class TSParser {
                         break;
                     case 'mp3':
                         extension = 'mp3';
+                        break;
+                    case 'ac3':
+                        extension = 'ac3';
+                        break;
+                    case 'eac3':
+                        extension = 'eac3';
+                        break;
+                    case 'ecm':
+                        extension = 'ecm';
+                        break;
+                    case 'emm':
+                        extension = 'emm';
                         break;
                     case 'klv':
                         extension = 'klv';
@@ -318,6 +336,8 @@ const STREAM_TYPE = {
     0x42: "AVS",
     0x81: "AC3 (ATSC)",
     0x86: "SCTE-35 (Digital Program Insertion)",
+    0xF0: "ECM Stream (Entitlement Control Message)",
+    0xF1: "EMM Stream (Entitlement Management Message)",
 };
 
 function readFile(path) {
@@ -526,25 +546,37 @@ export function probeTransportStreamBuffer(buf) {
             const reg = s.descriptors.find(d => d.name === "registration")?.format_identifier;
             const codec_name =
                 reg === "KLVA" ? "klv" :
-                    (s.stream_type === 0x1B ? "h264" :
-                        s.stream_type === 0x24 ? "hevc" :
-                            s.stream_type === 0x0F || s.stream_type === 0x11 ? "aac" :
-                                s.stream_type === 0x03 || s.stream_type === 0x04 ? "mp3" :
-                                    s.stream_type === 0x15 && reg === "KLVA" ? "klv" :
-                                        s.stream_type === 0x15 ? "timed_id3" :
-                                            s.stream_type === 0x06 && reg ? reg : "unknown");
+                    (s.stream_type === 0x01 ? "mpeg1video" :
+                        s.stream_type === 0x02 ? "mpeg2video" :
+                            s.stream_type === 0x1B ? "h264" :
+                                s.stream_type === 0x24 ? "hevc" :
+                                    s.stream_type === 0x0F || s.stream_type === 0x11 ? "aac" :
+                                        s.stream_type === 0x03 || s.stream_type === 0x04 ? "mp3" :
+                                            s.stream_type === 0x81 ? "ac3" :
+                                                s.stream_type === 0x87 ? "eac3" :
+                                                    s.stream_type === 0xF0 ? "ecm" :
+                                                        s.stream_type === 0xF1 ? "emm" :
+                                                            s.stream_type === 0x15 && reg === "KLVA" ? "klv" :
+                                                                s.stream_type === 0x15 ? "timed_id3" :
+                                                                    s.stream_type === 0x06 && reg ? reg : "unknown");
 
-            const codec_type = codec_name === "h264" || codec_name === "hevc" ? "video" :
-                        codec_name === "aac" || codec_name === "mp3" ? "audio" :
-                            codec_name === "klv" || codec_name === "timed_id3" ? "data" : "unknown";
+            const codec_type = codec_name === "h264" || codec_name === "hevc" || codec_name === "mpeg1video" || codec_name === "mpeg2video" ? "video" :
+                        codec_name === "aac" || codec_name === "mp3" || codec_name === "ac3" || codec_name === "eac3" ? "audio" :
+                            codec_name === "klv" || codec_name === "timed_id3" || codec_name === "ecm" || codec_name === "emm" ? "data" : "unknown";
 
             return {
                 index: index,
                 codec_name,
-                codec_long_name: codec_name === "h264" ? "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10" :
+                codec_long_name: codec_name === "mpeg1video" ? "MPEG-1 Video" :
+                                codec_name === "mpeg2video" ? "MPEG-2 Video" :
+                                codec_name === "h264" ? "H.264 / AVC / MPEG-4 AVC / MPEG-4 part 10" :
                                 codec_name === "hevc" ? "H.265 / HEVC (High Efficiency Video Coding)" :
                                 codec_name === "aac" ? "AAC (Advanced Audio Coding)" :
                                 codec_name === "mp3" ? "MP3 (MPEG audio layer 3)" :
+                                codec_name === "ac3" ? "AC-3 (Dolby Digital)" :
+                                codec_name === "eac3" ? "E-AC-3 (Dolby Digital Plus)" :
+                                codec_name === "ecm" ? "ECM Stream (Entitlement Control Message)" :
+                                codec_name === "emm" ? "EMM Stream (Entitlement Management Message)" :
                                 codec_name === "klv" ? "SMPTE 336M Key-Length-Value (KLV) metadata" :
                                 codec_name === "timed_id3" ? "Timed ID3 metadata" :
                                 "Unknown",

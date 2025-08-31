@@ -945,10 +945,11 @@ export class CFileManager extends CManager {
             // and as JSON, pretty formatted
             console.log(JSON.stringify(probe, null, 2));
 
-            debugger;
+           // debugger;
 
 
             return TSParser.parseTSFile(filename, id, buffer, (streamFilename, streamId, streamData) => {
+                console.log("Detected TS Stream: " + streamFilename + " for id: " + streamId + "")
                 return this.parseAsset(streamFilename, streamId, streamData);
             });
         }
