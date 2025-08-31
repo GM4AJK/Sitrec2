@@ -141,6 +141,13 @@ export class TSParser {
                     offset += chunk.length;
                 }
 
+                // For video streams, extract elementary stream data from PES packets
+                let finalData = concatenatedData;
+                if (streamInfo.codec_type === 'video' || streamInfo.codec_name === 'h264') {
+                    finalData = TSParser.extractElementaryStreamFromPES(concatenatedData);
+                    console.log(`extractTSStreams: Extracted elementary stream from PES for PID ${pid}: ${finalData.length} bytes`);
+                }
+
                 // Determine file extension based on codec
                 let extension;
                 switch (streamInfo.codec_name) {
@@ -190,7 +197,7 @@ export class TSParser {
                     pid: pid,
                     type: streamInfo.codec_name,
                     extension: extension,
-                    data: concatenatedData.buffer,
+                    data: finalData.buffer,
                     codec_type: streamInfo.codec_type,
                     stream_type: streamInfo.stream_type,
                     descriptors: streamInfo.descriptors
@@ -223,6 +230,98 @@ export class TSParser {
      */
     static probeTransportStreamBuffer(buffer) {
         return probeTransportStreamBuffer(buffer);
+    }
+
+    /**
+     * Extract elementary stream data from PES packets
+     * Removes PES headers to get the actual H.264/video stream data
+     * @param {Uint8Array} pesData - Raw PES packet data
+     * @returns {Uint8Array} Elementary stream data
+     */
+    static extractElementaryStreamFromPES(pesData) {
+        const elementaryStreamChunks = [];
+        let offset = 0;
+
+        while (offset < pesData.length - 6) { // Need at least 6 bytes for PES header
+            // Look for PES start code: 0x00 0x00 0x01
+            if (pesData[offset] === 0x00 && pesData[offset + 1] === 0x00 && pesData[offset + 2] === 0x01) {
+                const streamId = pesData[offset + 3];
+                
+                // Check if this is a video stream ID (0xE0-0xEF)
+                if (streamId >= 0xE0 && streamId <= 0xEF) {
+                    // Parse PES packet header
+                    const packetLength = (pesData[offset + 4] << 8) | pesData[offset + 5];
+                    
+                    // Basic PES header is 6 bytes minimum
+                    let headerOffset = offset + 6;
+                    
+                    // If packet length is 0, this is an unbounded PES packet
+                    let nextPesStart = pesData.length;
+                    if (packetLength > 0) {
+                        nextPesStart = offset + 6 + packetLength;
+                    } else {
+                        // Find next PES start code
+                        for (let i = headerOffset + 3; i < pesData.length - 2; i++) {
+                            if (pesData[i] === 0x00 && pesData[i + 1] === 0x00 && pesData[i + 2] === 0x01) {
+                                const nextStreamId = pesData[i + 3];
+                                if (nextStreamId >= 0xE0 && nextStreamId <= 0xEF) {
+                                    nextPesStart = i;
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    
+                    // For video streams, check for optional PES header fields
+                    if (headerOffset < pesData.length) {
+                        const pesHeaderDataLength = pesData[headerOffset + 2];
+                        headerOffset += 3 + pesHeaderDataLength; // Skip fixed fields + optional fields
+                    }
+                    
+                    // Extract elementary stream data (everything after PES header)
+                    if (headerOffset < nextPesStart) {
+                        const elementaryData = pesData.slice(headerOffset, nextPesStart);
+                        elementaryStreamChunks.push(elementaryData);
+                    }
+                    
+                    offset = nextPesStart;
+                } else {
+                    // Not a video stream, skip this PES packet
+                    offset += 6;
+                    if (offset < pesData.length - 2) {
+                        const packetLength = (pesData[offset - 2] << 8) | pesData[offset - 1];
+                        if (packetLength > 0) {
+                            offset += packetLength;
+                        } else {
+                            offset++;
+                        }
+                    } else {
+                        break;
+                    }
+                }
+            } else {
+                offset++;
+            }
+        }
+
+        // If no PES packets found, return original data (might be already elementary stream)
+        if (elementaryStreamChunks.length === 0) {
+            console.log('extractElementaryStreamFromPES: No PES packets found, returning original data');
+            return pesData;
+        }
+
+        // Concatenate all elementary stream chunks
+        const totalLength = elementaryStreamChunks.reduce((sum, chunk) => sum + chunk.length, 0);
+        const result = new Uint8Array(totalLength);
+        let resultOffset = 0;
+
+        for (const chunk of elementaryStreamChunks) {
+            result.set(chunk, resultOffset);
+            resultOffset += chunk.length;
+        }
+
+        console.log(`extractElementaryStreamFromPES: Extracted ${elementaryStreamChunks.length} PES packets, ${totalLength} bytes of elementary stream data`);
+        return result;
     }
 
 }

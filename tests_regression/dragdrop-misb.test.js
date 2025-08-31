@@ -9,7 +9,8 @@ describe('MISB File Drag and Drop Test', () => {
     // Increase timeout for file processing
     jest.setTimeout(120000);
     
-    const testFilePath = '/Users/mick/Dropbox/Sitrec Resources/MISB/QGISFMV_Samples/MISB/falls.ts';
+    const testFileName = 'short.ts';
+    const testFilePath = `/Users/mick/Dropbox/Sitrec Resources/MISB/QGISFMV_Samples/MISB/${testFileName}`;
     
     beforeAll(async () => {
         // Check if test file exists
@@ -64,7 +65,7 @@ describe('MISB File Drag and Drop Test', () => {
         }
     });
     
-    test('should successfully drag and drop falls.ts file and process it', async () => {
+    test(`should successfully drag and drop ${testFileName} file and process it`, async () => {
         try {
             // Navigate to the Custom sitch
             const url = 'https://local.metabunk.org/sitrec/?sitch=custom&ignoreunload=1';
@@ -460,14 +461,14 @@ describe('MISB File Drag and Drop Test', () => {
             
             // Check if file was processed
             const fileProcessed = consoleMessages.some(msg => 
-                msg.includes('LOADING DROPPED FILE') && msg.includes('falls.ts')
+                msg.includes('LOADING DROPPED FILE') && msg.includes(testFileName)
             );
             
             expect(fileProcessed).toBe(true);
             
             // If video node has file info, check it
             if (processingResults.videoNodeInfo && processingResults.videoNodeInfo.hasFile) {
-                expect(processingResults.videoNodeInfo.fileName).toBe('falls.ts');
+                expect(processingResults.videoNodeInfo.fileName).toBe(testFileName);
                 console.log(`Video loaded: ${processingResults.videoNodeInfo.fileName}`);
                 console.log(`Format: ${processingResults.videoNodeInfo.format}`);
                 console.log(`Dimensions: ${processingResults.videoNodeInfo.width}x${processingResults.videoNodeInfo.height}`);

@@ -3,7 +3,7 @@ import path from 'path';
 import {TSParser} from '../src/TSParser.js';
 
 describe('MISB File Processing Test', () => {
-    const testFilePath = '/Users/mick/Dropbox/Sitrec Resources/MISB/QGISFMV_Samples/MISB/falls.ts';
+    const testFilePath = '/Users/mick/Dropbox/Sitrec Resources/MISB/QGISFMV_Samples/MISB/short.ts';
     
     beforeAll(() => {
         // Check if test file exists

@@ -295,6 +295,16 @@ export class CVideoH264Data extends CVideoData {
                 );
             }
 
+            // Validate SPS/PPS data
+            if (!analysis.spsData || analysis.spsData.length < 4) {
+                throw new Error(`Invalid SPS data: ${analysis.spsData ? analysis.spsData.length : 'null'} bytes`);
+            }
+            if (!analysis.ppsData || analysis.ppsData.length < 1) {
+                throw new Error(`Invalid PPS data: ${analysis.ppsData ? analysis.ppsData.length : 'null'} bytes`);
+            }
+
+            console.log(`SPS data: ${analysis.spsData.length} bytes, PPS data: ${analysis.ppsData.length} bytes`);
+
             // Extract NAL units and create chunks
             const nalUnits = H264Decoder.extractNALUnits(new Uint8Array(h264Buffer));
             const encodedChunks = H264Decoder.createEncodedVideoChunks(nalUnits, 30);
@@ -304,8 +314,8 @@ export class CVideoH264Data extends CVideoData {
             // Process chunks to create groups (similar to MP4 demuxer)
             this.processChunksIntoGroups(encodedChunks);
 
-            // Create decoder with frame caching
-            this.decoder = new VideoDecoder({
+            // Store decoder callbacks for potential recreation
+            this.decoderCallbacks = {
                 output: videoFrame => {
                     try {
                         this.format = videoFrame.format;
@@ -394,17 +404,59 @@ export class CVideoH264Data extends CVideoData {
                     } else {
                         console.warn("Non-fatal decoder error, continuing operation");
                     }
-                },
-            });
-
-            // Configure decoder
-            const config = {
-                codec: 'avc1.42E01E', // H.264 Baseline Profile
-                description: H264Decoder.createAVCDecoderConfig(analysis.spsData, analysis.ppsData)
+                }
             };
 
+            // Create decoder with stored callbacks
+            this.decoder = new VideoDecoder(this.decoderCallbacks);
+
+            // Configure decoder
+            const description = H264Decoder.createAVCDecoderConfig(analysis.spsData, analysis.ppsData);
+            
+            // Create codec string from SPS data
+            const profile = analysis.spsData[1];
+            const compatibility = analysis.spsData[2];
+            const level = analysis.spsData[3];
+            const codecString = `avc1.${profile.toString(16).padStart(2, '0')}${compatibility.toString(16).padStart(2, '0')}${level.toString(16).padStart(2, '0')}`;
+            
+            const config = {
+                codec: codecString,
+                description: description
+            };
+
+            console.log(`Decoder config: codec=${config.codec}, description=${description.byteLength} bytes`);
+            console.log(`Profile: 0x${profile.toString(16)}, Compatibility: 0x${compatibility.toString(16)}, Level: 0x${level.toString(16)}`);
             this.config = config;
-            this.decoder.configure(config);
+            
+            // Check if codec is supported before configuring
+            try {
+                const isSupported = await VideoDecoder.isConfigSupported(config);
+                console.log("Codec support check:", isSupported);
+                
+                if (!isSupported.supported) {
+                    throw new Error(`Codec ${config.codec} is not supported by this browser`);
+                }
+            } catch (supportError) {
+                console.warn("Could not check codec support:", supportError);
+                // Continue anyway, as some browsers might not support isConfigSupported
+            }
+
+            // Configure decoder and wait for it to be ready
+            try {
+                await this.decoder.configure(config);
+                console.log("VideoDecoder configured successfully, state:", this.decoder.state);
+                
+                // Verify decoder is in configured state
+                if (this.decoder.state !== 'configured') {
+                    throw new Error(`Decoder configuration failed, state: ${this.decoder.state}`);
+                }
+                
+
+                
+            } catch (configError) {
+                console.error("Decoder configuration failed:", configError);
+                throw new Error(`Failed to configure VideoDecoder: ${configError.message}`);
+            }
 
             console.log(`H.264 initialization complete: ${this.frames} frames`);
 
@@ -522,6 +574,7 @@ export class CVideoH264Data extends CVideoData {
         // Check if decoder is properly configured
         if (this.decoder.state !== 'configured') {
             console.warn("Cannot decode: VideoDecoder is not configured, state:", this.decoder.state);
+            
             return;
         }
 

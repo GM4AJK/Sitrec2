@@ -39,8 +39,9 @@ export class H264Decoder {
         } = options;
 
         // Create decoder configuration from SPS/PPS
+        const codecString = this.createH264CodecString(analysis.spsData);
         const config = {
-            codec: 'avc1.42E01E', // H.264 Baseline Profile
+            codec: codecString,
             description: this.createAVCDecoderConfig(analysis.spsData, analysis.ppsData)
         };
 
@@ -52,8 +53,30 @@ export class H264Decoder {
             error: onError
         });
 
-        // Configure the decoder
-        await decoder.configure(config);
+        // Configure the decoder with error handling
+        try {
+            console.log("Configuring VideoDecoder...");
+            
+            // Check if codec is supported first
+            if (!VideoDecoder.isConfigSupported) {
+                console.warn("VideoDecoder.isConfigSupported not available, skipping codec check");
+            } else {
+                const supportCheck = await VideoDecoder.isConfigSupported(config);
+                console.log("Codec support check:", supportCheck);
+                
+                if (!supportCheck.supported) {
+                    throw new Error(`H.264 codec not supported: ${config.codec}`);
+                }
+            }
+            
+            await decoder.configure(config);
+            console.log("H.264 decoder configured successfully");
+            
+        } catch (error) {
+            console.error("VideoDecoder configuration failed:", error);
+            decoder.close();
+            throw new Error(`Failed to configure VideoDecoder: ${error.message}`);
+        }
 
         console.log("H.264 decoder created successfully");
         return decoder;
@@ -102,34 +125,80 @@ export class H264Decoder {
     }
 
     /**
+     * Create H.264 codec string from SPS data
+     * Format: avc1.PPCCLL where PP=profile, CC=compatibility, LL=level
+     */
+    static createH264CodecString(spsData) {
+        if (spsData.length < 4) {
+            throw new Error('SPS data too short for codec string generation');
+        }
+        
+        const profileIdc = spsData[1];
+        const profileCompatibility = spsData[2];
+        const levelIdc = spsData[3];
+        
+        // Create codec string in format avc1.PPCCLL
+        const codecString = `avc1.${profileIdc.toString(16).padStart(2, '0').toUpperCase()}${profileCompatibility.toString(16).padStart(2, '0').toUpperCase()}${levelIdc.toString(16).padStart(2, '0').toUpperCase()}`;
+        
+        console.log('Generated H.264 codec string:', codecString);
+        return codecString;
+    }
+
+    /**
      * Create AVC decoder configuration from SPS/PPS data
      */
     static createAVCDecoderConfig(spsData, ppsData) {
-        // Create AVCC format configuration
-        // This is a simplified version - a full implementation would parse SPS/PPS properly
-        const config = new Uint8Array(spsData.length + ppsData.length + 11);
+        // Create proper AVCC format configuration
+        // Reference: ISO/IEC 14496-15 Section 5.2.4.1
+        console.log('Creating AVCC config with SPS:', spsData.length, 'bytes, PPS:', ppsData.length, 'bytes');
+        
+        // Parse SPS for profile/level information
+        if (spsData.length < 4) {
+            throw new Error('SPS data too short');
+        }
+        
+        const profileIdc = spsData[1];
+        const profileCompatibility = spsData[2]; 
+        const levelIdc = spsData[3];
+        
+        console.log('SPS Profile/Level:', {
+            profile: profileIdc.toString(16),
+            compatibility: profileCompatibility.toString(16),
+            level: levelIdc.toString(16)
+        });
+
+        // Calculate total size needed
+        const configSize = 6 + // AVCC header
+                          2 + spsData.length + // SPS
+                          1 + 2 + ppsData.length; // PPS
+                          
+        const config = new Uint8Array(configSize);
         let offset = 0;
 
-        // AVCC header
+        // AVCC header (6 bytes)
         config[offset++] = 0x01; // configurationVersion
-        config[offset++] = spsData[1]; // AVCProfileIndication
-        config[offset++] = spsData[2]; // profile_compatibility
-        config[offset++] = spsData[3]; // AVCLevelIndication
-        config[offset++] = 0xFF; // lengthSizeMinusOne (4 bytes)
-        config[offset++] = 0xE1; // numOfSequenceParameterSets (1)
+        config[offset++] = profileIdc; // AVCProfileIndication
+        config[offset++] = profileCompatibility; // profile_compatibility
+        config[offset++] = levelIdc; // AVCLevelIndication
+        config[offset++] = 0xFF; // lengthSizeMinusOne (4-byte length fields)
+        config[offset++] = 0xE1; // numOfSequenceParameterSets (1 SPS)
 
-        // SPS length and data
-        config[offset++] = (spsData.length >> 8) & 0xFF;
-        config[offset++] = spsData.length & 0xFF;
+        // SPS data
+        config[offset++] = (spsData.length >> 8) & 0xFF; // SPS length high byte
+        config[offset++] = spsData.length & 0xFF;        // SPS length low byte
         config.set(spsData, offset);
         offset += spsData.length;
 
-        // PPS count and data
-        config[offset++] = 0x01; // numOfPictureParameterSets (1)
-        config[offset++] = (ppsData.length >> 8) & 0xFF;
-        config[offset++] = ppsData.length & 0xFF;
+        // PPS data
+        config[offset++] = 0x01; // numOfPictureParameterSets (1 PPS)
+        config[offset++] = (ppsData.length >> 8) & 0xFF; // PPS length high byte
+        config[offset++] = ppsData.length & 0xFF;        // PPS length low byte
         config.set(ppsData, offset);
+        offset += ppsData.length;
 
+        console.log('Created AVCC config:', config.length, 'bytes');
+        console.log('AVCC header:', Array.from(config.slice(0, 6)).map(x => '0x' + x.toString(16).padStart(2, '0')).join(' '));
+        
         return config.buffer;
     }
 
