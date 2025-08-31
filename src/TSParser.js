@@ -207,92 +207,6 @@ export class TSParser {
     }
 
     /**
-     * Detect stream type based on payload data
-     * @param {Uint8Array} payloadData - The payload data to analyze
-     * @param {number} pid - The PID of the stream
-     * @returns {Object|null} Stream type info or null if not detected
-     */
-    static detectStreamType(payloadData, pid) {
-        if (payloadData.length < 4) {
-            return null;
-        }
-
-        // Check for PES header (starts with 0x000001)
-        if (payloadData[0] === 0x00 && payloadData[1] === 0x00 && payloadData[2] === 0x01) {
-            const streamId = payloadData[3];
-
-            // console.log(`detectStreamType: PID ${pid} identified as stream ID ${streamId}`);
-
-            let dataOffset = 6; // After prefix, id, length
-            const pesLength = (payloadData[4] << 8) | payloadData[5];
-
-            // Check if has optional PES header extension
-            const noExtensionIds = new Set([0xBC, 0xBE, 0xBF, 0xF0, 0xF1, 0xFF, 0xF2, 0xF8]);
-            if (!noExtensionIds.has(streamId)) {
-                // Has extension
-                const pesFlags = payloadData[6];
-                const pesHeaderDataLen = payloadData[8];
-                dataOffset = 9 + pesHeaderDataLen;
-            }
-
-            const innerData = payloadData.subarray(dataOffset);
-
-            // Private streams (potential KLV)
-            if (streamId === 0xBD || streamId === 0xBF) {
-                console.log(`detectStreamType: PID ${pid} identified as private stream (ID ${streamId}, potential KLV)`);
-                if (innerData.length >= 16 &&
-                    innerData[0] === 0x06 && innerData[1] === 0x0E &&
-                    innerData[2] === 0x2B && innerData[3] === 0x34) {
-                    console.log(`detectStreamType: PID ${pid} confirmed as KLV data (Universal Label found after PES header)`);
-                    return { type: 'klv', extension: 'klv' };
-                }
-                return { type: 'data', extension: 'bin' };
-            }
-
-            // Video streams (0xE0-0xEF)
-            if (streamId >= 0xE0 && streamId <= 0xEF) {
-                return { type: 'video', extension: 'h264' };
-            }
-
-            // Audio streams (0xC0-0xDF)
-            if (streamId >= 0xC0 && streamId <= 0xDF) {
-                return { type: 'audio', extension: 'aac' };
-            }
-        }
-
-        // Check for H.264 NAL units (raw, non-PES)
-        if (payloadData.length >= 4) {
-            // Look for H.264 start codes (0x00000001 or 0x000001)
-            for (let i = 0; i < Math.min(payloadData.length - 4, 100); i++) {
-                if ((payloadData[i] === 0x00 && payloadData[i+1] === 0x00 &&
-                        payloadData[i+2] === 0x00 && payloadData[i+3] === 0x01) ||
-                    (payloadData[i] === 0x00 && payloadData[i+1] === 0x00 &&
-                        payloadData[i+2] === 0x01)) {
-                    return { type: 'video', extension: 'h264' };
-                }
-            }
-        }
-
-        // Check for KLV data (MISB metadata) - raw, non-PES
-        // KLV typically starts with a 16-byte Universal Label
-        if (payloadData.length >= 16) {
-
-            // get the first 24 bytes as a hex string
-            const labelHex = payloadData.slice(0, 24).reduce((acc, val) => acc + ('0' + val.toString(16)).slice(-2), '');
-
-            // MISB KLV Universal Labels typically start with 0x060E2B34
-            if (payloadData[0] === 0x06 && payloadData[1] === 0x0E &&
-                payloadData[2] === 0x2B && payloadData[3] === 0x34) {
-                console.log(`detectStreamType: PID ${pid} identified as KLV data (Universal Label found)`);
-                return { type: 'klv', extension: 'klv' };
-            }
-        }
-
-        // Default to unknown binary data
-        return { type: 'data', extension: 'bin' };
-    }
-
-    /**
      * Comprehensive Transport Stream analysis - ffprobe equivalent
      * Analyzes the entire stream for detailed codec information, timing, and metadata
      * @param {ArrayBuffer} buffer - The TS file buffer
@@ -339,14 +253,6 @@ const STREAM_TYPE = {
     0xF0: "ECM Stream (Entitlement Control Message)",
     0xF1: "EMM Stream (Entitlement Management Message)",
 };
-
-function readFile(path) {
-    const buf = fs.readFileSync(path);
-    if (buf.length < PACKET || buf[0] !== SYNC) {
-        throw new Error("Not an MPEG-TS file (bad sync).");
-    }
-    return buf;
-}
 
 function* packets(buf) {
     for (let off = 0; off + PACKET <= buf.length; off += PACKET) {
@@ -503,10 +409,6 @@ function parsePMT(section) {
 }
 
 // Public API
-export function probeTransportStream(path) {
-    const buf = readFile(path);
-    return probeTransportStreamBuffer(buf);
-}
 
 export function probeTransportStreamBuffer(buf) {
     // if ArrayBuffer, convert it to Uint8Array
