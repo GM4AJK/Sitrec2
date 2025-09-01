@@ -223,6 +223,27 @@ export class CVideoH264Data extends CVideoData {
         }
     }
 
+    getProfileName(profileIdc) {
+        const profiles = {
+            0x42: 'Baseline',
+            0x4D: 'Main',
+            0x58: 'Extended',
+            0x64: 'High'
+        };
+        return profiles[profileIdc] || `Unknown (0x${profileIdc.toString(16)})`;
+    }
+
+    getLevelName(levelIdc) {
+        const levels = {
+            0x1E: '3.0',
+            0x1F: '3.1',
+            0x20: '3.2',
+            0x28: '4.0',
+            0x29: '4.1'
+        };
+        return levels[levelIdc] || `Unknown (0x${levelIdc.toString(16)})`;
+    }
+
     flushEntireCache() {
         if (this.imageCache) {
             // Close all ImageBitmap objects to free memory
@@ -281,6 +302,8 @@ export class CVideoH264Data extends CVideoData {
             this.groups = [];
             this.groupsPending = 0;
             this.nextRequest = -1;
+            this.decoderError = false; // Reset decoder error flag
+            this.recreationAttempts = 0; // Reset recreation attempts
 
             // Analyze H.264 stream
             console.log("Analyzing H.264 stream...");
@@ -401,6 +424,19 @@ export class CVideoH264Data extends CVideoData {
                     if (e.name === 'NotSupportedError' || e.name === 'InvalidStateError') {
                         this.decoderError = true;
                         console.error("Fatal decoder error, marking as unusable");
+                    } else if (e.name === 'EncodingError') {
+                        console.warn("Decode error occurred, attempting to recreate decoder");
+                        // Prevent infinite recreation loops
+                        if (!this.recreationAttempts) this.recreationAttempts = 0;
+                        if (this.recreationAttempts < 3) {
+                            this.recreationAttempts++;
+                            this.recreateDecoder();
+                        } else {
+                            console.error("Too many decoder recreation attempts, trying alternative approach");
+                            this.decoderError = true;
+                            // Try one more time with modified SPS if we haven't already
+                            this.tryAlternativeDecoding();
+                        }
                     } else {
                         console.warn("Non-fatal decoder error, continuing operation");
                     }
@@ -411,40 +447,102 @@ export class CVideoH264Data extends CVideoData {
             this.decoder = new VideoDecoder(this.decoderCallbacks);
 
             // Configure decoder
-            const description = H264Decoder.createAVCDecoderConfig(analysis.spsData, analysis.ppsData);
+            let spsData = analysis.spsData;
+            let ppsData = analysis.ppsData;
             
-            // Create codec string from SPS data
-            const profile = analysis.spsData[1];
-            const compatibility = analysis.spsData[2];
-            const level = analysis.spsData[3];
-            const codecString = `avc1.${profile.toString(16).padStart(2, '0')}${compatibility.toString(16).padStart(2, '0')}${level.toString(16).padStart(2, '0')}`;
-            
-            const config = {
-                codec: codecString,
-                description: description
-            };
-
-            console.log(`Decoder config: codec=${config.codec}, description=${description.byteLength} bytes`);
-            console.log(`Profile: 0x${profile.toString(16)}, Compatibility: 0x${compatibility.toString(16)}, Level: 0x${level.toString(16)}`);
-            this.config = config;
-            
-            // Check if codec is supported before configuring
-            try {
-                const isSupported = await VideoDecoder.isConfigSupported(config);
-                console.log("Codec support check:", isSupported);
-                
-                if (!isSupported.supported) {
-                    throw new Error(`Codec ${config.codec} is not supported by this browser`);
-                }
-            } catch (supportError) {
-                console.warn("Could not check codec support:", supportError);
-                // Continue anyway, as some browsers might not support isConfigSupported
+            // PATCH: Fix compatibility issues with constraint_set1_flag
+            // Some streams have constraint_set1_flag=1 which can cause WebCodecs issues
+            if (spsData[2] & 0x40) { // Check if constraint_set1_flag is set
+                console.log("🔧 Detected constraint_set1_flag=1, creating modified SPS for better WebCodecs compatibility");
+                spsData = new Uint8Array(spsData);
+                spsData[2] = spsData[2] & 0xBF; // Clear constraint_set1_flag (bit 6)
+                console.log(`   Original compatibility: 0x${analysis.spsData[2].toString(16)}`);
+                console.log(`   Modified compatibility: 0x${spsData[2].toString(16)}`);
             }
+            
+            const description = H264Decoder.createAVCDecoderConfig(spsData, ppsData);
+            
+            // Create codec string from SPS data with compatibility fallbacks
+            const profile = spsData[1];
+            const compatibility = spsData[2];
+            const level = spsData[3];
+            
+            // CRITICAL: Codec string MUST exactly match the SPS profile/level data
+            // Using mismatched codec strings causes "Decoder error" in WebCodecs
+            const actualCodec = `avc1.${profile.toString(16).padStart(2, '0')}${compatibility.toString(16).padStart(2, '0')}${level.toString(16).padStart(2, '0')}`;
+            
+            const codecConfigs = [
+                {
+                    codec: actualCodec,
+                    description: description,
+                    name: `Actual SPS Profile/Level (${this.getProfileName(profile)} Level ${this.getLevelName(level)})`
+                }
+            ];
+            
+            let config = null;
+            
+            // Try each configuration until one works
+            for (const testConfig of codecConfigs) {
+                try {
+                    console.log(`Testing codec configuration: ${testConfig.name} (${testConfig.codec})`);
+                    const isSupported = await VideoDecoder.isConfigSupported(testConfig);
+                    console.log(`Codec support result:`, isSupported);
+                    
+                    if (isSupported.supported) {
+                        config = testConfig;
+                        console.log(`✅ Using compatible codec: ${testConfig.name}`);
+                        break;
+                    } else {
+                        console.log(`❌ Codec not supported: ${testConfig.name}`);
+                    }
+                } catch (supportError) {
+                    console.warn(`Could not check support for ${testConfig.name}:`, supportError);
+                    // If we can't check support, try it anyway (fallback for older browsers)
+                    if (!config) {
+                        config = testConfig;
+                        console.log(`🔄 Fallback to: ${testConfig.name}`);
+                    }
+                }
+            }
+            
+            if (!config) {
+                // Ultimate fallback - use original config
+                config = codecConfigs[0];
+                console.warn('⚠️ No supported codec found, using original configuration');
+            }
+
+            console.log(`Decoder config: codec=${config.codec}, description=${config.description.byteLength} bytes`);
+            console.log(`Profile: 0x${profile.toString(16)}, Compatibility: 0x${compatibility.toString(16)}, Level: 0x${level.toString(16)}`);
+            
+            // Debug: Validate AVCC configuration
+            const avccData = new Uint8Array(config.description);
+            console.log("🔍 AVCC Config validation:");
+            console.log(`   Version: ${avccData[0]} (should be 1)`);
+            console.log(`   Profile: 0x${avccData[1].toString(16)} (should match SPS)`);
+            console.log(`   Compatibility: 0x${avccData[2].toString(16)}`);
+            console.log(`   Level: 0x${avccData[3].toString(16)} (should match SPS)`);
+            console.log(`   Length size: ${(avccData[4] & 0x03) + 1} bytes (should be 4)`);
+            console.log(`   SPS count: ${avccData[5] & 0x1F} (should be 1)`);
+            
+            if (avccData[0] !== 1) {
+                console.error("   ❌ Invalid AVCC version");
+            }
+            if (avccData[1] !== profile) {
+                console.error(`   ❌ AVCC profile mismatch: config=0x${avccData[1].toString(16)}, SPS=0x${profile.toString(16)}`);
+            }
+            if (avccData[3] !== level) {
+                console.error(`   ❌ AVCC level mismatch: config=0x${avccData[3].toString(16)}, SPS=0x${level.toString(16)}`);
+            }
+            
+            this.config = config;
 
             // Configure decoder and wait for it to be ready
             try {
                 await this.decoder.configure(config);
                 console.log("VideoDecoder configured successfully, state:", this.decoder.state);
+                
+                // Reset recreation attempts on successful configuration
+                this.recreationAttempts = 0;
                 
                 // Verify decoder is in configured state
                 if (this.decoder.state !== 'configured') {
@@ -595,6 +693,65 @@ export class CVideoH264Data extends CVideoData {
         try {
             for (let i = group.frame; i < group.frame + group.length; i++) {
                 if (i < this.chunks.length) {
+                    // Debug: Log first few decode attempts
+                    if (i <= 5) {
+                        console.log(`🔍 Decoding frame ${i}:`);
+                        console.log(`   Type: ${this.chunks[i].type}`);
+                        console.log(`   Size: ${this.chunks[i].byteLength} bytes`);
+                        console.log(`   Timestamp: ${this.chunks[i].timestamp}`);
+                        
+                        // Check first few bytes of the chunk data using copyTo()
+                        const data = new Uint8Array(this.chunks[i].byteLength);
+                        this.chunks[i].copyTo(data);
+                        
+                        const firstBytes = Array.from(data.slice(0, 8))
+                            .map(b => '0x' + b.toString(16).padStart(2, '0'))
+                            .join(' ');
+                        console.log(`   First 8 bytes: ${firstBytes}`);
+                        
+                        // Parse AVCC format - might have multiple NAL units
+                        let offset = 0;
+                        let nalCount = 0;
+                        let hasVideoNAL = false;
+                        console.log(`   📦 Parsing aggregated frame:`);
+                        
+                        while (offset < data.length - 4) {
+                            const lengthPrefix = (data[offset] << 24) | (data[offset + 1] << 16) | 
+                                               (data[offset + 2] << 8) | data[offset + 3];
+                            
+                            if (lengthPrefix <= 0 || offset + 4 + lengthPrefix > data.length) {
+                                console.error(`   ❌ Invalid length prefix ${lengthPrefix} at offset ${offset}`);
+                                break;
+                            }
+                            
+                            const nalType = data[offset + 4] & 0x1F;
+                            nalCount++;
+                            
+                            console.log(`   NAL ${nalCount}: type=${nalType}, length=${lengthPrefix}, offset=${offset}`);
+                            
+                            if (nalType === 5 || nalType === 1) {
+                                hasVideoNAL = true;
+                            } else if (nalType === 6) {
+                                console.log(`   📝 SEI metadata NAL unit`);
+                            } else {
+                                console.error(`   ❌ Unexpected NAL type: ${nalType}`);
+                            }
+                            
+                            offset += 4 + lengthPrefix;
+                        }
+                        
+                        if (offset === data.length && hasVideoNAL) {
+                            console.log(`   ✅ Valid aggregated frame with ${nalCount} NAL units`);
+                        } else {
+                            console.error(`   ❌ Frame validation failed: offset=${offset}, length=${data.length}, hasVideo=${hasVideoNAL}`);
+                        }
+                    }
+                    
+                    // Debug: Log decode attempt
+                    if (i <= 5) {
+                        console.log(`   🎬 Calling decoder.decode() for frame ${i}`);
+                    }
+                    
                     this.decoder.decode(this.chunks[i]);
                 } else {
                     console.warn("Trying to decode frame beyond chunks length:", i, ">=", this.chunks.length);
@@ -673,6 +830,50 @@ export class CVideoH264Data extends CVideoData {
         infoDiv.style.fontSize = "13px"
         infoDiv.style.zIndex = '1001';
         infoDiv.innerHTML = d
+    }
+
+
+
+    tryAlternativeDecoding() {
+        console.log("🔄 Trying alternative decoding approach...");
+        
+        // For now, just mark as error and use blank frames
+        // In the future, we could try:
+        // 1. Different codec configurations
+        // 2. Frame-by-frame decoding
+        // 3. Fallback to software decoder
+        console.log("⚠️ Alternative decoding not implemented yet, using blank frames");
+        this.decoderError = true;
+    }
+
+    async recreateDecoder() {
+        try {
+            console.log("Recreating VideoDecoder after error...");
+            
+            // Close existing decoder if it exists
+            if (this.decoder && this.decoder.state !== 'closed') {
+                try {
+                    this.decoder.close();
+                } catch (e) {
+                    console.warn("Error closing decoder:", e);
+                }
+            }
+            
+            // Create new decoder with same callbacks
+            this.decoder = new VideoDecoder(this.decoderCallbacks);
+            
+            // Reconfigure with stored config
+            if (this.config) {
+                await this.decoder.configure(this.config);
+                console.log("VideoDecoder recreated and configured successfully");
+            } else {
+                console.error("No stored config available for decoder recreation");
+            }
+            
+        } catch (error) {
+            console.error("Failed to recreate decoder:", error);
+            this.decoderError = true;
+        }
     }
 
     readFileAsArrayBuffer(file) {

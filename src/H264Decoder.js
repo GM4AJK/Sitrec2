@@ -203,7 +203,7 @@ export class H264Decoder {
     }
 
     /**
-     * Create EncodedVideoChunk objects from NAL units
+     * Create EncodedVideoChunk objects from NAL units with proper frame aggregation
      */
     static createEncodedVideoChunks(nalUnits, fps) {
         const chunks = [];
@@ -211,88 +211,107 @@ export class H264Decoder {
         let timestamp = 0;
 
         // Group NAL units into frames
-        let currentFrame = [];
-        let isKeyFrame = false;
+        const frames = this.groupNALUnitsIntoFrames(nalUnits);
+        console.log(`Grouped ${nalUnits.length} NAL units into ${frames.length} frames`);
 
-        for (const nal of nalUnits) {
-            const nalType = nal.data[0] & 0x1F;
+        for (const frame of frames) {
+            if (frame.nalUnits.length === 0) continue;
+
+            // Create aggregated frame data
+            const frameData = this.createAggregatedFrame(frame.nalUnits);
             
-            if (nalType === 7 || nalType === 8) {
-                // SPS/PPS - add to current frame
-                currentFrame.push(nal);
-            } else if (nalType === 5) {
-                // IDR frame - keyframe
-                currentFrame.push(nal);
-                isKeyFrame = true;
-                
-                // Create chunk for this frame
-                if (currentFrame.length > 0) {
-                    const frameData = this.combineNALUnits(currentFrame);
-                    chunks.push(new EncodedVideoChunk({
-                        type: isKeyFrame ? 'key' : 'delta',
-                        timestamp: timestamp,
-                        duration: frameDuration,
-                        data: frameData
-                    }));
-                    
-                    timestamp += frameDuration;
-                    currentFrame = [];
-                    isKeyFrame = false;
-                }
-            } else if (nalType === 1) {
-                // P frame - delta frame
-                currentFrame.push(nal);
-                
-                // Create chunk for this frame
-                if (currentFrame.length > 0) {
-                    const frameData = this.combineNALUnits(currentFrame);
-                    chunks.push(new EncodedVideoChunk({
-                        type: 'delta',
-                        timestamp: timestamp,
-                        duration: frameDuration,
-                        data: frameData
-                    }));
-                    
-                    timestamp += frameDuration;
-                    currentFrame = [];
-                }
-            }
-        }
-
-        // Handle any remaining frame data
-        if (currentFrame.length > 0) {
-            const frameData = this.combineNALUnits(currentFrame);
             chunks.push(new EncodedVideoChunk({
-                type: isKeyFrame ? 'key' : 'delta',
+                type: frame.type,
                 timestamp: timestamp,
                 duration: frameDuration,
                 data: frameData
             }));
+            timestamp += frameDuration;
         }
 
         return chunks;
     }
 
     /**
-     * Combine multiple NAL units into a single frame buffer (AVCC format)
+     * Group NAL units into complete frames
      */
-    static combineNALUnits(nalUnits) {
-        let totalSize = 0;
-        
-        // Calculate total size needed
+    static groupNALUnitsIntoFrames(nalUnits) {
+        const frames = [];
+        let currentFrame = {
+            type: null,
+            nalUnits: []
+        };
+
         for (const nal of nalUnits) {
-            totalSize += 4 + nal.data.length; // 4 bytes for length prefix + NAL data
+            const nalType = nal.data[0] & 0x1F;
+            
+            if (nalType === 5) {
+                // IDR frame - start new keyframe
+                if (currentFrame.nalUnits.length > 0) {
+                    frames.push(currentFrame);
+                }
+                currentFrame = {
+                    type: 'key',
+                    nalUnits: [nal]
+                };
+                
+            } else if (nalType === 1) {
+                // P frame - start new delta frame
+                if (currentFrame.nalUnits.length > 0) {
+                    frames.push(currentFrame);
+                }
+                currentFrame = {
+                    type: 'delta',
+                    nalUnits: [nal]
+                };
+                
+            } else if (nalType === 6) {
+                // SEI - add to current frame if we have one with video data
+                if (currentFrame.nalUnits.length > 0 && currentFrame.type !== null) {
+                    currentFrame.nalUnits.push(nal);
+                }
+                // If no current frame or current frame has no video data, ignore orphaned SEI
+                
+            } else if (nalType === 9) {
+                // Access Unit Delimiter - frame boundary marker
+                if (currentFrame.nalUnits.length > 0) {
+                    frames.push(currentFrame);
+                    currentFrame = {
+                        type: null,
+                        nalUnits: []
+                    };
+                }
+            }
+            // Skip SPS/PPS (types 7, 8) - they go in decoder config only
         }
 
+        // Add final frame
+        if (currentFrame.nalUnits.length > 0) {
+            frames.push(currentFrame);
+        }
+
+        // Filter out frames without video data
+        return frames.filter(frame => frame.type !== null);
+    }
+
+    /**
+     * Create aggregated frame data from multiple NAL units
+     */
+    static createAggregatedFrame(nalUnits) {
+        // Calculate total size needed
+        let totalSize = 0;
+        for (const nal of nalUnits) {
+            totalSize += 4 + nal.data.length; // 4 bytes length prefix + NAL data
+        }
+
+        // Create aggregated buffer
         const frameBuffer = new ArrayBuffer(totalSize);
         const frameView = new Uint8Array(frameBuffer);
         const dataView = new DataView(frameBuffer);
         
         let offset = 0;
-        
-        // Write each NAL unit with length prefix (AVCC format)
         for (const nal of nalUnits) {
-            // Write length prefix (big-endian 32-bit)
+            // Write length prefix (big-endian 32-bit) - AVCC format
             dataView.setUint32(offset, nal.data.length, false);
             offset += 4;
             
@@ -303,6 +322,10 @@ export class H264Decoder {
 
         return frameBuffer;
     }
+
+
+
+
 
     /**
      * Extract individual NAL units from H.264 stream
