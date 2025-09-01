@@ -48,7 +48,7 @@ export class CVideoH264Data extends CVideoData {
         this.chunks = []; // per frame chunks
         this.groups = []; // groups for frames+delta
         this.groupsPending = 0;
-        this.nextRequest = -1;
+        this.nextRequest = null;
         this.incomingFrame = 0;
         this.lastTimeStamp = -1;
         this.lastDecodeInfo = "";
@@ -274,7 +274,7 @@ export class CVideoH264Data extends CVideoData {
         }
         
         this.groupsPending = 0;
-        this.nextRequest = -1;
+        this.nextRequest = null;
     }
 
     async initializeCaching(v, loadedCallback, errorCallback) {
@@ -301,7 +301,8 @@ export class CVideoH264Data extends CVideoData {
             this.chunks = [];
             this.groups = [];
             this.groupsPending = 0;
-            this.nextRequest = -1;
+            this.nextRequest = null;
+            this.tsToFrame = null; // timestamp->frame index map (display order)
             this.decoderError = false; // Reset decoder error flag
             this.recreationAttempts = 0; // Reset recreation attempts
 
@@ -334,6 +335,12 @@ export class CVideoH264Data extends CVideoData {
 
             console.log(`Created ${encodedChunks.length} video chunks`);
 
+            // Build timestamp->frame index map in DISPLAY order (matches timestamps)
+            this.tsToFrame = new Map();
+            for (let i = 0; i < encodedChunks.length; i++) {
+                this.tsToFrame.set(encodedChunks[i].timestamp, i);
+            }
+
             // Process chunks to create groups (similar to MP4 demuxer)
             this.processChunksIntoGroups(encodedChunks);
 
@@ -344,20 +351,19 @@ export class CVideoH264Data extends CVideoData {
                         this.format = videoFrame.format;
                         this.lastDecodeInfo = "last frame.timestamp = " + videoFrame.timestamp + "<br>";
 
-                        var groupNumber = 0;
-                        // find the group this frame is in
-                        while (groupNumber + 1 < this.groups.length && videoFrame.timestamp >= this.groups[groupNumber + 1].timestamp)
-                            groupNumber++;
-                        var group = this.groups[groupNumber]
-
-                        if (!group) {
-                            console.warn("No group found for decoded frame with timestamp", videoFrame.timestamp);
+                        // Map output to frame index via timestamp (robust w/ B-frames)
+                        if (!this.tsToFrame || !this.tsToFrame.has(videoFrame.timestamp)) {
+                            console.warn("No frame index for timestamp", videoFrame.timestamp);
                             videoFrame.close();
                             return;
                         }
-
-                        // calculate the frame number we are decoding from how many are left
-                        const frameNumber = group.frame + group.length - group.pending;
+                        const frameNumber = this.tsToFrame.get(videoFrame.timestamp);
+                        const group = this.getGroup(frameNumber);
+                        if (!group) {
+                            console.warn("Group not found for frame number", frameNumber);
+                            videoFrame.close();
+                            return;
+                        }
                         
                         createImageBitmap(videoFrame).then(image => {
                             if (!this.imageCache) {
@@ -402,10 +408,11 @@ export class CVideoH264Data extends CVideoData {
                             if (group.pending == 0) {
                                 group.loaded = true;
                                 this.groupsPending--;
-                                if (this.groupsPending === 0 && this.nextRequest >= 0) {
-                                    console.log("FULFILLING deferred request as no groups pending , frame = " + this.nextRequest)
-                                    this.requestGroup(this.nextRequest)
-                                    this.nextRequest = -1
+                                if (this.groupsPending === 0 && this.nextRequest) {
+                                    const g = this.nextRequest;
+                                    this.nextRequest = null;
+                                    console.log("FULFILLING deferred request as no groups pending");
+                                    this.requestGroup(g);
                                 }
                             }
                         }).catch(error => {
@@ -450,15 +457,7 @@ export class CVideoH264Data extends CVideoData {
             let spsData = analysis.spsData;
             let ppsData = analysis.ppsData;
             
-            // PATCH: Fix compatibility issues with constraint_set1_flag
-            // Some streams have constraint_set1_flag=1 which can cause WebCodecs issues
-            if (spsData[2] & 0x40) { // Check if constraint_set1_flag is set
-                console.log("🔧 Detected constraint_set1_flag=1, creating modified SPS for better WebCodecs compatibility");
-                spsData = new Uint8Array(spsData);
-                spsData[2] = spsData[2] & 0xBF; // Clear constraint_set1_flag (bit 6)
-                console.log(`   Original compatibility: 0x${analysis.spsData[2].toString(16)}`);
-                console.log(`   Modified compatibility: 0x${spsData[2].toString(16)}`);
-            }
+            // Keep SPS bytes unmodified; do not twiddle constraint flags.
             
             const description = H264Decoder.createAVCDecoderConfig(spsData, ppsData);
             
@@ -681,7 +680,7 @@ export class CVideoH264Data extends CVideoData {
 
         // if decoder is busy, defer the request
         if (this.decoder.decodeQueueSize > 0) {
-            this.nextRequest = group;
+            if (!this.nextRequest) this.nextRequest = group;
             return;
         }
 
@@ -778,7 +777,7 @@ export class CVideoH264Data extends CVideoData {
 
                 for (let i = group.frame; i < group.frame + group.length; i++) {
                     // release all the frames in this group
-                    this.imageCache[i] = new Image()    // TODO, maybe better as null, but other code expect an empty Image when not loaded
+                    this.imageCache[i] = undefined;   // lean sentinel
                     this.imageDataCache[i] = undefined;
                     this.frameCache[i] = undefined;
                 }
