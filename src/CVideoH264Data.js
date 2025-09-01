@@ -49,6 +49,7 @@ export class CVideoH264Data extends CVideoData {
         this.groups = []; // groups for frames+delta
         this.groupsPending = 0;
         this.nextRequest = null;
+        this.requestQueue = [];
         this.incomingFrame = 0;
         this.lastTimeStamp = -1;
         this.lastDecodeInfo = "";
@@ -154,12 +155,12 @@ export class CVideoH264Data extends CVideoData {
             }
 
             let image = this.imageCache[bestFrame];
-            
+
             // If no valid frame found, return blank frame
             if (!image || (image.width === 0)) {
                 return this.createBlankFrame();
             }
-            
+
             return image;
         }
     }
@@ -170,7 +171,11 @@ export class CVideoH264Data extends CVideoData {
 
     createBlankFrame() {
         if (!this.width || !this.height) {
-            return null; // Can't create blank frame without dimensions
+            const tempCanvas = document.createElement('canvas');
+            tempCanvas.width = 1; tempCanvas.height = 1;
+            const ctx = tempCanvas.getContext('2d');
+            ctx.fillStyle = 'black'; ctx.fillRect(0, 0, 1, 1);
+            return tempCanvas;
         }
 
         if (!this.blankFrame) {
@@ -179,11 +184,11 @@ export class CVideoH264Data extends CVideoData {
             canvas.width = this.width;
             canvas.height = this.height;
             const ctx = canvas.getContext('2d');
-            
+
             // Fill with black
             ctx.fillStyle = 'black';
             ctx.fillRect(0, 0, this.width, this.height);
-            
+
             // Convert to ImageBitmap for consistency with decoded frames
             createImageBitmap(canvas).then(bitmap => {
                 this.blankFrame = bitmap;
@@ -192,11 +197,11 @@ export class CVideoH264Data extends CVideoData {
                 // Fallback to canvas
                 this.blankFrame = canvas;
             });
-            
+
             // Return canvas immediately while ImageBitmap is being created
             return canvas;
         }
-        
+
         return this.blankFrame;
     }
 
@@ -253,18 +258,18 @@ export class CVideoH264Data extends CVideoData {
                 }
             }
         }
-        
+
         // Close blank frame if it's an ImageBitmap
         if (this.blankFrame && typeof this.blankFrame.close === 'function') {
             this.blankFrame.close();
         }
         this.blankFrame = null;
-        
+
         // Reset cache arrays
         this.imageCache = [];
         this.imageDataCache = [];
         this.frameCache = [];
-        
+
         // Reset groups
         if (this.groups) {
             for (let group of this.groups) {
@@ -272,17 +277,18 @@ export class CVideoH264Data extends CVideoData {
                 group.pending = 0;
             }
         }
-        
+
         this.groupsPending = 0;
         this.nextRequest = null;
+        this.requestQueue = [];
     }
 
     async initializeCaching(v, loadedCallback, errorCallback) {
         try {
             console.log("Initializing H.264 frame caching system...");
-            
+
             let h264Buffer;
-            
+
             // Get the H.264 data from either file or buffer
             if (v.dropFile) {
                 // Read the dropped file
@@ -302,6 +308,7 @@ export class CVideoH264Data extends CVideoData {
             this.groups = [];
             this.groupsPending = 0;
             this.nextRequest = null;
+            this.requestQueue = [];
             this.tsToFrame = null; // timestamp->frame index map (display order)
             this.decoderError = false; // Reset decoder error flag
             this.recreationAttempts = 0; // Reset recreation attempts
@@ -331,7 +338,14 @@ export class CVideoH264Data extends CVideoData {
 
             // Extract NAL units and create chunks
             const nalUnits = H264Decoder.extractNALUnits(new Uint8Array(h264Buffer));
-            const encodedChunks = H264Decoder.createEncodedVideoChunks(nalUnits, 30);
+
+            // After analysis:
+            let fps = 30; // Default
+            if (analysis.vui && analysis.vui.timing_info_present) {
+                fps = analysis.vui.time_scale / (2 * analysis.vui.num_units_in_tick); // Standard formula, assumes fixed_frame_rate_flag
+            }
+
+            const encodedChunks = H264Decoder.createEncodedVideoChunks(nalUnits, fps);
 
             console.log(`Created ${encodedChunks.length} video chunks`);
 
@@ -364,18 +378,18 @@ export class CVideoH264Data extends CVideoData {
                             videoFrame.close();
                             return;
                         }
-                        
+
                         createImageBitmap(videoFrame).then(image => {
                             if (!this.imageCache) {
                                 this.imageCache = [];
                             }
-                            
+
                             this.imageCache[frameNumber] = image
                             this.width = image.width;
                             this.height = image.height;
                             this.imageWidth = image.width;
                             this.imageHeight = image.height;
-                            
+
                             if (this.c_tmp === undefined) {
                                 this.c_tmp = document.createElement("canvas")
                                 this.c_tmp.setAttribute("width", this.width)
@@ -408,11 +422,10 @@ export class CVideoH264Data extends CVideoData {
                             if (group.pending == 0) {
                                 group.loaded = true;
                                 this.groupsPending--;
-                                if (this.groupsPending === 0 && this.nextRequest) {
-                                    const g = this.nextRequest;
-                                    this.nextRequest = null;
-                                    console.log("FULFILLING deferred request as no groups pending");
-                                    this.requestGroup(g);
+                                if (this.groupsPending === 0 && this.requestQueue.length > 0) {
+                                    console.log("FULFILLING deferred requests as no groups pending");
+                                    const nextGroup = this.requestQueue.shift();
+                                    this.requestGroup(nextGroup);
                                 }
                             }
                         }).catch(error => {
@@ -456,37 +469,47 @@ export class CVideoH264Data extends CVideoData {
             // Configure decoder
             let spsData = analysis.spsData;
             let ppsData = analysis.ppsData;
-            
+
             // Keep SPS bytes unmodified; do not twiddle constraint flags.
-            
+
             const description = H264Decoder.createAVCDecoderConfig(spsData, ppsData);
-            
+
             // Create codec string from SPS data with compatibility fallbacks
-            const profile = spsData[1];
-            const compatibility = spsData[2];
-            const level = spsData[3];
-            
+            const profile = spsData[0];
+            const compatibility = spsData[1];
+            const level = spsData[2];
+
             // CRITICAL: Codec string MUST exactly match the SPS profile/level data
             // Using mismatched codec strings causes "Decoder error" in WebCodecs
             const actualCodec = `avc1.${profile.toString(16).padStart(2, '0')}${compatibility.toString(16).padStart(2, '0')}${level.toString(16).padStart(2, '0')}`;
-            
+
             const codecConfigs = [
                 {
                     codec: actualCodec,
                     description: description,
-                    name: `Actual SPS Profile/Level (${this.getProfileName(profile)} Level ${this.getLevelName(level)})`
+                    name: `Actual SPS (${this.getProfileName(profile)}@${this.getLevelName(level)})`
+                },
+                {
+                    codec: 'avc1.4d401f',
+                    description: description,
+                    name: 'Fallback Main@3.1'
+                },
+                {
+                    codec: 'avc1.42001e',
+                    description: description,
+                    name: 'Fallback Baseline@3.0'
                 }
             ];
-            
+
             let config = null;
-            
+
             // Try each configuration until one works
             for (const testConfig of codecConfigs) {
                 try {
                     console.log(`Testing codec configuration: ${testConfig.name} (${testConfig.codec})`);
                     const isSupported = await VideoDecoder.isConfigSupported(testConfig);
                     console.log(`Codec support result:`, isSupported);
-                    
+
                     if (isSupported.supported) {
                         config = testConfig;
                         console.log(`✅ Using compatible codec: ${testConfig.name}`);
@@ -503,7 +526,7 @@ export class CVideoH264Data extends CVideoData {
                     }
                 }
             }
-            
+
             if (!config) {
                 // Ultimate fallback - use original config
                 config = codecConfigs[0];
@@ -512,7 +535,7 @@ export class CVideoH264Data extends CVideoData {
 
             console.log(`Decoder config: codec=${config.codec}, description=${config.description.byteLength} bytes`);
             console.log(`Profile: 0x${profile.toString(16)}, Compatibility: 0x${compatibility.toString(16)}, Level: 0x${level.toString(16)}`);
-            
+
             // Debug: Validate AVCC configuration
             const avccData = new Uint8Array(config.description);
             console.log("🔍 AVCC Config validation:");
@@ -522,7 +545,7 @@ export class CVideoH264Data extends CVideoData {
             console.log(`   Level: 0x${avccData[3].toString(16)} (should match SPS)`);
             console.log(`   Length size: ${(avccData[4] & 0x03) + 1} bytes (should be 4)`);
             console.log(`   SPS count: ${avccData[5] & 0x1F} (should be 1)`);
-            
+
             if (avccData[0] !== 1) {
                 console.error("   ❌ Invalid AVCC version");
             }
@@ -532,24 +555,24 @@ export class CVideoH264Data extends CVideoData {
             if (avccData[3] !== level) {
                 console.error(`   ❌ AVCC level mismatch: config=0x${avccData[3].toString(16)}, SPS=0x${level.toString(16)}`);
             }
-            
+
             this.config = config;
 
             // Configure decoder and wait for it to be ready
             try {
                 await this.decoder.configure(config);
                 console.log("VideoDecoder configured successfully, state:", this.decoder.state);
-                
+
                 // Reset recreation attempts on successful configuration
                 this.recreationAttempts = 0;
-                
+
                 // Verify decoder is in configured state
                 if (this.decoder.state !== 'configured') {
                     throw new Error(`Decoder configuration failed, state: ${this.decoder.state}`);
                 }
-                
 
-                
+
+
             } catch (configError) {
                 console.error("Decoder configuration failed:", configError);
                 throw new Error(`Failed to configure VideoDecoder: ${configError.message}`);
@@ -559,7 +582,7 @@ export class CVideoH264Data extends CVideoData {
 
             // Set global video properties
             Sit.videoFrames = this.frames * this.videoSpeed;
-            Sit.fps = 30; // Default FPS
+            Sit.fps = fps; // Default FPS
 
             updateSitFrames();
 
@@ -567,15 +590,15 @@ export class CVideoH264Data extends CVideoData {
             this.loadedCallback();
 
             EventManager.dispatchEvent("videoLoaded", {
-                videoData: this, 
-                width: this.imageWidth, 
+                videoData: this,
+                width: this.imageWidth,
                 height: this.imageHeight
             });
 
         } catch (error) {
             console.error("Failed to initialize H.264 caching:", error);
             console.warn("Falling back to error state");
-            
+
             this.errorImage = null;
             loadImage('./data/images/errorImage.png').then(result => {
                 this.errorImage = result;
@@ -671,7 +694,7 @@ export class CVideoH264Data extends CVideoData {
         // Check if decoder is properly configured
         if (this.decoder.state !== 'configured') {
             console.warn("Cannot decode: VideoDecoder is not configured, state:", this.decoder.state);
-            
+
             return;
         }
 
@@ -680,7 +703,9 @@ export class CVideoH264Data extends CVideoData {
 
         // if decoder is busy, defer the request
         if (this.decoder.decodeQueueSize > 0) {
-            if (!this.nextRequest) this.nextRequest = group;
+            if (!this.requestQueue.includes(group)) { // Avoid dups
+                this.requestQueue.push(group);
+            }
             return;
         }
 
@@ -688,7 +713,7 @@ export class CVideoH264Data extends CVideoData {
         group.loaded = false;
         group.decodeOrder = []
         this.groupsPending++;
-        
+
         try {
             for (let i = group.frame; i < group.frame + group.length; i++) {
                 if (i < this.chunks.length) {
@@ -698,36 +723,36 @@ export class CVideoH264Data extends CVideoData {
                         console.log(`   Type: ${this.chunks[i].type}`);
                         console.log(`   Size: ${this.chunks[i].byteLength} bytes`);
                         console.log(`   Timestamp: ${this.chunks[i].timestamp}`);
-                        
+
                         // Check first few bytes of the chunk data using copyTo()
                         const data = new Uint8Array(this.chunks[i].byteLength);
                         this.chunks[i].copyTo(data);
-                        
+
                         const firstBytes = Array.from(data.slice(0, 8))
                             .map(b => '0x' + b.toString(16).padStart(2, '0'))
                             .join(' ');
                         console.log(`   First 8 bytes: ${firstBytes}`);
-                        
+
                         // Parse AVCC format - might have multiple NAL units
                         let offset = 0;
                         let nalCount = 0;
                         let hasVideoNAL = false;
                         console.log(`   📦 Parsing aggregated frame:`);
-                        
+
                         while (offset < data.length - 4) {
-                            const lengthPrefix = (data[offset] << 24) | (data[offset + 1] << 16) | 
-                                               (data[offset + 2] << 8) | data[offset + 3];
-                            
+                            const lengthPrefix = (data[offset] << 24) | (data[offset + 1] << 16) |
+                                (data[offset + 2] << 8) | data[offset + 3];
+
                             if (lengthPrefix <= 0 || offset + 4 + lengthPrefix > data.length) {
                                 console.error(`   ❌ Invalid length prefix ${lengthPrefix} at offset ${offset}`);
                                 break;
                             }
-                            
+
                             const nalType = data[offset + 4] & 0x1F;
                             nalCount++;
-                            
+
                             console.log(`   NAL ${nalCount}: type=${nalType}, length=${lengthPrefix}, offset=${offset}`);
-                            
+
                             if (nalType === 5 || nalType === 1) {
                                 hasVideoNAL = true;
                             } else if (nalType === 6) {
@@ -735,22 +760,22 @@ export class CVideoH264Data extends CVideoData {
                             } else {
                                 console.error(`   ❌ Unexpected NAL type: ${nalType}`);
                             }
-                            
+
                             offset += 4 + lengthPrefix;
                         }
-                        
+
                         if (offset === data.length && hasVideoNAL) {
                             console.log(`   ✅ Valid aggregated frame with ${nalCount} NAL units`);
                         } else {
                             console.error(`   ❌ Frame validation failed: offset=${offset}, length=${data.length}, hasVideo=${hasVideoNAL}`);
                         }
                     }
-                    
+
                     // Debug: Log decode attempt
                     if (i <= 5) {
                         console.log(`   🎬 Calling decoder.decode() for frame ${i}`);
                     }
-                    
+
                     this.decoder.decode(this.chunks[i]);
                 } else {
                     console.warn("Trying to decode frame beyond chunks length:", i, ">=", this.chunks.length);
@@ -835,7 +860,7 @@ export class CVideoH264Data extends CVideoData {
 
     tryAlternativeDecoding() {
         console.log("🔄 Trying alternative decoding approach...");
-        
+
         // For now, just mark as error and use blank frames
         // In the future, we could try:
         // 1. Different codec configurations
@@ -848,7 +873,7 @@ export class CVideoH264Data extends CVideoData {
     async recreateDecoder() {
         try {
             console.log("Recreating VideoDecoder after error...");
-            
+
             // Close existing decoder if it exists
             if (this.decoder && this.decoder.state !== 'closed') {
                 try {
@@ -857,10 +882,10 @@ export class CVideoH264Data extends CVideoData {
                     console.warn("Error closing decoder:", e);
                 }
             }
-            
+
             // Create new decoder with same callbacks
             this.decoder = new VideoDecoder(this.decoderCallbacks);
-            
+
             // Reconfigure with stored config
             if (this.config) {
                 await this.decoder.configure(this.config);
@@ -868,7 +893,7 @@ export class CVideoH264Data extends CVideoData {
             } else {
                 console.error("No stored config available for decoder recreation");
             }
-            
+
         } catch (error) {
             console.error("Failed to recreate decoder:", error);
             this.decoderError = true;
