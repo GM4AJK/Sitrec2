@@ -24,8 +24,6 @@ import {CGeoJSON} from "./geoJSONUtils";
 import {CNodeSmoothedPositionTrack} from "./nodes/CNodeSmoothedPositionTrack";
 
 
-
-
 class CMetaTrack {
     constructor(trackFileName, trackDataNode, trackNode) {
         this.trackNode = trackNode;
@@ -303,6 +301,7 @@ class CTrackManager extends CManager {
                 // where the user might drag in the same file(s) twice
                 // so if it exists, we call disposeRemove to free any buffers, and remove it from the manager
                 // so then we can just reload it again
+                let trackColor = null; // Declare trackColor variable
                 if (removeDuplicates) {
                     // iterate over the tracks and find if there is one that has the same filename
                     // in trackFileName
@@ -384,7 +383,9 @@ class CTrackManager extends CManager {
                         new Color(0.5, 0, 0.5),
                     ];
 
-                    let trackColor = trackColors[trackNumber % trackColors.length];
+                    if (trackColor === null) {
+                        trackColor = trackColors[trackNumber % trackColors.length];
+                    }
                     // make dropcolor be the same as the track color bur reduced in brightness to 75%
                     const dropColor = trackColor.clone().multiplyScalar(0.75);
 
