@@ -6,6 +6,10 @@ export function incrementMainLoopCount() {
 
 export var Globals = {}
 
+export function setSitchEstablished(bool) {
+    Globals.sitchEstablished = bool;
+}
+
 export var Sit;
 export function setSit(s) {Sit = s;}
 

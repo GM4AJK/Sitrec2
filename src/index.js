@@ -24,6 +24,7 @@ import {
     setNullNode,
     setRenderOne,
     setSit,
+    setSitchEstablished,
     setSitchMan,
     setUnits,
     setupGUIGlobals,
@@ -305,7 +306,7 @@ if (latlon) {
             Sit.fixedCameraPosition.agl = true;
 
 
-            Globals.sitchEstablished = true; // so loading tracks won't set the Lat/Lon time again
+            setSitchEstablished(true); // so loading tracks won't set the Lat/Lon time again
 
 
 
@@ -329,7 +330,7 @@ if (dateTime) {
     GlobalDateTimeNode.populateStartTimeFromUTCString(dateTime);
     Globals.timeOverride = true; // flag to ignore deserializing date time
     console.log("GlobalDateTimeNode dateStart  = " + GlobalDateTimeNode.dateStart.toISOString());
-    Globals.sitchEstablished = true; // so loading tracks won't set the date time again
+    setSitchEstablished(true); // so loading tracks won't set the date time again
 }
 
 
@@ -420,7 +421,7 @@ function checkFornewSitchObject() {
 
 async function newSitch(situation, customSetup = false ) {
 
-    Globals.sitchEstablished = false;
+    setSitchEstablished(false);
 
     // for the built-in sitches, we change the url, but we don't reload the page
     // that way the user can share the url direct to this sitch
@@ -1022,7 +1023,7 @@ async function setupFunctions() {
         // normally setting the camera positon means we have established the sitch
         // however if it's ust geolocating the camera, then we don't want to set the sitch established
         // as we still want to load tracks and have it set the start time and location to the track
-        Globals.sitchEstablished = false;
+        setSitchEstablished(false);
 
     }
 

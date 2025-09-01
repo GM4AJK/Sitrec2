@@ -1,4 +1,4 @@
-import {Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Globals";
+import {Globals, guiMenus, NodeMan, setRenderOne, setSitchEstablished, Sit} from "../Globals";
 import {CNode} from "./CNode";
 import {par} from "../par";
 import {isKeyCodeHeld, isKeyHeld} from "../KeyBoardHandler";
@@ -547,7 +547,7 @@ export class CNodeDateTime extends CNode {
         if (!this.refreshingUI) {
 
             // if they set the time, don't auto set it later
-            Globals.sitchEstablished = true;
+            setSitchEstablished(true);
 
             this.adjustDaysInMonth();
 
@@ -575,7 +575,7 @@ export class CNodeDateTime extends CNode {
 //            console.log("Did a time change recalc debugCounter = "+Globals.debugCounter)
             Globals.debugCascade = false;
             setRenderOne(true);
-            Globals.sitchEstablished = true;
+            setSitchEstablished(true);
         }
     }
 

@@ -1,12 +1,14 @@
 // Support functions for the custom sitches and mods
 
 import {
-    FileManager, GlobalDateTimeNode,
+    FileManager,
+    GlobalDateTimeNode,
     Globals,
     guiMenus,
     infoDiv,
     NodeMan,
-    setCustomManager, setRenderOne,
+    setRenderOne,
+    setSitchEstablished,
     Sit,
     Units
 } from "./Globals";
@@ -16,7 +18,7 @@ import {createCustomModalWithCopy, saveFilePrompted} from "./CFileManager";
 import {DragDropHandler} from "./DragDropHandler";
 import {par} from "./par";
 import {GlobalScene} from "./LocalFrame";
-import {measurementUIVars, refreshLabelsAfterLoading, refreshLabelVisibility} from "./nodes/CNodeLabels3D";
+import {refreshLabelsAfterLoading} from "./nodes/CNodeLabels3D";
 import {assert} from "./assert.js";
 import {getShortURL} from "./urlUtils";
 import {CNode3DObject} from "./nodes/CNode3DObject";
@@ -30,10 +32,6 @@ import {DebugArrowAB} from "./threeExt";
 import {TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
-
-
-
-
 
 
 export class CCustomManager {
@@ -121,14 +119,14 @@ export class CCustomManager {
         // they add any tracks
         EventManager.addEventListener("Switch.onChange.cameraTrackSwitch", (choice) => {
             console.log("EVENT Camera track switch changed to " + choice)
-            Globals.sitchEstablished = true
+            setSitchEstablished(true)
         });
 
         // Changing the LOS traversal method would indicate a sitch has been established
         // this might be done after the first track
         EventManager.addEventListener("Switch.onChange.LOSTraverseSelectTrack", (choice) => {
             console.log("EVENT Camera track switch changed to " + choice)
-            Globals.sitchEstablished = true
+            setSitchEstablished(true)
         });
 
         // Changing the CameraLOSController method would indicate a sitch has been established
@@ -136,20 +134,20 @@ export class CCustomManager {
         // I'm not doing this, as the LOS controller is changed programatically by loading the first track
         // coudl possibly patch around it, but I'm not sure if it's needed.
         // EventManager.addEventListener("Switch.onChange.CameraLOSController", (choice) => {
-        //     Globals.sitchEstablished = true
+        //     setSitchEstablished(true)
         // });
 
         EventManager.addEventListener("GUIValue.onChange.Camera [C] Lat", (value) => {
-            Globals.sitchEstablished = true
+            setSitchEstablished(true)
         });
 
         EventManager.addEventListener("GUIValue.onChange.Camera [C] Lon", (value) => {
-            Globals.sitchEstablished = true
+            setSitchEstablished(true)
         });
 
         EventManager.addEventListener("PositionLLA.onChange", (data) => {
             if (data.id === "fixedCameraPosition") {
-                Globals.sitchEstablished = true
+                setSitchEstablished(true)
 
                 // if there's a camera track switch, then we need to update the camera track
                 if (NodeMan.exists("cameraTrackSwitch")) {
@@ -195,6 +193,8 @@ export class CCustomManager {
                if (meta.latitude && meta.longitude && meta.altitude) {
                    const camera = NodeMan.get("fixedCameraPosition");
                    camera.gotoLLA(meta.latitude, meta.longitude, meta.altitude)
+                   // and set sitchEstablished to true
+                   setSitchEstablished(true);
                }
 
                 // got date and time?
@@ -202,10 +202,11 @@ export class CCustomManager {
                    // parse the date and time
                    // set the GlobalDateTimeNode to this date
                    GlobalDateTimeNode.setStartDateTime(meta.creationDate);
-              }
+                   // and set sitchEstablished to true
+                   setSitchEstablished(true);
+               }
 
-               // and set sitchEstablished to true
-               Globals.sitchEstablished = true;
+
 
            }
 
@@ -1002,7 +1003,7 @@ export class CCustomManager {
                     }
                 }
 
-                Globals.sitchEstablished = true; // flag that we've done some editing, so any future drag-and-drop will not mess with the sitch
+                setSitchEstablished(true); // flag that we've done some editing, so any future drag-and-drop will not mess with the sitch
 
             }
 
@@ -1192,7 +1193,7 @@ export class CCustomManager {
 
                 // we assume if they set some terrain then they don't want the automatic
                 // moving of the terrain and time done
-                Globals.sitchEstablished = true;
+                setSitchEstablished(true);
 
                 const mainView = ViewMan.get("mainView")
                 const cursorPos = mainView.cursorSprite.position.clone();

@@ -14,7 +14,7 @@ import {adjustHeightAboveGround, elevationAtLL} from "../threeExt";
 import {assert} from "../assert";
 import {ViewMan} from "../CViewManager";
 import {EventManager} from "../CEventManager";
-import {Globals, guiMenus, NodeMan, Sit} from "../Globals";
+import {guiMenus, NodeMan, setSitchEstablished, Sit} from "../Globals";
 import {getApproximateLocationFromIP} from "../GeoLocation";
 
 export class CNodePositionLLA extends CNode {
@@ -300,7 +300,7 @@ export class CNodePositionLLA extends CNode {
 
                 // don't do any more drag-and-drop triggering of positions
                 // after we move the target or the camera
-                Globals.sitchEstablished = true;
+                setSitchEstablished(true);
 
                 const mainView = ViewMan.get("mainView")
                 const cursorPos = mainView.cursorSprite.position.clone();

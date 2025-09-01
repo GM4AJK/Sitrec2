@@ -6,7 +6,16 @@ import {CNodeConstant} from "./nodes/CNode";
 import * as LAYER from "./LayerMasks";
 import {Color} from "three";
 import {getFileExtension, scaleF2M} from "./utils";
-import {FileManager, GlobalDateTimeNode, Globals, guiMenus, NodeMan, setRenderOne, Sit} from "./Globals";
+import {
+    FileManager,
+    GlobalDateTimeNode,
+    Globals,
+    guiMenus,
+    NodeMan,
+    setRenderOne,
+    setSitchEstablished,
+    Sit
+} from "./Globals";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {CManager} from "./CManager";
 import {CNodeControllerMatrix, CNodeControllerTrackPosition} from "./nodes/CNodeControllerVarious";
@@ -240,7 +249,7 @@ class CTrackManager extends CManager {
 // we want to make tracks from
     addTracks(trackFiles, removeDuplicates = false, sphereMask = LAYER.MASK_HELPERS) {
 
-        let setSitchEstablished = false;
+        let settingSitchEstablished = false;
 
 
         console.log("-----------------------------------------------------")
@@ -432,9 +441,9 @@ class CTrackManager extends CManager {
 
                     this.centerOnTrack(shortName, trackNumber, trackOb, hasCenter, hasAngles);
 
-                    // if there's more than one track loaded, or there's a center track, then flag to set Globals.sitchEstablished = true after the track is processed
+                    // if there's more than one track loaded, or there's a center track, then flag to set setSitchEstablished(true) after the track is processed
                     if (trackNumber > 0 || hasCenter) {
-                        setSitchEstablished = true;
+                        settingSitchEstablished = true;
                     }
 
 
@@ -454,8 +463,8 @@ class CTrackManager extends CManager {
 
         } // and go to the next track
 
-        if (setSitchEstablished) {
-            Globals.sitchEstablished = true;
+        if (settingSitchEstablished) {
+            setSitchEstablished(true);
         }
 
         // we've loaded some tracks, and set stuff up, so ensure everything is calculated

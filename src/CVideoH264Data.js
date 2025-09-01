@@ -17,7 +17,6 @@ export class CVideoH264Data extends CVideoData {
 
     constructor(v, loadedCallback, errorCallback) {
         super(v);
-
         this.format = "h264"
         this.error = false;
         this.loaded = false;
