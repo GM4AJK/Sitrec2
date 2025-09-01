@@ -265,6 +265,8 @@ export class CVideoH264Data extends CVideoData {
         }
         this.blankFrame = null;
 
+
+
         // Reset cache arrays
         this.imageCache = [];
         this.imageDataCache = [];
@@ -281,6 +283,69 @@ export class CVideoH264Data extends CVideoData {
         this.groupsPending = 0;
         this.nextRequest = null;
         this.requestQueue = [];
+        
+        // Reset decode frame index
+        this.decodeFrameIndex = 0;
+    }
+
+    /**
+     * Process a decoded video frame and convert it to ImageBitmap
+     */
+    processDecodedFrame(frameNumber, videoFrame, group) {
+        // If this is our first successful decode, mark success
+        if (!this.firstDecodeSuccess) {
+            this.firstDecodeSuccess = true;
+            console.log(`H.264 decoder working - first frame decoded successfully (${videoFrame.codedWidth}x${videoFrame.codedHeight})`);
+        }
+
+        createImageBitmap(videoFrame).then(image => {
+            if (!this.imageCache) {
+                this.imageCache = [];
+            }
+
+            this.imageCache[frameNumber] = image
+            this.width = image.width;
+            this.height = image.height;
+            this.imageWidth = image.width;
+            this.imageHeight = image.height;
+
+            if (this.c_tmp === undefined) {
+                this.c_tmp = document.createElement("canvas")
+                this.c_tmp.setAttribute("width", this.width)
+                this.c_tmp.setAttribute("height", this.height)
+                this.ctx_tmp = this.c_tmp.getContext("2d")
+            }
+
+            // if it's the last one we wanted, then tell the system to render a frame
+            if (frameNumber === this.lastGetImageFrame) {
+                setRenderOne(true);
+            }
+
+            if (!group.decodeOrder) {
+                group.decodeOrder = [];
+            }
+            group.decodeOrder.push(frameNumber);
+
+            if (group.pending <= 0) {
+                console.warn("Decoding more frames than were listed as pending at frame " + frameNumber);
+                return;
+            }
+
+            group.pending--;
+            if (group.pending == 0) {
+                group.loaded = true;
+                this.groupsPending--;
+                if (this.groupsPending === 0 && this.requestQueue.length > 0) {
+                    console.log("FULFILLING deferred requests as no groups pending");
+                    const nextGroup = this.requestQueue.shift();
+                    this.requestGroup(nextGroup);
+                }
+            }
+        }).catch(error => {
+            console.error("Error creating ImageBitmap:", error);
+        });
+
+        videoFrame.close();
     }
 
     async initializeCaching(v, loadedCallback, errorCallback) {
@@ -312,9 +377,9 @@ export class CVideoH264Data extends CVideoData {
             this.groupsPending = 0;
             this.nextRequest = null;
             this.requestQueue = [];
-            this.tsToFrame = null; // timestamp->frame index map (display order)
             this.decoderError = false; // Reset decoder error flag
             this.recreationAttempts = 0; // Reset recreation attempts
+            this.decodeFrameIndex = 0; // Simple counter for decode order
 
             // Analyze H.264 stream
             console.log("Analyzing H.264 stream...");
@@ -349,14 +414,7 @@ export class CVideoH264Data extends CVideoData {
             }
 
             const encodedChunks = H264Decoder.createEncodedVideoChunks(nalUnits, fps);
-
             console.log(`Created ${encodedChunks.length} video chunks`);
-
-            // Build timestamp->frame index map in DISPLAY order (matches timestamps)
-            this.tsToFrame = new Map();
-            for (let i = 0; i < encodedChunks.length; i++) {
-                this.tsToFrame.set(encodedChunks[i].timestamp, i);
-            }
 
             // Process chunks to create groups (similar to MP4 demuxer)
             this.processChunksIntoGroups(encodedChunks);
@@ -368,14 +426,18 @@ export class CVideoH264Data extends CVideoData {
                         this.format = videoFrame.format;
                         this.lastDecodeInfo = "last frame.timestamp = " + videoFrame.timestamp + "<br>";
 
-                        // Map output to frame index via timestamp (robust w/ B-frames)
-                        if (!this.tsToFrame || !this.tsToFrame.has(videoFrame.timestamp)) {
-                            console.warn("No frame index for timestamp", videoFrame.timestamp);
-                            videoFrame.close();
-                            return;
-                        }
-                        const frameNumber = this.tsToFrame.get(videoFrame.timestamp);
+                        // SIMPLE SOLUTION: Use decode order as frame index
+                        // This ignores timestamps completely and just assigns frames sequentially
+                        // as they come out of the decoder
                         
+                        if (this.decodeFrameIndex === undefined) {
+                            this.decodeFrameIndex = 0;
+                        }
+                        
+                        const frameNumber = this.decodeFrameIndex;
+                        this.decodeFrameIndex++;
+                        
+                        // Process this frame with its decode-order frame number
                         const group = this.getGroup(frameNumber);
                         if (!group) {
                             console.warn("Group not found for frame number", frameNumber);
@@ -383,66 +445,8 @@ export class CVideoH264Data extends CVideoData {
                             return;
                         }
                         
-                        // If this is our first successful decode, mark success
-                        if (!this.firstDecodeSuccess) {
-                            this.firstDecodeSuccess = true;
-                            console.log(`H.264 decoder working - first frame decoded successfully (${videoFrame.codedWidth}x${videoFrame.codedHeight})`);
-                        }
-
-                        createImageBitmap(videoFrame).then(image => {
-                            if (!this.imageCache) {
-                                this.imageCache = [];
-                            }
-
-                            this.imageCache[frameNumber] = image
-                            this.width = image.width;
-                            this.height = image.height;
-                            this.imageWidth = image.width;
-                            this.imageHeight = image.height;
-
-                            if (this.c_tmp === undefined) {
-                                this.c_tmp = document.createElement("canvas")
-                                this.c_tmp.setAttribute("width", this.width)
-                                this.c_tmp.setAttribute("height", this.height)
-                                this.ctx_tmp = this.c_tmp.getContext("2d")
-                            }
-
-                            // if it's the last one we wanted, then tell the system to render a frame
-                            if (frameNumber === this.lastGetImageFrame) {
-                                setRenderOne(true);
-                            }
-
-                            const group = this.getGroup(frameNumber);
-                            if (!group) {
-                                console.warn("Group not found for frame number", frameNumber);
-                                return;
-                            }
-
-                            if (!group.decodeOrder) {
-                                group.decodeOrder = [];
-                            }
-                            group.decodeOrder.push(frameNumber);
-
-                            if (group.pending <= 0) {
-                                console.warn("Decoding more frames than were listed as pending at frame " + frameNumber);
-                                return;
-                            }
-
-                            group.pending--;
-                            if (group.pending == 0) {
-                                group.loaded = true;
-                                this.groupsPending--;
-                                if (this.groupsPending === 0 && this.requestQueue.length > 0) {
-                                    console.log("FULFILLING deferred requests as no groups pending");
-                                    const nextGroup = this.requestQueue.shift();
-                                    this.requestGroup(nextGroup);
-                                }
-                            }
-                        }).catch(error => {
-                            console.error("Error creating ImageBitmap:", error);
-                        });
-
-                        videoFrame.close();
+                        this.processDecodedFrame(frameNumber, videoFrame, group);
+                        
                     } catch (error) {
                         console.error("Error in decoder output callback:", error);
                         videoFrame.close();
@@ -594,6 +598,8 @@ export class CVideoH264Data extends CVideoData {
             }
 
             console.log(`H.264 initialization complete: ${this.frames} frames`);
+            console.log(`📊 Using decode order as frame sequence - frames will be numbered 0, 1, 2, 3... as decoded`);
+            console.log(`🎯 This ensures consistent frame ordering regardless of H.264 internal timestamps`);
 
             // Set global video properties
             Sit.videoFrames = this.frames * this.videoSpeed;

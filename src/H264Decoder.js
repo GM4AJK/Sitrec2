@@ -208,25 +208,31 @@ export class H264Decoder {
     static createEncodedVideoChunks(nalUnits, fps) {
         const chunks = [];
         const frameDuration = 1000000 / fps; // Duration in microseconds
-        let timestamp = 0;
 
         // Group NAL units into frames
         const frames = this.groupNALUnitsIntoFrames(nalUnits);
         console.log(`Grouped ${nalUnits.length} NAL units into ${frames.length} frames`);
 
-        for (const frame of frames) {
+        // Assign presentation timestamps in display order
+        // For streams without B-frames, this will be the same as decode order
+        // For streams with B-frames, we need to handle reordering
+        for (let i = 0; i < frames.length; i++) {
+            const frame = frames[i];
             if (frame.nalUnits.length === 0) continue;
 
             // Create aggregated frame data
             const frameData = this.createAggregatedFrame(frame.nalUnits);
             
+            // Use frame index as presentation timestamp to ensure display order matches decode order
+            // This prevents frame reordering issues in the decoder output
+            const presentationTimestamp = i * frameDuration;
+            
             chunks.push(new EncodedVideoChunk({
                 type: frame.type,
-                timestamp: timestamp,
+                timestamp: presentationTimestamp,
                 duration: frameDuration,
                 data: frameData
             }));
-            timestamp += frameDuration;
         }
 
         return chunks;
@@ -257,6 +263,16 @@ export class H264Decoder {
                 
             } else if (nalType === 1) {
                 // P frame - start new delta frame
+                if (currentFrame.nalUnits.length > 0) {
+                    frames.push(currentFrame);
+                }
+                currentFrame = {
+                    type: 'delta',
+                    nalUnits: [nal]
+                };
+                
+            } else if (nalType === 2) {
+                // B frame - start new delta frame (B-frames are also delta frames in WebCodecs)
                 if (currentFrame.nalUnits.length > 0) {
                     frames.push(currentFrame);
                 }
