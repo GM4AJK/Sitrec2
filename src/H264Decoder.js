@@ -298,6 +298,14 @@ export class H264Decoder {
      * Create aggregated frame data from multiple NAL units
      */
     static createAggregatedFrame(nalUnits) {
+        // Try AVCC format first (length prefixes) - this should work with AVCC decoder config
+        return this.createAVCCFrame(nalUnits);
+    }
+
+    /**
+     * Create AVCC format frame (length prefixes)
+     */
+    static createAVCCFrame(nalUnits) {
         // Calculate total size needed
         let totalSize = 0;
         for (const nal of nalUnits) {
@@ -313,6 +321,37 @@ export class H264Decoder {
         for (const nal of nalUnits) {
             // Write length prefix (big-endian 32-bit) - AVCC format
             dataView.setUint32(offset, nal.data.length, false);
+            offset += 4;
+            
+            // Write NAL unit data
+            frameView.set(nal.data, offset);
+            offset += nal.data.length;
+        }
+
+        return frameBuffer;
+    }
+
+    /**
+     * Create Annex-B format frame (start codes) - fallback option
+     */
+    static createAnnexBFrame(nalUnits) {
+        // Calculate total size needed
+        let totalSize = 0;
+        for (const nal of nalUnits) {
+            totalSize += 4 + nal.data.length; // 4 bytes start code + NAL data
+        }
+
+        // Create aggregated buffer
+        const frameBuffer = new ArrayBuffer(totalSize);
+        const frameView = new Uint8Array(frameBuffer);
+        
+        let offset = 0;
+        for (const nal of nalUnits) {
+            // Write start code (0x00 0x00 0x00 0x01)
+            frameView[offset] = 0x00;
+            frameView[offset + 1] = 0x00;
+            frameView[offset + 2] = 0x00;
+            frameView[offset + 3] = 0x01;
             offset += 4;
             
             // Write NAL unit data
@@ -414,11 +453,9 @@ export class H264Decoder {
                     if (nalType === 7) { // SPS
                         analysis.hasSPS = true;
                         analysis.spsData = data.slice(nalStart, nalEnd);
-                        console.log(`Found SPS NAL unit: ${analysis.spsData.length} bytes`);
                     } else if (nalType === 8) { // PPS
                         analysis.hasPPS = true;
                         analysis.ppsData = data.slice(nalStart, nalEnd);
-                        console.log(`Found PPS NAL unit: ${analysis.ppsData.length} bytes`);
                     } else if (nalType === 5) { // IDR
                         analysis.hasIDR = true;
                     }

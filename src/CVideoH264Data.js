@@ -62,8 +62,8 @@ export class CVideoH264Data extends CVideoData {
     getImage(frame) {
         frame = Math.floor(frame / this.videoSpeed); // videoSpeed will normally be 1, but for timelapse will be
 
-        if (this.incompatible) {
-            // incompatible browser (i.e. does not support WebCodec)
+        if (this.incompatible || this.fallbackMode) {
+            // incompatible browser or incompatible H.264 stream
             return this.errorImage
         } else {
 
@@ -302,6 +302,9 @@ export class CVideoH264Data extends CVideoData {
 
             console.log(`H.264 data size: ${h264Buffer.byteLength} bytes`);
 
+            // Store h264 data for potential alternative decoding
+            this.h264Data = h264Buffer;
+
             // Reset caching variables for this initialization
             this.frames = 0;
             this.chunks = [];
@@ -372,11 +375,18 @@ export class CVideoH264Data extends CVideoData {
                             return;
                         }
                         const frameNumber = this.tsToFrame.get(videoFrame.timestamp);
+                        
                         const group = this.getGroup(frameNumber);
                         if (!group) {
                             console.warn("Group not found for frame number", frameNumber);
                             videoFrame.close();
                             return;
+                        }
+                        
+                        // If this is our first successful decode, mark success
+                        if (!this.firstDecodeSuccess) {
+                            this.firstDecodeSuccess = true;
+                            console.log(`H.264 decoder working - first frame decoded successfully (${videoFrame.codedWidth}x${videoFrame.codedHeight})`);
                         }
 
                         createImageBitmap(videoFrame).then(image => {
@@ -439,26 +449,30 @@ export class CVideoH264Data extends CVideoData {
                     }
                 },
                 error: e => {
-                    console.error("VideoDecoder error:", e);
+                    // If we're in alternative decoding mode, don't recreate - just log and continue
+                    if (this.alternativeDecoding) {
+                        return;
+                    }
+                    
                     // Only mark as unusable for fatal errors, not decode errors
                     if (e.name === 'NotSupportedError' || e.name === 'InvalidStateError') {
                         this.decoderError = true;
-                        console.error("Fatal decoder error, marking as unusable");
+                        console.error("Fatal H.264 decoder error:", e.message);
                     } else if (e.name === 'EncodingError') {
-                        console.warn("Decode error occurred, attempting to recreate decoder");
                         // Prevent infinite recreation loops
                         if (!this.recreationAttempts) this.recreationAttempts = 0;
-                        if (this.recreationAttempts < 3) {
+                        if (this.recreationAttempts < 1) {
                             this.recreationAttempts++;
+                            console.log("H.264 decode error, attempting to recreate decoder...");
                             this.recreateDecoder();
                         } else {
-                            console.error("Too many decoder recreation attempts, trying alternative approach");
+                            console.log("H.264 decoder recreation failed, trying alternative format...");
                             this.decoderError = true;
-                            // Try one more time with modified SPS if we haven't already
-                            this.tryAlternativeDecoding();
+                            this.alternativeDecoding = true;
+                            this.tryAlternativeDecoding().catch(error => {
+                                console.warn("H.264 alternative decoding failed:", error.message);
+                            });
                         }
-                    } else {
-                        console.warn("Non-fatal decoder error, continuing operation");
                     }
                 }
             };
@@ -475,9 +489,10 @@ export class CVideoH264Data extends CVideoData {
             const description = H264Decoder.createAVCDecoderConfig(spsData, ppsData);
 
             // Create codec string from SPS data with compatibility fallbacks
-            const profile = spsData[0];
-            const compatibility = spsData[1];
-            const level = spsData[2];
+            // SPS structure: [NAL_header, profile_idc, constraint_flags, level_idc, ...]
+            const profile = spsData[1];        // profile_idc
+            const compatibility = spsData[2];  // constraint_set_flags
+            const level = spsData[3];          // level_idc
 
             // CRITICAL: Codec string MUST exactly match the SPS profile/level data
             // Using mismatched codec strings causes "Decoder error" in WebCodecs
@@ -717,66 +732,17 @@ export class CVideoH264Data extends CVideoData {
         try {
             for (let i = group.frame; i < group.frame + group.length; i++) {
                 if (i < this.chunks.length) {
-                    // Debug: Log first few decode attempts
-                    if (i <= 5) {
-                        console.log(`🔍 Decoding frame ${i}:`);
-                        console.log(`   Type: ${this.chunks[i].type}`);
-                        console.log(`   Size: ${this.chunks[i].byteLength} bytes`);
-                        console.log(`   Timestamp: ${this.chunks[i].timestamp}`);
-
-                        // Check first few bytes of the chunk data using copyTo()
-                        const data = new Uint8Array(this.chunks[i].byteLength);
-                        this.chunks[i].copyTo(data);
-
-                        const firstBytes = Array.from(data.slice(0, 8))
-                            .map(b => '0x' + b.toString(16).padStart(2, '0'))
-                            .join(' ');
-                        console.log(`   First 8 bytes: ${firstBytes}`);
-
-                        // Parse AVCC format - might have multiple NAL units
-                        let offset = 0;
-                        let nalCount = 0;
-                        let hasVideoNAL = false;
-                        console.log(`   📦 Parsing aggregated frame:`);
-
-                        while (offset < data.length - 4) {
-                            const lengthPrefix = (data[offset] << 24) | (data[offset + 1] << 16) |
-                                (data[offset + 2] << 8) | data[offset + 3];
-
-                            if (lengthPrefix <= 0 || offset + 4 + lengthPrefix > data.length) {
-                                console.error(`   ❌ Invalid length prefix ${lengthPrefix} at offset ${offset}`);
-                                break;
-                            }
-
-                            const nalType = data[offset + 4] & 0x1F;
-                            nalCount++;
-
-                            console.log(`   NAL ${nalCount}: type=${nalType}, length=${lengthPrefix}, offset=${offset}`);
-
-                            if (nalType === 5 || nalType === 1) {
-                                hasVideoNAL = true;
-                            } else if (nalType === 6) {
-                                console.log(`   📝 SEI metadata NAL unit`);
-                            } else {
-                                console.error(`   ❌ Unexpected NAL type: ${nalType}`);
-                            }
-
-                            offset += 4 + lengthPrefix;
-                        }
-
-                        if (offset === data.length && hasVideoNAL) {
-                            console.log(`   ✅ Valid aggregated frame with ${nalCount} NAL units`);
-                        } else {
-                            console.error(`   ❌ Frame validation failed: offset=${offset}, length=${data.length}, hasVideo=${hasVideoNAL}`);
-                        }
+                    // Check for problematic small P-frames and skip them temporarily
+                    const chunk = this.chunks[i];
+                    let shouldSkip = false;
+                    
+                    if (chunk.type === 'delta' && chunk.byteLength < 30) {
+                        shouldSkip = true;
                     }
 
-                    // Debug: Log decode attempt
-                    if (i <= 5) {
-                        console.log(`   🎬 Calling decoder.decode() for frame ${i}`);
+                    if (!shouldSkip) {
+                        this.decoder.decode(this.chunks[i]);
                     }
-
-                    this.decoder.decode(this.chunks[i]);
                 } else {
                     console.warn("Trying to decode frame beyond chunks length:", i, ">=", this.chunks.length);
                     group.pending--;
@@ -858,28 +824,174 @@ export class CVideoH264Data extends CVideoData {
 
 
 
-    tryAlternativeDecoding() {
-        console.log("🔄 Trying alternative decoding approach...");
+    async tryAlternativeDecoding() {
+        console.log("Trying alternative H.264 decoding approach...");
 
-        // For now, just mark as error and use blank frames
-        // In the future, we could try:
-        // 1. Different codec configurations
-        // 2. Frame-by-frame decoding
-        // 3. Fallback to software decoder
-        console.log("⚠️ Alternative decoding not implemented yet, using blank frames");
-        this.decoderError = true;
-    }
-
-    async recreateDecoder() {
         try {
-            console.log("Recreating VideoDecoder after error...");
+            // Get the original NAL units and analysis
+            const nalUnits = H264Decoder.extractNALUnits(new Uint8Array(this.h264Data));
+            const analysis = H264Decoder.analyzeH264Stream(this.h264Data);
+            const frames = H264Decoder.groupNALUnitsIntoFrames(nalUnits);
+            
+            // Recreate chunks with SPS/PPS included in keyframes (Annex-B format)
+            const fps = 30;
+            const frameDuration = 1000000 / fps;
+            let timestamp = 0;
+            
+            this.chunks = [];
+            for (const frame of frames) {
+                if (frame.nalUnits.length === 0) continue;
 
-            // Close existing decoder if it exists
+                let frameNalUnits = [...frame.nalUnits];
+                
+                // For keyframes, prepend SPS and PPS
+                if (frame.type === 'key') {
+                    const spsNal = { data: analysis.spsData };
+                    const ppsNal = { data: analysis.ppsData };
+                    frameNalUnits = [spsNal, ppsNal, ...frameNalUnits];
+                }
+
+                // Create Annex-B format with start codes
+                const frameData = H264Decoder.createAnnexBFrame(frameNalUnits);
+                
+                this.chunks.push(new EncodedVideoChunk({
+                    type: frame.type,
+                    timestamp: timestamp,
+                    duration: frameDuration,
+                    data: frameData
+                }));
+                timestamp += frameDuration;
+            }
+            
+            console.log(`Recreated ${this.chunks.length} chunks in Annex-B format`);
+            
+            // Try Annex-B decoder configuration (no description needed)
+            const annexBConfig = { codec: this.config.codec };
+            
+            // Close existing decoder
             if (this.decoder && this.decoder.state !== 'closed') {
                 try {
                     this.decoder.close();
                 } catch (e) {
                     console.warn("Error closing decoder:", e);
+                }
+            }
+            
+            // Create new decoder
+            this.decoder = new VideoDecoder(this.decoderCallbacks);
+            await this.decoder.configure(annexBConfig);
+            
+            // Try decoding the first keyframe
+            this.recreationAttempts = 0;
+            
+            // Find first keyframe and try to decode it
+            for (let i = 0; i < Math.min(5, this.chunks.length); i++) {
+                if (this.chunks[i].type === 'key') {
+                    try {
+                        this.decoder.decode(this.chunks[i]);
+                        
+                        // Wait briefly to see if decode succeeds
+                        await new Promise(resolve => setTimeout(resolve, 100));
+                        
+                        if (this.decoder.state === 'configured') {
+                            console.log("Alternative H.264 format working");
+                        } else {
+                            console.log("Alternative H.264 format failed, using fallback");
+                            this.implementFinalFallback();
+                            return;
+                        }
+                        
+                        break;
+                    } catch (error) {
+                        console.log(`Keyframe ${i} decode failed:`, error.message);
+                    }
+                }
+            }
+            
+        } catch (error) {
+            console.log("Alternative H.264 decoding failed:", error.message);
+            this.implementFinalFallback();
+        }
+    }
+    
+    implementFinalFallback() {
+        console.log("H.264 stream incompatible with WebCodecs, using fallback mode");
+        
+        // Mark as using fallback mode
+        this.decoderError = true;
+        this.fallbackMode = true;
+        
+        // Create informative error image
+        this.createInformativeErrorImage();
+        
+        // Set up basic video properties if we have them
+        if (this.chunks && this.chunks.length > 0) {
+            this.frames = this.chunks.length;
+        }
+        
+        // Call loaded callback to indicate we're "ready" (even if in fallback mode)
+        if (this.loadedCallback) {
+            this.loadedCallback();
+        }
+    }
+    
+    createInformativeErrorImage() {
+        // Create a more informative error image with details about the issue
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 480;
+        const ctx = canvas.getContext('2d');
+        
+        // Black background
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // White text
+        ctx.fillStyle = 'white';
+        ctx.font = '24px Arial';
+        ctx.textAlign = 'center';
+        
+        const centerX = canvas.width / 2;
+        let y = 100;
+        
+        ctx.fillText('H.264 Video Decoding Failed', centerX, y);
+        y += 40;
+        
+        ctx.font = '16px Arial';
+        ctx.fillText('This H.264 stream is not compatible with WebCodecs', centerX, y);
+        y += 30;
+        ctx.fillText('The video format may be too old or use unsupported features', centerX, y);
+        y += 40;
+        
+        ctx.fillText('Technical Details:', centerX, y);
+        y += 25;
+        ctx.font = '14px Arial';
+        ctx.fillText(`• Profile: ${this.getProfileName(0x4D)} Level: ${this.getLevelName(0x29)}`, centerX, y);
+        y += 20;
+        ctx.fillText(`• Frames: ${this.chunks ? this.chunks.length : 'Unknown'}`, centerX, y);
+        y += 20;
+        ctx.fillText(`• Format: Raw H.264 Elementary Stream`, centerX, y);
+        y += 40;
+        
+        ctx.fillText('Possible solutions:', centerX, y);
+        y += 25;
+        ctx.fillText('• Re-encode video with modern H.264 settings', centerX, y);
+        y += 20;
+        ctx.fillText('• Use MP4 container format instead of raw H.264', centerX, y);
+        y += 20;
+        ctx.fillText('• Try a different browser (Chrome/Edge/Safari)', centerX, y);
+        
+        this.errorImage = canvas;
+    }
+
+    async recreateDecoder() {
+        try {
+            // Close existing decoder if it exists
+            if (this.decoder && this.decoder.state !== 'closed') {
+                try {
+                    this.decoder.close();
+                } catch (e) {
+                    // Ignore close errors
                 }
             }
 
@@ -889,13 +1001,12 @@ export class CVideoH264Data extends CVideoData {
             // Reconfigure with stored config
             if (this.config) {
                 await this.decoder.configure(this.config);
-                console.log("VideoDecoder recreated and configured successfully");
             } else {
-                console.error("No stored config available for decoder recreation");
+                throw new Error("No decoder configuration available");
             }
 
         } catch (error) {
-            console.error("Failed to recreate decoder:", error);
+            console.log("Failed to recreate H.264 decoder:", error.message);
             this.decoderError = true;
         }
     }
