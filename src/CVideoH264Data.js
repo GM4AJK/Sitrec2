@@ -1,231 +1,33 @@
-import {Globals, infoDiv, setRenderOne, Sit} from "./Globals";
+import {Sit} from "./Globals";
 import {assert} from "./assert";
 import {loadImage} from "./utils";
-import {CVideoData} from "./CVideoData";
+import {CVideoWebCodecBase} from "./CVideoWebCodecBase";
 import {H264Decoder} from "./H264Decoder";
 import {updateSitFrames} from "./UpdateSitFrames";
 import {EventManager} from "./CEventManager";
-import {par} from "./par";
-import {isLocal} from "./configUtils";
 
 /**
  * Video data handler for raw H.264 elementary streams with frame caching
  * These are typically extracted from TS files and lack MP4 container structure
- * Now implements on-demand frame decoding similar to CVideoWebCodecDataRaw
+ * Now implements on-demand frame decoding similar to CVideoMp4Data
  */
-export class CVideoH264Data extends CVideoData {
+export class CVideoH264Data extends CVideoWebCodecBase {
 
     constructor(v, loadedCallback, errorCallback) {
-        super(v);
-        this.format = "h264"
-        this.error = false;
-        this.loaded = false;
-        this.loadedCallback = loadedCallback;
-        this.errorCallback = errorCallback;
-
-        this.incompatible = true;
-        try {
-            if (VideoDecoder !== undefined) {
-                this.incompatible = false;
-            }
-        } catch (e) {
-        }
+        super(v, loadedCallback, errorCallback);
+        this.format = "h264";
 
         if (this.incompatible) {
-            console.log("H.264 Video Playback Requires up-to-date WebCodec Browser (Chrome/Edge/Safari)");
-            this.errorImage = null;
-            loadImage('./data/images/errorImage.png').then(result => {
-                this.errorImage = result;
-                if (errorCallback) errorCallback("WebCodec not supported");
-            });
             return;
         }
-
-        // Initialize caching variables early to prevent undefined errors
-        this.frames = 0;
-        this.lastGetImageFrame = 0;
-        this.chunks = []; // per frame chunks
-        this.groups = []; // groups for frames+delta
-        this.groupsPending = 0;
-        this.nextRequest = null;
-        this.requestQueue = [];
-        this.incomingFrame = 0;
-        this.lastTimeStamp = -1;
-        this.lastDecodeInfo = "";
-        this.blankFrame = null; // Will be created once we know video dimensions
 
         // Initialize frame caching system
         this.initializeCaching(v, loadedCallback, errorCallback);
     }
 
-    getImage(frame) {
-        frame = Math.floor(frame / this.videoSpeed); // videoSpeed will normally be 1, but for timelapse will be
 
-        if (this.incompatible || this.fallbackMode) {
-            // incompatible browser or incompatible H.264 stream
-            return this.errorImage
-        } else {
 
-            // Safety checks - if not initialized yet, return blank frame if possible
-            if (!this.groups || this.groups.length === 0 || !this.imageCache || !this.chunks) {
-                return this.createBlankFrame();
-            }
 
-            // Check for invalid frame numbers - return blank frame instead of null
-            if (frame < 0 || frame >= this.chunks.length) {
-                return this.createBlankFrame();
-            }
-
-            let cacheWindow = 30; // how much we seek ahead (and keep behind)
-            const mem = navigator.deviceMemory
-            if (mem !== undefined && mem >= 8) {
-                // 8GB or more, then we can afford to cache more
-                cacheWindow = 100;
-
-                // PATCH - if we are local, or Mick, then then we can afford to cache even more
-                // TODO - allow the user to select this window size in some per-user setting
-                if (isLocal || Globals.userID === 1) {
-                    cacheWindow = 300;
-                }
-            }
-
-            this.requestFrame(frame) // request this frame, of course, probable already have it though.
-
-            this.lastGetImageFrame = frame
-
-            // we purge everything except the three proximate groups and any groups that are being decoded
-            // in theory this should be no more that four
-            // purge before a new request
-            const groupsToKeep = [];
-
-            // iteratere through the groups
-            // and keep the ones that overlap the range
-            // frame to frame + cacheWindow (So we get the next group if we are going forward)
-            for (let g in this.groups) {
-                const group = this.groups[g]
-                if (group.frame + group.length > frame && group.frame < frame + cacheWindow) {
-                    groupsToKeep.push(group);
-                }
-            }
-
-            // then frame - cacheWindow to frame, and iterate g backwards so we get the closest first
-            for (let g = this.groups.length - 1; g >= 0; g--) {
-                const group = this.groups[g]
-                if (group.frame + group.length > frame - cacheWindow && group.frame < frame) {
-                    groupsToKeep.push(group);
-                }
-            }
-
-            // request them all, will ignore if already loaded or pending
-            for (let g in groupsToKeep) {
-                this.requestGroup(groupsToKeep[g])
-            }
-
-            // purge all the other groups
-            this.purgeGroupsExcept(groupsToKeep)
-
-            assert(this.imageCache, "imageCache is " + this.imageCache + " for frame " + frame + " but groups.length = " + this.groups.length);
-
-            // return the closest frame that has been loaded
-            // usually this just mean it returns the one indicated by "frame"
-            // but if we've rapidly scrubbed then we might not have this frame
-            // Note when purging we currently don't removed the key frames
-            // so we'll have a sparsely populated set of frames for scrubbing
-            let A = frame;
-            let B = frame;
-            let bestFrame = frame;
-            while (A >= 0 && B < this.chunks.length) {
-                if (A >= 0) {
-                    if (this.imageCache[A] !== undefined && this.imageCache[A].width !== 0) {
-                        bestFrame = A;
-                        break;
-                        //return this.imageCache[A];
-                    }
-                    A--
-                }
-                if (B < this.chunks.length) {
-                    if (this.imageCache[B] !== undefined && this.imageCache[B].width !== 0) {
-                        bestFrame = B;
-                        break;
-                        //    return this.imageCache[B];
-                    }
-                    B++
-                }
-            }
-
-            let image = this.imageCache[bestFrame];
-
-            // If no valid frame found, return blank frame
-            if (!image || (image.width === 0)) {
-                return this.createBlankFrame();
-            }
-
-            return image;
-        }
-    }
-
-    update() {
-        // Nothing to update for error state
-    }
-
-    createBlankFrame() {
-        if (!this.width || !this.height) {
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = 1; tempCanvas.height = 1;
-            const ctx = tempCanvas.getContext('2d');
-            ctx.fillStyle = 'black'; ctx.fillRect(0, 0, 1, 1);
-            return tempCanvas;
-        }
-
-        if (!this.blankFrame) {
-            // Create a blank canvas with video dimensions
-            const canvas = document.createElement('canvas');
-            canvas.width = this.width;
-            canvas.height = this.height;
-            const ctx = canvas.getContext('2d');
-
-            // Fill with black
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, this.width, this.height);
-
-            // Convert to ImageBitmap for consistency with decoded frames
-            createImageBitmap(canvas).then(bitmap => {
-                this.blankFrame = bitmap;
-            }).catch(error => {
-                console.warn("Error creating blank frame ImageBitmap:", error);
-                // Fallback to canvas
-                this.blankFrame = canvas;
-            });
-
-            // Return canvas immediately while ImageBitmap is being created
-            return canvas;
-        }
-
-        return this.blankFrame;
-    }
-
-    stopStreaming() {
-        this.flushEntireCache();
-        // Note: We don't close the decoder here to allow continued scrubbing
-        // The decoder will be closed only when the video object is destroyed
-    }
-
-    // Only call this when completely done with the video (switching videos, etc.)
-    destroy() {
-        this.closeDecoder();
-        this.flushEntireCache();
-    }
-
-    closeDecoder() {
-        if (this.decoder && this.decoder.state !== 'closed') {
-            try {
-                this.decoder.close();
-                console.log("VideoDecoder closed");
-            } catch (error) {
-                console.warn("Error closing decoder:", error);
-            }
-        }
-    }
 
     getProfileName(profileIdc) {
         const profiles = {
@@ -248,47 +50,51 @@ export class CVideoH264Data extends CVideoData {
         return levels[levelIdc] || `Unknown (0x${levelIdc.toString(16)})`;
     }
 
-    flushEntireCache() {
-        if (this.imageCache) {
-            // Close all ImageBitmap objects to free memory
-            for (let i = 0; i < this.imageCache.length; i++) {
-                if (this.imageCache[i] && typeof this.imageCache[i].close === 'function') {
-                    this.imageCache[i].close();
+
+
+    /**
+     * Override decoder callbacks for H.264-specific logic
+     */
+    createDecoderCallbacks() {
+        return {
+            output: videoFrame => {
+                try {
+                    this.format = videoFrame.format;
+                    this.lastDecodeInfo = "last frame.timestamp = " + videoFrame.timestamp + "<br>";
+
+                    // Use timestamp-based frame mapping similar to MP4 approach
+                    // Find the group this frame belongs to based on timestamp
+                    var groupNumber = 0;
+                    while (groupNumber + 1 < this.groups.length && videoFrame.timestamp >= this.groups[groupNumber + 1].timestamp) {
+                        groupNumber++;
+                    }
+                    var group = this.groups[groupNumber];
+                    
+                    if (!group) {
+                        console.warn("Group not found for timestamp", videoFrame.timestamp);
+                        videoFrame.close();
+                        return;
+                    }
+
+                    // Calculate the frame number within the group based on pending count
+                    // This ensures frames are mapped to correct positions even when scrubbing
+                    const frameNumber = group.frame + group.length - group.pending;
+                    
+                    this.processDecodedFrame(frameNumber, videoFrame, group);
+                    
+                } catch (error) {
+                    console.error("Error in decoder output callback:", error);
+                    videoFrame.close();
                 }
+            },
+            error: e => {
+                this.handleDecoderError(e);
             }
-        }
-
-        // Close blank frame if it's an ImageBitmap
-        if (this.blankFrame && typeof this.blankFrame.close === 'function') {
-            this.blankFrame.close();
-        }
-        this.blankFrame = null;
-
-
-
-        // Reset cache arrays
-        this.imageCache = [];
-        this.imageDataCache = [];
-        this.frameCache = [];
-
-        // Reset groups
-        if (this.groups) {
-            for (let group of this.groups) {
-                group.loaded = false;
-                group.pending = 0;
-            }
-        }
-
-        this.groupsPending = 0;
-        this.nextRequest = null;
-        this.requestQueue = [];
-        
-        // Reset decode frame index
-        this.decodeFrameIndex = 0;
+        };
     }
 
     /**
-     * Process a decoded video frame and convert it to ImageBitmap
+     * Override processDecodedFrame to add H.264-specific first decode success logging
      */
     processDecodedFrame(frameNumber, videoFrame, group) {
         // If this is our first successful decode, mark success
@@ -297,54 +103,76 @@ export class CVideoH264Data extends CVideoData {
             console.log(`H.264 decoder working - first frame decoded successfully (${videoFrame.codedWidth}x${videoFrame.codedHeight})`);
         }
 
-        createImageBitmap(videoFrame).then(image => {
-            if (!this.imageCache) {
-                this.imageCache = [];
+        // Call base class implementation
+        super.processDecodedFrame(frameNumber, videoFrame, group);
+    }
+
+    /**
+     * Override decoder error handling for H.264-specific error recovery
+     */
+    handleDecoderError(e) {
+        // If we're in alternative decoding mode, don't recreate - just log and continue
+        if (this.alternativeDecoding) {
+            return;
+        }
+        
+        // Only mark as unusable for fatal errors, not decode errors
+        if (e.name === 'NotSupportedError' || e.name === 'InvalidStateError') {
+            this.decoderError = true;
+            console.error("Fatal H.264 decoder error:", e.message);
+        } else if (e.name === 'EncodingError') {
+            // Prevent infinite recreation loops
+            if (!this.recreationAttempts) this.recreationAttempts = 0;
+            if (this.recreationAttempts < 1) {
+                this.recreationAttempts++;
+                console.log("H.264 decode error, attempting to recreate decoder...");
+                this.recreateDecoder();
+            } else {
+                console.log("H.264 decoder recreation failed, trying alternative format...");
+                this.decoderError = true;
+                this.alternativeDecoding = true;
+                this.tryAlternativeDecoding().catch(error => {
+                    console.warn("H.264 alternative decoding failed:", error.message);
+                });
             }
+        } else {
+            console.warn("H.264 decoder error (non-fatal):", e.message);
+        }
+    }
 
-            this.imageCache[frameNumber] = image
-            this.width = image.width;
-            this.height = image.height;
-            this.imageWidth = image.width;
-            this.imageHeight = image.height;
+    /**
+     * Override group completion handling for H.264-specific nextRequest logic
+     */
+    handleGroupComplete() {
+        if (this.groupsPending === 0 && this.nextRequest >= 0) {
+            console.log("FULFILLING deferred request as no groups pending, frame = " + this.nextRequest);
+            this.requestGroup(this.nextRequest);
+            this.nextRequest = -1;
+        }
+    }
 
-            if (this.c_tmp === undefined) {
-                this.c_tmp = document.createElement("canvas")
-                this.c_tmp.setAttribute("width", this.width)
-                this.c_tmp.setAttribute("height", this.height)
-                this.ctx_tmp = this.c_tmp.getContext("2d")
-            }
+    /**
+     * Override busy decoder handling for H.264-specific nextRequest logic
+     */
+    handleBusyDecoder(group) {
+        this.nextRequest = group;
+    }
 
-            // if it's the last one we wanted, then tell the system to render a frame
-            if (frameNumber === this.lastGetImageFrame) {
-                setRenderOne(true);
-            }
-
-            if (!group.decodeOrder) {
-                group.decodeOrder = [];
-            }
-            group.decodeOrder.push(frameNumber);
-
-            if (group.pending <= 0) {
-                console.warn("Decoding more frames than were listed as pending at frame " + frameNumber);
-                return;
-            }
-
-            group.pending--;
-            if (group.pending == 0) {
-                group.loaded = true;
-                this.groupsPending--;
-                if (this.groupsPending === 0 && this.requestQueue.length > 0) {
-                    console.log("FULFILLING deferred requests as no groups pending");
-                    const nextGroup = this.requestQueue.shift();
-                    this.requestGroup(nextGroup);
-                }
-            }
-        }).catch(error => {
-            console.error("Error creating ImageBitmap:", error);
-        });
-
-        videoFrame.close();
+    /**
+     * Override to show H.264-specific additional debug information
+     */
+    getAdditionalDebugInfo() {
+        let info = "";
+        if (this.decoderError) {
+            info += "⚠️ Decoder Error State: " + this.decoderError;
+        }
+        if (this.alternativeDecoding) {
+            info += " | Alternative Decoding Mode";
+        }
+        if (this.recreationAttempts > 0) {
+            info += " | Recreation Attempts: " + this.recreationAttempts;
+        }
+        return info;
     }
 
     async initializeCaching(v, loadedCallback, errorCallback) {
@@ -374,11 +202,9 @@ export class CVideoH264Data extends CVideoData {
             this.chunks = [];
             this.groups = [];
             this.groupsPending = 0;
-            this.nextRequest = null;
-            this.requestQueue = [];
+            this.nextRequest = -1; // Use MP4-style nextRequest approach
             this.decoderError = false; // Reset decoder error flag
             this.recreationAttempts = 0; // Reset recreation attempts
-            this.decodeFrameIndex = 0; // Simple counter for decode order
 
             // Analyze H.264 stream
             console.log("Analyzing H.264 stream...");
@@ -418,70 +244,10 @@ export class CVideoH264Data extends CVideoData {
             // Process chunks to create groups (similar to MP4 demuxer)
             this.processChunksIntoGroups(encodedChunks);
 
-            // Store decoder callbacks for potential recreation
-            this.decoderCallbacks = {
-                output: videoFrame => {
-                    try {
-                        this.format = videoFrame.format;
-                        this.lastDecodeInfo = "last frame.timestamp = " + videoFrame.timestamp + "<br>";
 
-                        // SIMPLE SOLUTION: Use decode order as frame index
-                        // This ignores timestamps completely and just assigns frames sequentially
-                        // as they come out of the decoder
-                        
-                        if (this.decodeFrameIndex === undefined) {
-                            this.decodeFrameIndex = 0;
-                        }
-                        
-                        const frameNumber = this.decodeFrameIndex;
-                        this.decodeFrameIndex++;
-                        
-                        // Process this frame with its decode-order frame number
-                        const group = this.getGroup(frameNumber);
-                        if (!group) {
-                            console.warn("Group not found for frame number", frameNumber);
-                            videoFrame.close();
-                            return;
-                        }
-                        
-                        this.processDecodedFrame(frameNumber, videoFrame, group);
-                        
-                    } catch (error) {
-                        console.error("Error in decoder output callback:", error);
-                        videoFrame.close();
-                    }
-                },
-                error: e => {
-                    // If we're in alternative decoding mode, don't recreate - just log and continue
-                    if (this.alternativeDecoding) {
-                        return;
-                    }
-                    
-                    // Only mark as unusable for fatal errors, not decode errors
-                    if (e.name === 'NotSupportedError' || e.name === 'InvalidStateError') {
-                        this.decoderError = true;
-                        console.error("Fatal H.264 decoder error:", e.message);
-                    } else if (e.name === 'EncodingError') {
-                        // Prevent infinite recreation loops
-                        if (!this.recreationAttempts) this.recreationAttempts = 0;
-                        if (this.recreationAttempts < 1) {
-                            this.recreationAttempts++;
-                            console.log("H.264 decode error, attempting to recreate decoder...");
-                            this.recreateDecoder();
-                        } else {
-                            console.log("H.264 decoder recreation failed, trying alternative format...");
-                            this.decoderError = true;
-                            this.alternativeDecoding = true;
-                            this.tryAlternativeDecoding().catch(error => {
-                                console.warn("H.264 alternative decoding failed:", error.message);
-                            });
-                        }
-                    }
-                }
-            };
 
-            // Create decoder with stored callbacks
-            this.decoder = new VideoDecoder(this.decoderCallbacks);
+            // Create decoder using base class method
+            this.decoder = this.createDecoder();
 
             // Configure decoder
             let spsData = analysis.spsData;
@@ -652,180 +418,9 @@ export class CVideoH264Data extends CVideoData {
         }
     }
 
-    // find the group object for a given frame
-    getGroup(frame) {
-        for (let g = 0; g < this.groups.length; g++) {
-            const group = this.groups[g]
-            if (frame >= group.frame && frame < (group.frame + group.length)) {
-                return group;
-            }
-        }
-        const last = this.groups[this.groups.length - 1];
-        assert(last != undefined, "last groups is undefined, I've loaded " + this.groups.length)
-        console.warn("Last frame = " + last.frame + ", length = " + last.length + ", i.e. up to " + (last.frame + last.length - 1))
-        return null;
-    }
 
-    getGroupsBetween(start, end) {
-        const groups = []
-        for (let g = 0; g < this.groups.length; g++) {
-            const group = this.groups[g]
-            if (group.frame + group.length >= start && group.frame < end) {
-                groups.push(group);
-            }
-        }
-        return groups;
-    }
 
-    // request that a frame be loaded
-    requestFrame(frame) {
-        if (!this.groups || this.groups.length === 0 || !this.chunks) {
-            return; // Not initialized yet
-        }
 
-        // Silently handle invalid frame numbers - getImage will return blank frame
-        if (frame < 0 || frame >= this.chunks.length) {
-            return; // Invalid frame, getImage will handle with blank frame
-        }
-
-        const group = this.getGroup(frame);
-        if (group === null) {
-            return; // No group found, getImage will handle with blank frame
-        }
-        this.requestGroup(group);
-    }
-
-    requestGroup(group) {
-        if (!group || typeof group !== "object") {
-            console.warn("requestGroup: invalid group", group);
-            return;
-        }
-
-        if (!this.decoder || !this.chunks) {
-            return; // Not initialized yet
-        }
-
-        // Check if decoder is in a fatal error state
-        if (this.decoderError) {
-            console.warn("Cannot decode: VideoDecoder has fatal error");
-            return;
-        }
-
-        // Check if decoder is properly configured
-        if (this.decoder.state !== 'configured') {
-            console.warn("Cannot decode: VideoDecoder is not configured, state:", this.decoder.state);
-
-            return;
-        }
-
-        if (group.loaded || group.pending > 0)
-            return;
-
-        // if decoder is busy, defer the request
-        if (this.decoder.decodeQueueSize > 0) {
-            if (!this.requestQueue.includes(group)) { // Avoid dups
-                this.requestQueue.push(group);
-            }
-            return;
-        }
-
-        group.pending = group.length;
-        group.loaded = false;
-        group.decodeOrder = []
-        this.groupsPending++;
-
-        try {
-            for (let i = group.frame; i < group.frame + group.length; i++) {
-                if (i < this.chunks.length) {
-                    // Check for problematic small P-frames and skip them temporarily
-                    const chunk = this.chunks[i];
-                    let shouldSkip = false;
-                    
-                    if (chunk.type === 'delta' && chunk.byteLength < 30) {
-                        shouldSkip = true;
-                    }
-
-                    if (!shouldSkip) {
-                        this.decoder.decode(this.chunks[i]);
-                    }
-                } else {
-                    console.warn("Trying to decode frame beyond chunks length:", i, ">=", this.chunks.length);
-                    group.pending--;
-                }
-            }
-
-            // Note: We don't call flush() here to keep the decoder open for scrubbing
-            // The decoder will naturally output frames as they're ready
-        } catch (error) {
-            console.error("Error during group decode:", error);
-            // Don't mark decoder as unusable for decode errors - they might be recoverable
-            group.pending = 0;
-            group.loaded = false;
-            this.groupsPending--;
-        }
-    }
-
-    purgeGroupsExcept(keep) {
-        for (let g in this.groups) {
-            const group = this.groups[g]
-            if (keep.find(keeper => keeper === group) === undefined && group.loaded) {
-                assert (this.imageCache, "imageCache is undefined when purging groups but groups.length = " + this.groups.length);
-
-                for (let i = group.frame; i < group.frame + group.length; i++) {
-                    // release all the frames in this group
-                    this.imageCache[i] = undefined;   // lean sentinel
-                    this.imageDataCache[i] = undefined;
-                    this.frameCache[i] = undefined;
-                }
-                group.loaded = false;
-            }
-        }
-    }
-
-    debugVideo() {
-        let d = "";
-
-        if (this.config !== undefined && this.decoder && this.groups) {
-            d += "Config: Codec: " + this.config.codec + "  format:" + this.format + " " + this.imageWidth + "x" + this.imageHeight + "<br>"
-            d += "CVideoView: " + this.width + "x" + this.height + "<br>"
-            d += "par.frame = " + par.frame + ", Sit.frames = " + Sit.frames + ", chunks = " + this.chunks.length + "<br>"
-            d += this.lastDecodeInfo;
-            d += "Decode Queue Size = " + this.decoder.decodeQueueSize + " State = " + this.decoder.state + "<br>";
-
-            const currentGroup = this.getGroup(par.frame);
-
-            for (let _g in this.groups) {
-                const g = this.groups[_g];
-
-                // count how many images and imageDatas we have
-                var images = 0;
-                var imageDatas = 0
-                var framesCaches = 0
-                if (this.imageCache) {
-                    for (var i = g.frame; i < g.frame + g.length; i++) {
-                        if (this.imageCache[i] != undefined && this.imageCache[i].width != 0)
-                            images++
-                        if (this.imageDataCache[i] != undefined && this.imageDataCache[i].width != 0)
-                            imageDatas++
-                        if (this.frameCache[i] != undefined)
-                            framesCaches++
-                    }
-                }
-
-                d += "Group " + _g + ": frame " + g.frame + " length " + g.length + " images " + images + " imageDatas " + imageDatas + " framesCaches "
-                    + framesCaches
-                    + (g.loaded ? " Loaded " : "")
-                    + (currentGroup === g ? "*" : " ")
-                    + (g.pending ? "pending = " + g.pending : "")
-                    + "<br>"
-            }
-        }
-
-        infoDiv.style.display = 'block';
-        infoDiv.style.fontSize = "13px"
-        infoDiv.style.zIndex = '1001';
-        infoDiv.innerHTML = d
-    }
 
 
 
@@ -1000,8 +595,8 @@ export class CVideoH264Data extends CVideoData {
                 }
             }
 
-            // Create new decoder with same callbacks
-            this.decoder = new VideoDecoder(this.decoderCallbacks);
+            // Create new decoder using base class method
+            this.decoder = this.createDecoder();
 
             // Reconfigure with stored config
             if (this.config) {

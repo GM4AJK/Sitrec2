@@ -169,7 +169,7 @@ export class CCustomManager {
                 width  = data.width;
                 height = data.height;
               } else if (data.videoData && data.videoData.config) {
-                // this is a video loaded from a CVideoWebCodecDataRaw, so we can use the config
+                // this is a video loaded from a CVideoMp4Data, so we can use the config
                 // codedWidth and codedHeight are the original video dimensions
                width  = data.videoData.config.codedWidth;
                height = data.videoData.config.codedHeight;

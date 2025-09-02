@@ -426,35 +426,35 @@ export class CVideoWebCodecData extends CVideoData {
     debugVideo() {
         let d = "";
 
+        // Start with filename (if available)
+        const filename = this.v?.file || this.v?.dropFile?.name || "Unknown";
+        d += "<strong>File: " + filename + "</strong><br>";
+
         if (this.config !== undefined) {
-
-
-            d += "Config: Codec: " + this.config.codec + "  format:" + this.format + " " + this.config.codedWidth + "x" + this.config.codedHeight + "<br>"
-            d += "CVideoView: " + this.width + "x" + this.height + "<br>"
-            d += "par.frame = " + par.frame + ", Sit.frames = " + Sit.frames + ", chunks = " + this.chunks.length + "<br>"
+            const fps = Sit.fps ? ` @ ${Sit.fps}fps` : '';
+            d += "Config: Codec: " + this.config.codec + "  format:" + this.format + " " + this.config.codedWidth + "x" + this.config.codedHeight + fps + "<br>";
+            d += "CVideoView: " + this.width + "x" + this.height + "<br>";
+            d += "par.frame = " + par.frame + ", Sit.frames = " + Sit.frames + ", chunks = " + this.chunks.length + "<br>";
             d += this.lastDecodeInfo;
             d += "Decode Queue Size = " + this.decoder.decodeQueueSize + " State = " + this.decoder.state + "<br>";
-
 
             for (let _g in this.groups) {
                 const g = this.groups[_g];
 
-
                 // count how many images and imageDatas we have
                 var images = 0;
-                var imageDatas = 0
-                var framesCaches = 0
+                var imageDatas = 0;
+                var framesCaches = 0;
                 for (var i = g.frame; i < g.frame + g.length; i++) {
                     if (this.imageCache[i] != undefined && this.imageCache[i].width != 0)
-                        images++
+                        images++;
                     if (this.imageDataCache[i] != undefined && this.imageDataCache[i].width != 0)
-                        imageDatas++
+                        imageDatas++;
                     if (this.frameCache[i] != undefined)
-                        framesCaches++
+                        framesCaches++;
                 }
 
-                const currentGroup = this.getGroup(par.frame)
-
+                const currentGroup = this.getGroup(par.frame);
 
                 d += "Group " + _g + " f = " + g.frame + " l = " + g.length + " ts = " + g.timestamp
                     + " i = " + images + " id = " + imageDatas + " fc = "
@@ -462,18 +462,14 @@ export class CVideoWebCodecData extends CVideoData {
                     + (g.loaded ? " Loaded " : "")
                     + (currentGroup === g ? "*" : " ")
                     + (g.pending ? "pending = " + g.pending : "")
-                    + "<br>"
-
-
+                    + "<br>";
             }
-
-
         }
 
         infoDiv.style.display = 'block';
-        infoDiv.style.fontSize = "13px"
+        infoDiv.style.fontSize = "13px";
         infoDiv.style.zIndex = '1001';
-        infoDiv.innerHTML = d
+        infoDiv.innerHTML = d;
     }
 
     getImage(frame) {

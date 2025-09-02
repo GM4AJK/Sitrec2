@@ -3,7 +3,7 @@ import {par} from "../par";
 import {FileManager} from "../Globals";
 
 import {SITREC_APP} from "../configUtils";
-import {CVideoWebCodecDataRaw} from "../CVideoWebCodecDataRaw";
+import {CVideoMp4Data} from "../CVideoMp4Data";
 import {CVideoH264Data} from "../CVideoH264Data";
 
 export class CNodeVideoWebCodecView extends CNodeVideoView {
@@ -120,7 +120,7 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
                 this.loadedCallback.bind(this), this.errorCallback.bind(this));
         } else {
             // Use the standard WebCodec handler for regular video files
-            this.videoData = new CVideoWebCodecDataRaw({id: this.id + "_data", dropFile: file},
+            this.videoData = new CVideoMp4Data({id: this.id + "_data", dropFile: file},
                 this.loadedCallback.bind(this), this.errorCallback.bind(this));
         }
         

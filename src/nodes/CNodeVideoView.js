@@ -6,7 +6,7 @@ import {CNodeGUIValue} from "./CNodeGUIValue";
 import {guiTweaks, NodeMan, setRenderOne, Sit} from "../Globals";
 import {CMouseHandler} from "../CMouseHandler";
 import {CNodeViewUI} from "./CNodeViewUI";
-import {CVideoWebCodecDataRaw} from "../CVideoWebCodecDataRaw";
+import {CVideoMp4Data} from "../CVideoMp4Data";
 import {CVideoImageData} from "../CVideoImageData";
 import {assert} from "../assert";
 import {EventManager} from "../CEventManager";
@@ -62,7 +62,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         }
         this.fileName = fileName;
         this.disposeVideoData()
-        this.videoData = new CVideoWebCodecDataRaw({id: this.id + "_data", file: fileName, videoSpeed: this.videoSpeed},
+        this.videoData = new CVideoMp4Data({id: this.id + "_data", file: fileName, videoSpeed: this.videoSpeed},
             this.loadedCallback.bind(this), this.errorCallback.bind(this))
 
         // loaded from a URL, so we can set the staticURL
