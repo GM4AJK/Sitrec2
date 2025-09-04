@@ -5,6 +5,99 @@
  * native WebCodecs API without requiring MP4 container conversion.
  */
 
+/**
+ * Bit reader for H.264 streams with Exponential-Golomb decoding support
+ */
+class H264BitReader {
+    constructor(data) {
+        this.data = new Uint8Array(data);
+        this.byteOffset = 0;
+        this.bitOffset = 0;
+    }
+
+    /**
+     * Read specified number of bits
+     */
+    readBits(numBits) {
+        let result = 0;
+        
+        for (let i = 0; i < numBits; i++) {
+            if (this.byteOffset >= this.data.length) {
+                throw new Error("Unexpected end of data");
+            }
+            
+            const bit = (this.data[this.byteOffset] >> (7 - this.bitOffset)) & 1;
+            result = (result << 1) | bit;
+            
+            this.bitOffset++;
+            if (this.bitOffset === 8) {
+                this.bitOffset = 0;
+                this.byteOffset++;
+            }
+        }
+        
+        return result;
+    }
+
+    /**
+     * Read unsigned Exponential-Golomb encoded value
+     */
+    readUE() {
+        let leadingZeros = 0;
+        
+        // Count leading zeros with safety check
+        while (this.hasMoreData() && this.readBits(1) === 0) {
+            leadingZeros++;
+            if (leadingZeros > 32) {
+                throw new Error("Invalid Exponential-Golomb encoding: too many leading zeros");
+            }
+        }
+        
+        if (leadingZeros === 0) {
+            return 0;
+        }
+        
+        // Ensure we have enough bits remaining
+        if (!this.hasMoreData()) {
+            throw new Error("Unexpected end of data in Exponential-Golomb decoding");
+        }
+        
+        // Read the remaining bits
+        const value = this.readBits(leadingZeros);
+        return (1 << leadingZeros) - 1 + value;
+    }
+
+    /**
+     * Read signed Exponential-Golomb encoded value
+     */
+    readSE() {
+        const ue = this.readUE();
+        if (ue === 0) return 0;
+        
+        // Convert to signed: positive = 2k+1, negative = 2k
+        return (ue % 2 === 1) ? Math.ceil(ue / 2) : -Math.floor(ue / 2);
+    }
+
+    /**
+     * Check if more data is available
+     */
+    hasMoreData() {
+        return this.byteOffset < this.data.length || 
+               (this.byteOffset === this.data.length - 1 && this.bitOffset < 8);
+    }
+
+    /**
+     * Get current bit position for debugging
+     */
+    getPosition() {
+        return {
+            byteOffset: this.byteOffset,
+            bitOffset: this.bitOffset,
+            totalBits: this.byteOffset * 8 + this.bitOffset
+        };
+    }
+}
+
 export class H264Decoder {
     
     /**
@@ -469,6 +562,12 @@ export class H264Decoder {
                     if (nalType === 7) { // SPS
                         analysis.hasSPS = true;
                         analysis.spsData = data.slice(nalStart, nalEnd);
+                        // Try to parse VUI timing info from SPS
+                        try {
+                            analysis.vui = this.parseVUIFromSPS(analysis.spsData);
+                        } catch (e) {
+                            console.warn("Failed to parse VUI from SPS:", e.message);
+                        }
                     } else if (nalType === 8) { // PPS
                         analysis.hasPPS = true;
                         analysis.ppsData = data.slice(nalStart, nalEnd);
@@ -480,6 +579,209 @@ export class H264Decoder {
         }
 
         return analysis;
+    }
+
+    /**
+     * Parse VUI (Video Usability Information) from SPS data
+     * This parser extracts timing information from H.264 SPS NAL units
+     */
+    static parseVUIFromSPS(spsData) {
+        try {
+            console.log("Parsing VUI from SPS data...");
+            
+            // Create bit reader for SPS data
+            const bitReader = new H264BitReader(spsData);
+            
+            // Skip NAL header (8 bits)
+            bitReader.readBits(8);
+            
+            // Parse SPS header
+            const profile_idc = bitReader.readBits(8);
+            const constraint_flags = bitReader.readBits(8);
+            const level_idc = bitReader.readBits(8);
+            
+            // seq_parameter_set_id (ue(v))
+            const seq_parameter_set_id = bitReader.readUE();
+            
+            console.log(`SPS: profile=${profile_idc}, level=${level_idc}, seq_id=${seq_parameter_set_id}`);
+            
+            // Handle high profiles (100, 110, 122, 244, 44, 83, 86, 118, 128)
+            if (profile_idc === 100 || profile_idc === 110 || profile_idc === 122 || 
+                profile_idc === 244 || profile_idc === 44 || profile_idc === 83 || 
+                profile_idc === 86 || profile_idc === 118 || profile_idc === 128) {
+                
+                const chroma_format_idc = bitReader.readUE();
+                if (chroma_format_idc === 3) {
+                    bitReader.readBits(1); // separate_colour_plane_flag
+                }
+                bitReader.readUE(); // bit_depth_luma_minus8
+                bitReader.readUE(); // bit_depth_chroma_minus8
+                bitReader.readBits(1); // qpprime_y_zero_transform_bypass_flag
+                
+                const seq_scaling_matrix_present_flag = bitReader.readBits(1);
+                if (seq_scaling_matrix_present_flag) {
+                    const scaling_list_count = (chroma_format_idc !== 3) ? 8 : 12;
+                    for (let i = 0; i < scaling_list_count; i++) {
+                        const seq_scaling_list_present_flag = bitReader.readBits(1);
+                        if (seq_scaling_list_present_flag) {
+                            // Skip scaling list parsing - complex and not needed for VUI
+                            this.skipScalingList(bitReader, i < 6 ? 16 : 64);
+                        }
+                    }
+                }
+            }
+            
+            // Continue parsing SPS
+            const log2_max_frame_num_minus4 = bitReader.readUE();
+            const pic_order_cnt_type = bitReader.readUE();
+            
+            if (pic_order_cnt_type === 0) {
+                bitReader.readUE(); // log2_max_pic_order_cnt_lsb_minus4
+            } else if (pic_order_cnt_type === 1) {
+                bitReader.readBits(1); // delta_pic_order_always_zero_flag
+                bitReader.readSE(); // offset_for_non_ref_pic
+                bitReader.readSE(); // offset_for_top_to_bottom_field
+                const num_ref_frames_in_pic_order_cnt_cycle = bitReader.readUE();
+                for (let i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++) {
+                    bitReader.readSE(); // offset_for_ref_frame[i]
+                }
+            }
+            
+            bitReader.readUE(); // max_num_ref_frames
+            bitReader.readBits(1); // gaps_in_frame_num_value_allowed_flag
+            bitReader.readUE(); // pic_width_in_mbs_minus1
+            bitReader.readUE(); // pic_height_in_map_units_minus1
+            
+            const frame_mbs_only_flag = bitReader.readBits(1);
+            if (!frame_mbs_only_flag) {
+                bitReader.readBits(1); // mb_adaptive_frame_field_flag
+            }
+            
+            bitReader.readBits(1); // direct_8x8_inference_flag
+            
+            const frame_cropping_flag = bitReader.readBits(1);
+            if (frame_cropping_flag) {
+                bitReader.readUE(); // frame_crop_left_offset
+                bitReader.readUE(); // frame_crop_right_offset
+                bitReader.readUE(); // frame_crop_top_offset
+                bitReader.readUE(); // frame_crop_bottom_offset
+            }
+            
+            // Finally, check for VUI parameters
+            const vui_parameters_present_flag = bitReader.readBits(1);
+            console.log(`VUI parameters present: ${vui_parameters_present_flag}`);
+            
+            if (vui_parameters_present_flag) {
+                return this.parseVUIParameters(bitReader);
+            }
+            
+            return null;
+            
+        } catch (error) {
+            console.warn("Failed to parse VUI from SPS:", error.message);
+            console.log("SPS data length:", spsData.length, "bytes");
+            if (spsData.length > 0) {
+                console.log("First few bytes:", Array.from(spsData.slice(0, Math.min(16, spsData.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Parse VUI parameters from bit stream
+     */
+    static parseVUIParameters(bitReader) {
+        const vui = {};
+        
+        // aspect_ratio_info_present_flag
+        const aspect_ratio_info_present_flag = bitReader.readBits(1);
+        if (aspect_ratio_info_present_flag) {
+            const aspect_ratio_idc = bitReader.readBits(8);
+            if (aspect_ratio_idc === 255) { // Extended_SAR
+                bitReader.readBits(16); // sar_width
+                bitReader.readBits(16); // sar_height
+            }
+        }
+        
+        // overscan_info_present_flag
+        const overscan_info_present_flag = bitReader.readBits(1);
+        if (overscan_info_present_flag) {
+            bitReader.readBits(1); // overscan_appropriate_flag
+        }
+        
+        // video_signal_type_present_flag
+        const video_signal_type_present_flag = bitReader.readBits(1);
+        if (video_signal_type_present_flag) {
+            bitReader.readBits(3); // video_format
+            bitReader.readBits(1); // video_full_range_flag
+            const colour_description_present_flag = bitReader.readBits(1);
+            if (colour_description_present_flag) {
+                bitReader.readBits(8); // colour_primaries
+                bitReader.readBits(8); // transfer_characteristics
+                bitReader.readBits(8); // matrix_coefficients
+            }
+        }
+        
+        // chroma_loc_info_present_flag
+        const chroma_loc_info_present_flag = bitReader.readBits(1);
+        if (chroma_loc_info_present_flag) {
+            bitReader.readUE(); // chroma_sample_loc_type_top_field
+            bitReader.readUE(); // chroma_sample_loc_type_bottom_field
+        }
+        
+        // timing_info_present_flag - This is what we're looking for!
+        vui.timing_info_present = bitReader.readBits(1);
+        console.log(`Timing info present: ${vui.timing_info_present}`);
+        
+        if (vui.timing_info_present) {
+            vui.num_units_in_tick = bitReader.readBits(32);
+            vui.time_scale = bitReader.readBits(32);
+            vui.fixed_frame_rate_flag = bitReader.readBits(1);
+            
+            console.log(`VUI Timing: num_units_in_tick=${vui.num_units_in_tick}, time_scale=${vui.time_scale}, fixed_frame_rate=${vui.fixed_frame_rate_flag}`);
+            
+            // Calculate frame rate
+            if (vui.num_units_in_tick > 0 && vui.time_scale > 0) {
+                // The formula depends on the video structure:
+                // - For progressive video: fps = time_scale / (2 * num_units_in_tick)
+                // - For interlaced video: fps = time_scale / num_units_in_tick
+                // - Some encoders use different conventions
+                
+                // Try both formulas and pick the most reasonable one
+                const fps_progressive = vui.time_scale / (2 * vui.num_units_in_tick);
+                const fps_interlaced = vui.time_scale / vui.num_units_in_tick;
+                
+                // Choose the one that's in a reasonable range (1-240 fps)
+                let fps = fps_progressive;
+                if (fps_progressive < 1 || fps_progressive > 240) {
+                    if (fps_interlaced >= 1 && fps_interlaced <= 240) {
+                        fps = fps_interlaced;
+                        console.log(`Using interlaced formula for FPS calculation`);
+                    }
+                }
+                
+                vui.calculated_fps = fps;
+                console.log(`Calculated FPS from VUI: ${fps} (progressive: ${fps_progressive}, interlaced: ${fps_interlaced})`);
+            }
+        }
+        
+        return vui;
+    }
+
+    /**
+     * Skip scaling list parsing (complex and not needed for timing info)
+     */
+    static skipScalingList(bitReader, sizeOfScalingList) {
+        let lastScale = 8;
+        let nextScale = 8;
+        
+        for (let j = 0; j < sizeOfScalingList; j++) {
+            if (nextScale !== 0) {
+                const delta_scale = bitReader.readSE();
+                nextScale = (lastScale + delta_scale + 256) % 256;
+            }
+            lastScale = (nextScale === 0) ? lastScale : nextScale;
+        }
     }
 
 

@@ -285,7 +285,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             // image width might change, for example, with the tiny images used by the old Gimbal video
             if (this.imageWidth !== image.width) {
-                console.log("Image width changed from " + this.imageWidth + " to " + image.width)
+          //      console.log("Image width changed from " + this.imageWidth + " to " + image.width)
                 this.imageWidth = image.width;
                 this.imageHeight = image.height;
             }

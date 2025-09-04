@@ -10,6 +10,11 @@ import {EventManager} from "./CEventManager";
  * Video data handler for raw H.264 elementary streams with frame caching
  * These are typically extracted from TS files and lack MP4 container structure
  * Now implements on-demand frame decoding similar to CVideoMp4Data
+ * 
+ * Constructor options:
+ * - fps: Frame rate (optional, defaults to 30 if not detected from stream)
+ * - dropFile: File object for dropped files
+ * - buffer: ArrayBuffer containing H.264 data
  */
 export class CVideoH264Data extends CVideoWebCodecBase {
 
@@ -232,10 +237,32 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             // Extract NAL units and create chunks
             const nalUnits = H264Decoder.extractNALUnits(new Uint8Array(h264Buffer));
 
-            // After analysis:
-            let fps = 30; // Default
-            if (analysis.vui && analysis.vui.timing_info_present) {
-                fps = analysis.vui.time_scale / (2 * analysis.vui.num_units_in_tick); // Standard formula, assumes fixed_frame_rate_flag
+            // Try to determine FPS from H.264 stream
+            let fps = v.fps || 30; // Use provided FPS or default to 30
+            
+            // Log what timing info we have available
+            console.log("H.264 Analysis timing info:", {
+                hasVUI: !!analysis.vui,
+                timingInfoPresent: analysis.vui?.timing_info_present,
+                calculatedFPS: analysis.vui?.calculated_fps,
+                providedFPS: v.fps,
+                usingFPS: fps
+            });
+            
+            if (v.fps) {
+                console.log(`✓ Using provided FPS: ${fps}`);
+            } else if (analysis.vui && analysis.vui.timing_info_present && analysis.vui.calculated_fps) {
+                const calculatedFps = analysis.vui.calculated_fps;
+                if (calculatedFps > 0 && calculatedFps <= 240) {
+                    fps = Math.round(calculatedFps * 100) / 100; // Round to 2 decimal places
+                    console.log(`✓ Detected FPS from VUI timing info: ${fps}`);
+                } else {
+                    console.warn(`⚠️ Invalid FPS calculated from VUI: ${calculatedFps}, using default ${fps}`);
+                }
+            } else {
+                console.warn(`⚠️ No VUI timing info available in H.264 stream, using default ${fps} FPS`);
+                console.log("💡 You can specify FPS in the constructor: new CVideoH264Data({..., fps: 25})");
+                console.log("📺 Common frame rates: 24 (cinema), 25 (PAL), 29.97/30 (NTSC), 50/60 (high frame rate)");
             }
 
             const encodedChunks = H264Decoder.createEncodedVideoChunks(nalUnits, fps);
@@ -368,7 +395,8 @@ export class CVideoH264Data extends CVideoWebCodecBase {
 
             // Set global video properties
             Sit.videoFrames = this.frames * this.videoSpeed;
-            Sit.fps = fps; // Default FPS
+            Sit.fps = fps;
+            this.detectedFps = fps; // Store for debugging
 
             updateSitFrames();
 
@@ -618,5 +646,36 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             reader.onerror = () => reject(reader.error);
             reader.readAsArrayBuffer(file);
         });
+    }
+
+    /**
+     * Update FPS after loading (useful for manual correction)
+     * @param {number} newFps - New frame rate
+     */
+    updateFPS(newFps) {
+        if (newFps > 0 && newFps <= 240) {
+            console.log(`Updating H.264 FPS from ${Sit.fps} to ${newFps}`);
+            Sit.fps = newFps;
+            this.detectedFps = newFps;
+            
+            // Update frame timing if needed
+            updateSitFrames();
+            
+            console.log(`✓ FPS updated to ${newFps}`);
+        } else {
+            console.error(`Invalid FPS value: ${newFps}. Must be between 0 and 240.`);
+        }
+    }
+
+    /**
+     * Get debug info including FPS detection details
+     */
+    getDebugFPSInfo() {
+        return {
+            detectedFps: this.detectedFps,
+            currentFps: Sit.fps,
+            wasProvided: !!this.v?.fps,
+            providedFps: this.v?.fps
+        };
     }
 }
