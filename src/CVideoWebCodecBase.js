@@ -467,7 +467,7 @@ export class CVideoWebCodecBase extends CVideoData {
         }
 
         if (isLocal) {
-             this.debugVideo()
+        //     this.debugVideo()
         }
     }
 

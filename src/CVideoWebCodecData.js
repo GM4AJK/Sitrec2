@@ -669,7 +669,7 @@ export class CVideoWebCodecData extends CVideoData {
         //     this.decoder.flush()
 
         if (isLocal) {
-             this.debugVideo()
+        //     this.debugVideo()
         }
     }
 
