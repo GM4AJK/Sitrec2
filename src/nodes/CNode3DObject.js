@@ -9,32 +9,39 @@ import {CNode3DGroup} from "./CNode3DGroup";
 import * as LAYER from "../LayerMasks";
 import {
     Box3,
-    BoxGeometry, BoxHelper,
+    BoxGeometry,
     CapsuleGeometry,
     CircleGeometry,
     Color,
-    ConeGeometry, CurvePath,
+    ConeGeometry,
+    CurvePath,
     CylinderGeometry,
     DodecahedronGeometry,
     EdgesGeometry,
-    IcosahedronGeometry, LatheGeometry, LineCurve3,
+    IcosahedronGeometry,
+    LatheGeometry,
+    LineCurve3,
     LineSegments,
     Mesh,
     MeshBasicMaterial,
     MeshLambertMaterial,
     MeshPhongMaterial,
-    MeshPhysicalMaterial, NoColorSpace,
-    OctahedronGeometry, QuadraticBezierCurve3,
+    MeshPhysicalMaterial,
+    OctahedronGeometry,
+    QuadraticBezierCurve3,
     RingGeometry,
-    SphereGeometry, SRGBColorSpace,
+    SphereGeometry,
     TetrahedronGeometry,
     TorusGeometry,
-    TorusKnotGeometry, TubeGeometry, Vector2, Vector3,
+    TorusKnotGeometry,
+    TubeGeometry,
+    Vector2,
+    Vector3,
     WireframeGeometry
 } from "three";
-import {FileManager, Globals, guiMenus, guiShowHide, NodeMan, setRenderOne} from "../Globals";
+import {FileManager, Globals, guiMenus, NodeMan, setRenderOne} from "../Globals";
 import {assert} from "../assert";
-import {disposeObject, disposeScene, propagateLayerMaskObject, setLayerMaskRecursive} from "../threeExt";
+import {disposeScene, propagateLayerMaskObject} from "../threeExt";
 import {loadGLTFModel} from "./CNode3DModel";
 import {V3} from "../threeUtils";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
@@ -103,6 +110,26 @@ class SuperEggGeometry extends LatheGeometry {
 class CapsuleGeometryTL {
     constructor(radius=0.5, totalLength = 5, capSegments = 20, radialSegments = 20) {
         return new CapsuleGeometry(radius, totalLength-radius*2, capSegments, radialSegments);
+    }
+}
+
+// EllipsoidGeometry
+// Creates an ellipsoid by scaling a sphere geometry
+class EllipsoidGeometry extends SphereGeometry {
+    constructor(radius = 1, aspect = 1, widthSegments = 32, heightSegments = 16) {
+        // Create a sphere with the base radius
+        super(radius, widthSegments, heightSegments);
+        
+        // Scale the Y-axis by the aspect ratio to create an ellipsoid
+        this.scale(1, aspect, 1);
+        
+        this.type = 'EllipsoidGeometry';
+        this.parameters = {
+            radius: radius,
+            aspect: aspect,
+            widthSegments: widthSegments,
+            heightSegments: heightSegments
+        };
     }
 }
 
@@ -202,6 +229,15 @@ const gTypes = {
             radius: [[0.5, 0.01, 100, 0.01], "Radius of the sphere"],
             widthSegments: [10, 4, 40, 1],
             heightSegments: [10, 3, 40, 1],
+        }
+    },
+    ellipsoid: {
+        g: EllipsoidGeometry,
+        params: {
+            radius: [[0.5, 0.01, 100, 0.01], "Horizontal radius of the ellipsoid"],
+            aspect: [[1.0, 0.01, 5.0, 0.001], "Aspect ratio - vertical radius / horizontal radius"],
+            widthSegments: [32, 4, 64, 1],
+            heightSegments: [16, 3, 32, 1],
         }
     },
     box: {
@@ -422,6 +458,7 @@ const commonMaterialParams = {
 
 const commonParams = {
     geometry: [["sphere", 
+        "ellipsoid",
         "box", 
         "capsule", 
         "circle", 
