@@ -628,23 +628,18 @@ export class CNode3DObject extends CNode3DGroup {
             const colladaContent = colladaResult.content;
             const colladaFilename = `${objectName}_${geometryType}.dae`;
             
-            // Create KML content that references the COLLADA model
-            const kmlContent = this.generateKMLContent(objectName, latitude, longitude, altitude, geometryType, colladaFilename);
+            // Create KML content that references the COLLADA model in files/ directory
+            const kmlContent = this.generateKMLContent(objectName, latitude, longitude, altitude, geometryType, `files/${colladaFilename}`);
             
-            // Save both files
-            const kmlFilename = `${objectName}_${geometryType}.kml`;
+            // Create a KMZ file containing doc.kml and files/model.dae
+            const kmzFilename = `${objectName}_${geometryType}.kmz`;
             
-            // Save COLLADA file first
-            await this.saveColladaFile(colladaContent, colladaFilename);
-            console.log(`COLLADA file exported successfully as: ${colladaFilename}`);
+            await this.saveAsKMZ(kmlContent, colladaContent, objectName, geometryType, kmzFilename);
+            console.log(`KMZ file exported successfully as: ${kmzFilename}`);
             console.log(`COLLADA contains ${colladaResult.vertexCount} vertices, ${colladaResult.triangleCount} triangles`);
             console.log(`Material: ${colladaResult.materialInfo.color}, opacity: ${colladaResult.materialInfo.opacity}`);
             
-            // Then save KML file
-            await this.saveKMLFile(kmlContent, kmlFilename);
-            console.log(`KML file exported successfully as: ${kmlFilename}`);
-            
-            alert(`3D object exported successfully!\n\nFiles saved:\n- ${kmlFilename} (KML file for Google Earth)\n- ${colladaFilename} (3D model file)\n\nIMPORTANT:\n1. Place both files in the same folder\n2. Open the KML file in Google Earth\n3. The 3D object will appear at the specified location\n\nNote: Google Earth may take a moment to load and render the 3D model.`);
+            alert(`3D object exported successfully!\n\nFile saved:\n- ${kmzFilename} (KMZ archive with embedded 3D model)\n\nIMPORTANT:\n1. Open the KMZ file directly in Google Earth\n2. The 3D object will appear at the specified location\n3. No extraction needed - everything is packaged together!\n\nNote: KMZ is the standard format for 3D models in Google Earth.`);
             
         } catch (error) {
             console.error('Error exporting to KML:', error);
@@ -1113,39 +1108,53 @@ export class CNode3DObject extends CNode3DGroup {
         return `${r.toFixed(6)} ${g.toFixed(6)} ${b.toFixed(6)} ${opacity.toFixed(6)}`;
     }
 
-    // Save COLLADA file with proper file type configuration
-    async saveColladaFile(contents, suggestedName = 'object.dae') {
+    // Save KML and COLLADA files as a KMZ archive with proper structure
+    async saveAsKMZ(kmlContent, colladaContent, objectName, geometryType, suggestedName) {
         try {
-            // Use the File System Access API with COLLADA file type
+            // Import JSZip dynamically
+            const JSZip = (await import('jszip')).default;
+            
+            const kmz = new JSZip();
+            
+            // Add doc.kml file to root of KMZ (required name for KMZ format)
+            kmz.file('doc.kml', kmlContent);
+            
+            // Create files/ directory and add COLLADA file
+            const colladaFilename = `${objectName}_${geometryType}.dae`;
+            kmz.file(`files/${colladaFilename}`, colladaContent);
+            
+            // Generate KMZ blob (which is just a ZIP with .kmz extension)
+            const kmzBlob = await kmz.generateAsync({type: 'blob'});
+            
+            // Use File System Access API to save KMZ
             const fileHandle = await window.showSaveFilePicker({
                 suggestedName,
                 types: [{
-                    description: 'COLLADA Files',
+                    description: 'Google Earth KMZ Files',
                     accept: {
-                        'model/vnd.collada+xml': ['.dae'],
-                        'application/xml': ['.dae'],
+                        'application/vnd.google-earth.kmz': ['.kmz'],
+                        'application/zip': ['.kmz'],
                     }
                 }]
             });
 
             const writable = await fileHandle.createWritable();
-            await writable.write(contents);
+            await writable.write(kmzBlob);
             await writable.close();
 
-            console.log('COLLADA file saved successfully!');
+            console.log('KMZ file saved successfully!');
             return fileHandle.name;
 
         } catch (error) {
             if (error.name === 'AbortError') {
-                console.log('COLLADA file save was cancelled by user');
-                throw new Error('COLLADA file save cancelled');
+                console.log('KMZ file save was cancelled by user');
+                throw new Error('KMZ file save cancelled');
             } else {
-                console.error('Error saving COLLADA file:', error);
+                console.error('Error saving KMZ file:', error);
                 throw error;
             }
         }
     }
-
 
     modSerialize() {
         return {
