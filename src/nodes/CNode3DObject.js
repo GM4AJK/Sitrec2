@@ -46,6 +46,7 @@ import {loadGLTFModel} from "./CNode3DModel";
 import {V3} from "../threeUtils";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import {CNodeLabel3D, CNodeMeasureAB} from "./CNodeLabels3D";
+import {EUSToLLA} from "../LLA-ECEF-ENU";
 
 // Note these files are CASE SENSIVE. Mac OS is case insensitive, so be careful. (e.g. F-15.glb will not work on my deployed server)
 export const ModelFiles = {
@@ -561,6 +562,11 @@ export class CNode3DObject extends CNode3DGroup {
             .tooltip("Display the bounding box of the object with dimensions")
             .isCommon = true;
 
+        // Add export to KML button
+        this.gui.add(this, "exportToKML").name("Export to KML")
+            .tooltip("Export this 3D object as a KML file for Google Earth")
+            .isCommon = true;
+
         this.rebuild();
 
 
@@ -599,6 +605,545 @@ export class CNode3DObject extends CNode3DGroup {
 
         })
 
+    }
+
+    // Export the 3D object as a KML file for Google Earth
+    async exportToKML() {
+        try {
+            // Get the current position of the object in EUS coordinates
+            const eusPosition = this.group.position.clone();
+            
+            // Convert EUS position to LLA (Latitude, Longitude, Altitude)
+            const lla = EUSToLLA(eusPosition);
+            const latitude = lla.x;   // degrees
+            const longitude = lla.y;  // degrees  
+            const altitude = lla.z;   // meters above sea level
+            
+            // Get object properties
+            const objectName = this.props.name || this.id;
+            const geometryType = this.common.geometry || 'sphere';
+            
+            // Generate COLLADA file content
+            const colladaResult = this.generateColladaContent(objectName, geometryType);
+            const colladaContent = colladaResult.content;
+            const colladaFilename = `${objectName}_${geometryType}.dae`;
+            
+            // Create KML content that references the COLLADA model
+            const kmlContent = this.generateKMLContent(objectName, latitude, longitude, altitude, geometryType, colladaFilename);
+            
+            // Save both files
+            const kmlFilename = `${objectName}_${geometryType}.kml`;
+            
+            // Save COLLADA file first
+            await this.saveColladaFile(colladaContent, colladaFilename);
+            console.log(`COLLADA file exported successfully as: ${colladaFilename}`);
+            console.log(`COLLADA contains ${colladaResult.vertexCount} vertices, ${colladaResult.triangleCount} triangles`);
+            console.log(`Material: ${colladaResult.materialInfo.color}, opacity: ${colladaResult.materialInfo.opacity}`);
+            
+            // Then save KML file
+            await this.saveKMLFile(kmlContent, kmlFilename);
+            console.log(`KML file exported successfully as: ${kmlFilename}`);
+            
+            alert(`3D object exported successfully!\n\nFiles saved:\n- ${kmlFilename} (KML file for Google Earth)\n- ${colladaFilename} (3D model file)\n\nIMPORTANT:\n1. Place both files in the same folder\n2. Open the KML file in Google Earth\n3. The 3D object will appear at the specified location\n\nNote: Google Earth may take a moment to load and render the 3D model.`);
+            
+        } catch (error) {
+            console.error('Error exporting to KML:', error);
+            alert('Error exporting to KML: ' + error.message);
+        }
+    }
+
+    // Generate KML content for the 3D object
+    generateKMLContent(name, latitude, longitude, altitude, geometryType, colladaFilename) {
+        // Get object dimensions based on geometry type
+        const dimensions = this.getObjectDimensions(geometryType);
+        
+        // Get material properties
+        const materialInfo = this.getMaterialInfo();
+        
+        // Create description with object details
+        const description = `
+            <![CDATA[
+            <h3>3D Object: ${name}</h3>
+            <p><strong>Type:</strong> ${geometryType}</p>
+            <p><strong>Position:</strong></p>
+            <ul>
+                <li>Latitude: ${latitude.toFixed(6)}°</li>
+                <li>Longitude: ${longitude.toFixed(6)}°</li>
+                <li>Altitude: ${altitude.toFixed(2)} m</li>
+            </ul>
+            <p><strong>Dimensions:</strong></p>
+            <ul>
+                ${dimensions.map(dim => `<li>${dim.name}: ${dim.value.toFixed(3)} ${dim.unit}</li>`).join('')}
+            </ul>
+            <p><strong>Material:</strong></p>
+            <ul>
+                <li>Type: ${materialInfo.type}</li>
+                <li>Color: ${materialInfo.color}</li>
+                <li>Opacity: ${materialInfo.opacity.toFixed(2)}</li>
+                ${materialInfo.transparent ? '<li>Transparent: Yes</li>' : ''}
+            </ul>
+            <p><em>Exported from Sitrec</em></p>
+            ]]>
+        `;
+
+        // Get object scale for proper sizing in Google Earth
+        const scale = this.getObjectScale();
+
+        // Generate KML with 3D model reference
+        const kml = `<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+    <Document>
+        <name>${name} - ${geometryType}</name>
+        <description>3D Object exported from Sitrec</description>
+        
+        <Placemark>
+            <name>${name}</name>
+            <description>${description}</description>
+            <Model>
+                <altitudeMode>absolute</altitudeMode>
+                <Location>
+                    <longitude>${longitude}</longitude>
+                    <latitude>${latitude}</latitude>
+                    <altitude>${altitude}</altitude>
+                </Location>
+                <Orientation>
+                    <heading>0</heading>
+                    <tilt>0</tilt>
+                    <roll>0</roll>
+                </Orientation>
+                <Scale>
+                    <x>${scale.x}</x>
+                    <y>${scale.y}</y>
+                    <z>${scale.z}</z>
+                </Scale>
+                <Link>
+                    <href>${colladaFilename}</href>
+                </Link>
+            </Model>
+        </Placemark>
+    </Document>
+</kml>`;
+
+        return kml;
+    }
+
+    // Get object dimensions based on geometry type
+    getObjectDimensions(geometryType) {
+        const dimensions = [];
+        
+        switch (geometryType) {
+            case 'sphere':
+                if (this.geometryParams.radius !== undefined) {
+                    dimensions.push({ name: 'Radius', value: this.geometryParams.radius, unit: 'm' });
+                }
+                break;
+                
+            case 'ellipsoid':
+                if (this.geometryParams.radius !== undefined) {
+                    dimensions.push({ name: 'Horizontal Radius', value: this.geometryParams.radius, unit: 'm' });
+                }
+                if (this.geometryParams.aspect !== undefined && this.geometryParams.radius !== undefined) {
+                    dimensions.push({ name: 'Vertical Radius', value: this.geometryParams.radius * this.geometryParams.aspect, unit: 'm' });
+                }
+                break;
+                
+            case 'box':
+                if (this.geometryParams.width !== undefined) {
+                    dimensions.push({ name: 'Width', value: this.geometryParams.width, unit: 'm' });
+                }
+                if (this.geometryParams.height !== undefined) {
+                    dimensions.push({ name: 'Height', value: this.geometryParams.height, unit: 'm' });
+                }
+                if (this.geometryParams.depth !== undefined) {
+                    dimensions.push({ name: 'Depth', value: this.geometryParams.depth, unit: 'm' });
+                }
+                break;
+                
+            case 'capsule':
+                if (this.geometryParams.radius !== undefined) {
+                    dimensions.push({ name: 'Radius', value: this.geometryParams.radius, unit: 'm' });
+                }
+                if (this.geometryParams.totalLength !== undefined) {
+                    dimensions.push({ name: 'Total Length', value: this.geometryParams.totalLength, unit: 'm' });
+                }
+                break;
+                
+            case 'cylinder':
+                if (this.geometryParams.radiusTop !== undefined) {
+                    dimensions.push({ name: 'Top Radius', value: this.geometryParams.radiusTop, unit: 'm' });
+                }
+                if (this.geometryParams.radiusBottom !== undefined) {
+                    dimensions.push({ name: 'Bottom Radius', value: this.geometryParams.radiusBottom, unit: 'm' });
+                }
+                if (this.geometryParams.height !== undefined) {
+                    dimensions.push({ name: 'Height', value: this.geometryParams.height, unit: 'm' });
+                }
+                break;
+                
+            default:
+                // For other geometry types, try to get common parameters
+                if (this.geometryParams.radius !== undefined) {
+                    dimensions.push({ name: 'Radius', value: this.geometryParams.radius, unit: 'm' });
+                }
+                if (this.geometryParams.height !== undefined) {
+                    dimensions.push({ name: 'Height', value: this.geometryParams.height, unit: 'm' });
+                }
+                break;
+        }
+        
+        return dimensions;
+    }
+
+    // Save KML file with proper file type configuration
+    async saveKMLFile(contents, suggestedName = 'object.kml') {
+        try {
+            // Use the File System Access API with KML file type
+            const fileHandle = await window.showSaveFilePicker({
+                suggestedName,
+                types: [{
+                    description: 'KML Files',
+                    accept: {
+                        'application/vnd.google-earth.kml+xml': ['.kml'],
+                        'text/xml': ['.kml'],
+                    }
+                }]
+            });
+
+            const writable = await fileHandle.createWritable();
+            await writable.write(contents);
+            await writable.close();
+
+            console.log('KML file saved successfully!');
+            return fileHandle.name;
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.log('File save was cancelled by user');
+                throw new Error('File save cancelled');
+            } else {
+                console.error('Error saving KML file:', error);
+                throw error;
+            }
+        }
+    }
+
+    // Get material information for KML description
+    getMaterialInfo() {
+        const material = this.material || this.object?.material;
+        if (!material) {
+            return {
+                type: 'Unknown',
+                color: '#ffffff',
+                opacity: 1.0,
+                transparent: false
+            };
+        }
+
+        // Convert Three.js color to hex string
+        const colorHex = material.color ? `#${material.color.getHexString()}` : '#ffffff';
+        
+        return {
+            type: this.common.material || 'basic',
+            color: colorHex,
+            opacity: material.opacity || 1.0,
+            transparent: material.transparent || false
+        };
+    }
+
+    // Get object scale for KML model
+    getObjectScale() {
+        // Get the geometry bounds to determine appropriate scaling
+        const geometry = this.geometry;
+        if (geometry && geometry.boundingBox) {
+            geometry.computeBoundingBox();
+            const box = geometry.boundingBox;
+            const size = Math.max(
+                box.max.x - box.min.x,
+                box.max.y - box.min.y,
+                box.max.z - box.min.z
+            );
+            
+            // Scale to ensure the model is visible in Google Earth (target size ~10-100 meters)
+            let scale = 1.0;
+            if (size < 1) {
+                scale = 10.0; // Scale up very small objects
+            } else if (size > 100) {
+                scale = 50.0 / size; // Scale down very large objects
+            }
+            
+            return { x: scale, y: scale, z: scale };
+        }
+        
+        // Default scale - use 1.0 for normal sized objects
+        return { x: 1.0, y: 1.0, z: 1.0 };
+    }
+
+    // Generate COLLADA (.dae) file content
+    generateColladaContent(name, geometryType) {
+        let geometry, material;
+        
+        // Handle both procedural geometry and loaded models
+        if (this.modelOrGeometry === "model" && this.model) {
+            // For loaded models, extract geometry from the first mesh
+            let firstMesh = null;
+            this.model.traverse((child) => {
+                if (child.isMesh && !firstMesh) {
+                    firstMesh = child;
+                }
+            });
+            
+            if (!firstMesh) {
+                throw new Error('No mesh found in the loaded model');
+            }
+            
+            geometry = firstMesh.geometry;
+            material = firstMesh.material;
+            geometryType = 'model';
+        } else {
+            // For procedural geometry
+            geometry = this.geometry;
+            material = this.material || this.object?.material;
+            
+            if (!geometry) {
+                throw new Error('No geometry available for COLLADA export');
+            }
+
+            // Check if object is in wireframe or edges mode
+            if (this.common.wireframe || this.common.edges) {
+                throw new Error('Cannot export wireframe or edges geometry to COLLADA. Please disable wireframe/edges mode and try again.');
+            }
+        }
+
+        // Get geometry data
+        const vertices = this.getVerticesFromGeometry(geometry);
+        const normals = this.getNormalsFromGeometry(geometry);
+        const indices = this.getIndicesFromGeometry(geometry);
+        
+        // Get material properties
+        const materialInfo = this.getMaterialInfo();
+        
+        // Generate unique IDs
+        const geometryId = `${name}-geometry`;
+        const materialId = `${name}-material`;
+        const effectId = `${name}-effect`;
+        
+        // Create COLLADA XML content
+        const collada = `<?xml version="1.0" encoding="utf-8"?>
+<COLLADA xmlns="http://www.collada.org/2005/11/COLLADASchema" version="1.4.1">
+    <asset>
+        <contributor>
+            <authoring_tool>Sitrec</authoring_tool>
+        </contributor>
+        <created>${new Date().toISOString()}</created>
+        <modified>${new Date().toISOString()}</modified>
+        <unit name="meter" meter="1"/>
+        <up_axis>Y_UP</up_axis>
+    </asset>
+    
+    <library_effects>
+        <effect id="${effectId}">
+            <profile_COMMON>
+                <technique sid="common">
+                    <phong>
+                        <emission>
+                            <color sid="emission">0.0 0.0 0.0 1.0</color>
+                        </emission>
+                        <ambient>
+                            <color sid="ambient">0.2 0.2 0.2 1.0</color>
+                        </ambient>
+                        <diffuse>
+                            <color sid="diffuse">${this.colorToRGBA(materialInfo.color, materialInfo.opacity)}</color>
+                        </diffuse>
+                        <specular>
+                            <color sid="specular">0.5 0.5 0.5 1.0</color>
+                        </specular>
+                        <shininess>
+                            <float sid="shininess">20.0</float>
+                        </shininess>
+                        ${materialInfo.transparent && materialInfo.opacity < 1.0 ? `
+                        <transparent opaque="A_ONE">
+                            <color sid="transparent">1.0 1.0 1.0 1.0</color>
+                        </transparent>
+                        <transparency>
+                            <float sid="transparency">${materialInfo.opacity}</float>
+                        </transparency>` : ''}
+                    </phong>
+                </technique>
+            </profile_COMMON>
+        </effect>
+    </library_effects>
+    
+    <library_materials>
+        <material id="${materialId}" name="${name}-material">
+            <instance_effect url="#${effectId}"/>
+        </material>
+    </library_materials>
+    
+    <library_geometries>
+        <geometry id="${geometryId}" name="${name}-geometry">
+            <mesh>
+                <source id="${geometryId}-positions">
+                    <float_array id="${geometryId}-positions-array" count="${vertices.length}">
+                        ${vertices.join(' ')}
+                    </float_array>
+                    <technique_common>
+                        <accessor source="#${geometryId}-positions-array" count="${vertices.length / 3}" stride="3">
+                            <param name="X" type="float"/>
+                            <param name="Y" type="float"/>
+                            <param name="Z" type="float"/>
+                        </accessor>
+                    </technique_common>
+                </source>
+                
+                <source id="${geometryId}-normals">
+                    <float_array id="${geometryId}-normals-array" count="${normals.length}">
+                        ${normals.join(' ')}
+                    </float_array>
+                    <technique_common>
+                        <accessor source="#${geometryId}-normals-array" count="${normals.length / 3}" stride="3">
+                            <param name="X" type="float"/>
+                            <param name="Y" type="float"/>
+                            <param name="Z" type="float"/>
+                        </accessor>
+                    </technique_common>
+                </source>
+                
+                <vertices id="${geometryId}-vertices">
+                    <input semantic="POSITION" source="#${geometryId}-positions"/>
+                </vertices>
+                
+                <triangles material="material0" count="${indices.length / 3}">
+                    <input semantic="VERTEX" source="#${geometryId}-vertices" offset="0"/>
+                    <input semantic="NORMAL" source="#${geometryId}-normals" offset="0"/>
+                    <p>${indices.join(' ')}</p>
+                </triangles>
+            </mesh>
+        </geometry>
+    </library_geometries>
+    
+    <library_visual_scenes>
+        <visual_scene id="Scene" name="Scene">
+            <node id="${name}" name="${name}" type="NODE">
+                <instance_geometry url="#${geometryId}">
+                    <bind_material>
+                        <technique_common>
+                            <instance_material symbol="material0" target="#${materialId}"/>
+                        </technique_common>
+                    </bind_material>
+                </instance_geometry>
+            </node>
+        </visual_scene>
+    </library_visual_scenes>
+    
+    <scene>
+        <instance_visual_scene url="#Scene"/>
+    </scene>
+</COLLADA>`;
+
+        return {
+            content: collada,
+            vertexCount: vertices.length / 3,
+            triangleCount: indices.length / 3,
+            materialInfo: materialInfo
+        };
+    }
+
+    // Extract vertices from Three.js geometry
+    getVerticesFromGeometry(geometry) {
+        const positions = geometry.attributes.position;
+        if (!positions) {
+            throw new Error('Geometry has no position attribute');
+        }
+        
+        // Convert vertices and ensure they're properly scaled for Google Earth
+        const vertices = Array.from(positions.array);
+        const transformedVertices = [];
+        
+        // Transform vertices to ensure proper orientation for Google Earth
+        // Google Earth uses Y-up coordinate system
+        for (let i = 0; i < vertices.length; i += 3) {
+            const x = vertices[i];
+            const y = vertices[i + 1];
+            const z = vertices[i + 2];
+            
+            // Keep the same coordinate system but ensure reasonable scale
+            transformedVertices.push(x, y, z);
+        }
+        
+        return transformedVertices;
+    }
+
+    // Extract normals from Three.js geometry
+    getNormalsFromGeometry(geometry) {
+        let normals = geometry.attributes.normal;
+        if (!normals) {
+            // Compute normals if they don't exist
+            geometry.computeVertexNormals();
+            normals = geometry.attributes.normal;
+        }
+        return Array.from(normals.array);
+    }
+
+    // Extract indices from Three.js geometry
+    getIndicesFromGeometry(geometry) {
+        const index = geometry.index;
+        if (index) {
+            return Array.from(index.array);
+        } else {
+            // Generate indices for non-indexed geometry
+            const vertexCount = geometry.attributes.position.count;
+            const indices = [];
+            for (let i = 0; i < vertexCount; i++) {
+                indices.push(i);
+            }
+            return indices;
+        }
+    }
+
+    // Convert hex color to RGBA string for COLLADA
+    colorToRGBA(hexColor, opacity = 1.0) {
+        // Remove # if present
+        const hex = hexColor.replace('#', '');
+        
+        // Parse RGB values
+        const r = parseInt(hex.substring(0, 2), 16) / 255;
+        const g = parseInt(hex.substring(2, 4), 16) / 255;
+        const b = parseInt(hex.substring(4, 6), 16) / 255;
+        
+        return `${r.toFixed(6)} ${g.toFixed(6)} ${b.toFixed(6)} ${opacity.toFixed(6)}`;
+    }
+
+    // Save COLLADA file with proper file type configuration
+    async saveColladaFile(contents, suggestedName = 'object.dae') {
+        try {
+            // Use the File System Access API with COLLADA file type
+            const fileHandle = await window.showSaveFilePicker({
+                suggestedName,
+                types: [{
+                    description: 'COLLADA Files',
+                    accept: {
+                        'model/vnd.collada+xml': ['.dae'],
+                        'application/xml': ['.dae'],
+                    }
+                }]
+            });
+
+            const writable = await fileHandle.createWritable();
+            await writable.write(contents);
+            await writable.close();
+
+            console.log('COLLADA file saved successfully!');
+            return fileHandle.name;
+
+        } catch (error) {
+            if (error.name === 'AbortError') {
+                console.log('COLLADA file save was cancelled by user');
+                throw new Error('COLLADA file save cancelled');
+            } else {
+                console.error('Error saving COLLADA file:', error);
+                throw error;
+            }
+        }
     }
 
 
