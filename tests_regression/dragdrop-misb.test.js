@@ -9,7 +9,7 @@ describe('MISB File Drag and Drop Test', () => {
     // Increase timeout for file processing
     jest.setTimeout(120000);
     
-    const testFileName = 'short.ts';
+    const testFileName = 'falls.ts';
     const testFilePath = `/Users/mick/Dropbox/Sitrec Resources/MISB/QGISFMV_Samples/MISB/${testFileName}`;
     
     beforeAll(async () => {
