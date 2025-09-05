@@ -39,7 +39,7 @@ import {
     Vector3,
     WireframeGeometry
 } from "three";
-import {FileManager, Globals, guiMenus, NodeMan, setRenderOne} from "../Globals";
+import {FileManager, Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Globals";
 import {assert} from "../assert";
 import {disposeScene, propagateLayerMaskObject} from "../threeExt";
 import {loadGLTFModel} from "./CNode3DModel";
@@ -623,6 +623,8 @@ export class CNode3DObject extends CNode3DGroup {
             const objectName = this.props.name || this.id;
             const geometryType = this.common.geometry || 'sphere';
             
+            // Get sitch name for filename prefix
+            const sitchName = Sit.sitchName || Sit.name;
             // Generate COLLADA file content
             const colladaResult = this.generateColladaContent(objectName, geometryType);
             const colladaContent = colladaResult.content;
@@ -631,8 +633,8 @@ export class CNode3DObject extends CNode3DGroup {
             // Create KML content that references the COLLADA model in files/ directory
             const kmlContent = this.generateKMLContent(objectName, latitude, longitude, altitude, geometryType, `files/${colladaFilename}`);
             
-            // Create a KMZ file containing doc.kml and files/model.dae
-            const kmzFilename = `${objectName}_${geometryType}.kmz`;
+            // Create a KMZ file containing doc.kml and files/model.dae with sitch name prefix
+            const kmzFilename = `${sitchName}_${objectName}_${geometryType}.kmz`;
             
             await this.saveAsKMZ(kmlContent, colladaContent, objectName, geometryType, kmzFilename);
             console.log(`KMZ file exported successfully as: ${kmzFilename}`);
