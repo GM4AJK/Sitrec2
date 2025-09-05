@@ -1,11 +1,5 @@
 import {CNode3DGroup} from "./CNode3DGroup";
-import {
-    GlobalNightSkyScene,
-    GlobalScene,
-    setupNightSkyScene,
-    setupDaySkyScene,
-    GlobalSunSkyScene, setupSunSkyScene
-} from "../LocalFrame";
+import {GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene, setupNightSkyScene, setupSunSkyScene} from "../LocalFrame";
 import {
     BufferAttribute,
     BufferGeometry,
@@ -28,22 +22,15 @@ import {
     Vector3
 } from "three";
 import {degrees, radians} from "../utils";
-import {
-    FileManager,
-    GlobalDateTimeNode,
-    Globals,
-    guiMenus,
-    guiShowHide, infoDiv,
-    NodeMan, setRenderOne,
-    Sit
-} from "../Globals";
+import {FileManager, GlobalDateTimeNode, Globals, guiMenus, guiShowHide, NodeMan, setRenderOne, Sit} from "../Globals";
 import {
     DebugArrow,
     DebugArrowAB,
     DebugWireframeSphere,
     pointOnGround,
     propagateLayerMaskObject,
-    removeDebugArrow, setLayerMaskRecursive
+    removeDebugArrow,
+    setLayerMaskRecursive
 } from "../threeExt";
 import {
     ECEF2EUS,
@@ -1427,11 +1414,14 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 //         // apply them
 //         this.celestialSphere.applyMatrix4(rotationMatrixX)
 
-        // Apply rotation matrices to both celestial spheres
+        // Apply rotation matrices to the night sky celestial sphere
         this.celestialSphere.applyMatrix4(rotationMatrixY)
         this.celestialSphere.applyMatrix4(rotationMatrixZ)
         this.celestialSphere.applyMatrix4(rotationMatrixX)
         
+        // The day sky sphere should use the same transformations as the night sky sphere
+        // since both are rendered with camera at origin and should show celestial objects
+        // in the same positions
         if (this.celestialDaySphere) {
             this.celestialDaySphere.applyMatrix4(rotationMatrixY)
             this.celestialDaySphere.applyMatrix4(rotationMatrixZ)
@@ -1444,12 +1434,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         let observer = new Astronomy.Observer(Sit.lat, Sit.lon, 0);
         // update the planets position for the current time
         for (const [name, planet] of Object.entries(this.planetSprites)) {
-            this.updatePlanetSprite(name, planet.sprite, nowDate, observer, 100)
-            
-            // Also update the day sky sprite if it exists (for Sun)
-            if (planet.daySkySprite) {
-                this.updatePlanetSprite(name, planet.daySkySprite, nowDate, observer, 100)
-            }
+            // Update both the regular sprite and day sky sprite in one call
+            this.updatePlanetSprite(name, planet.sprite, nowDate, observer, 100, planet.daySkySprite)
         }
 
         if (this.showSatellites && this.TLEData) {
@@ -2172,11 +2158,46 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     }
 
+    removePlanets(scene, dayScene = null) {
+        // Remove existing planet sprites from scenes to prevent duplicates
+        if (this.planetSprites) {
+            for (const [planet, planetData] of Object.entries(this.planetSprites)) {
+                if (planetData.sprite) {
+                    if (scene) scene.remove(planetData.sprite);
+                    if (planetData.sprite.material) {
+                        if (planetData.sprite.material.map) {
+                            planetData.sprite.material.map.dispose();
+                        }
+                        planetData.sprite.material.dispose();
+                    }
+                }
+                if (planetData.daySkySprite && dayScene) {
+                    dayScene.remove(planetData.daySkySprite);
+                    if (planetData.daySkySprite.material) {
+                        if (planetData.daySkySprite.material.map) {
+                            planetData.daySkySprite.material.map.dispose();
+                        }
+                        planetData.daySkySprite.material.dispose();
+                    }
+                }
+            }
+        }
+        this.planetSprites = {};
+    }
 
     addPlanets(scene, dayScene = null) {
 
         assert(Sit.lat !== undefined, "addStars needs Sit.lat")
         assert(Sit.lon !== undefined, "addStars needs Sit.lon")
+
+        // Remove existing planet sprites first to prevent duplicates
+        this.removePlanets(scene, dayScene);
+
+        // Safety check: if planetSprites already has entries, something went wrong
+        if (this.planetSprites && Object.keys(this.planetSprites).length > 0) {
+            console.warn("CNodeDisplayNightSky: planetSprites not empty after removePlanets, forcing cleanup");
+            this.planetSprites = {};
+        }
 
         // Setup the sprite material
 
@@ -2211,22 +2232,23 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             const spriteMaterial = new SpriteMaterial({map: spriteMap, color: color});
             const sprite = new Sprite(spriteMaterial);
 
-            this.updatePlanetSprite(planet, sprite, date, observer,sphereRadius)
-            this.planetSprites[planet].color = color
+            // Create day sky sprite if needed
+            // this is rendered AFTER the atmosphere polygon (with dayScene),
+            // and is the exact same position, etc as the night sprite
+
+            let daySkySprite = null;
+            if ((planet === "Sun" || planet === "Moon") && dayScene) {
+                const sunSpriteMaterial = new SpriteMaterial({map: spriteMap, color: color});
+                daySkySprite = new Sprite(sunSpriteMaterial);
+                dayScene.add(daySkySprite);
+            }
+
+            // Update both sprites at once
+            this.updatePlanetSprite(planet, sprite, date, observer, sphereRadius, daySkySprite);
+            this.planetSprites[planet].color = color;
 
             // Add sprite to scene
             scene.add(sprite);
-            
-            // Also add a separate sun and moon sprite to the day sky celestial sphere for daytime visibility
-            if ((planet === "Sun" || planet === "Moon") && dayScene) {
-                const sunSpriteMaterial = new SpriteMaterial({map: spriteMap, color: color});
-                const sunSpriteForDayScene = new Sprite(sunSpriteMaterial);
-                this.updatePlanetSprite(planet, sunSpriteForDayScene, date, observer, sphereRadius);
-                dayScene.add(sunSpriteForDayScene);
-                //
-                // Store reference to the day scene sun sprite
-                this.planetSprites[planet].daySkySprite = sunSpriteForDayScene;
-            }
 
         }
     }
@@ -2622,7 +2644,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     // Note, here we are claculating the ECEF position of planets on the celestial sphere
     // these are NOT the actual positions in space
-    updatePlanetSprite(planet, sprite, date, observer, sphereRadius) {
+    updatePlanetSprite(planet, sprite, date, observer, sphereRadius, daySkySprite = undefined) {
         //  const celestialInfo = Astronomy.Search(planet, date, observer, 1);
         const celestialInfo = Astronomy.Equator(planet, date, observer, false, true);
         const illumination = Astronomy.Illumination(planet, date)
@@ -2642,10 +2664,16 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         sprite.position.set(equatorial.x, equatorial.y, equatorial.z);
         var scale = 10 * Math.pow(10, -0.4 * (mag - -5));
         if (scale > 1) scale= 1;
-        if (planet === "Sun") scale = 5;
+        if (planet === "Sun") scale = 1.9;
         if (planet === "Moon") scale = 1.9;
 
         sprite.scale.set(scale, scale, 1);
+
+        // If daySkySprite is provided, update it with the same position and scale
+        if (daySkySprite) {
+            daySkySprite.position.set(equatorial.x, equatorial.y, equatorial.z);
+            daySkySprite.scale.set(scale, scale, 1);
+        }
 
 
         this.updateArrow(planet, ra, dec, date, observer, sphereRadius)
@@ -2796,14 +2824,28 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
         }
-        // add or update planetSprites
-        this.planetSprites[planet] = {
-            ra: ra,
-            dec: dec,
-            mag: mag,
-            equatorial: equatorial,
-            sprite: sprite,
-            color: color,
+        // add or update planetSprites - only create if it doesn't exist, otherwise just update
+        if (!this.planetSprites[planet]) {
+            this.planetSprites[planet] = {
+                ra: ra,
+                dec: dec,
+                mag: mag,
+                equatorial: equatorial,
+                sprite: sprite,
+                color: color,
+                daySkySprite: daySkySprite,
+            };
+        } else {
+            // Update existing entry
+            this.planetSprites[planet].ra = ra;
+            this.planetSprites[planet].dec = dec;
+            this.planetSprites[planet].mag = mag;
+            this.planetSprites[planet].equatorial = equatorial;
+            this.planetSprites[planet].color = color;
+            // Update daySkySprite if provided
+            if (daySkySprite) {
+                this.planetSprites[planet].daySkySprite = daySkySprite;
+            }
         }
 
     }
@@ -2834,6 +2876,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             this[obName].updateDirection(eusDir)
 
         }
+    }
+
+    dispose() {
+        // Clean up planet sprites before disposing
+        this.removePlanets(this.celestialSphere, this.celestialDaySphere);
+        super.dispose();
     }
 
 
