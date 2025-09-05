@@ -3,6 +3,8 @@
   "version": "1.0.0",
   "scripts": {
     "test": "npx jest tests/",
+    "test-regression": "npx jest tests_regression/",
+    "test-all": "npx jest",
     "test-misb": "node ../test-all-misb-files.js",
     "build": "npx webpack --config webpack.dev.js",
     "deploy": "npx webpack --config webpack.prod.js",

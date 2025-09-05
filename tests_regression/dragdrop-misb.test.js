@@ -17,14 +17,14 @@ describe('MISB File Drag and Drop Test', () => {
         if (!fs.existsSync(testFilePath)) {
             throw new Error(`Test file not found: ${testFilePath}`);
         }
-        
+
         browser = await puppeteer.launch({
             headless: false,
             defaultViewport: {
                 width: 1920,
                 height: 1080,
             },
-            args: ['--no-sandbox', '--disable-setuid-sandbox']
+            args: ['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage']
         });
         page = await browser.newPage();
         
