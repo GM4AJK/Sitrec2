@@ -1,7 +1,7 @@
 // CNodeSunlight.js - upates the global scene with the current sunlight
 // based on the current date and time and the look camera
 import {CNode} from "./CNode";
-import {GlobalDateTimeNode, Globals, infoDiv, NodeMan} from "../Globals";
+import {GlobalDateTimeNode, Globals, NodeMan} from "../Globals";
 import {getCelestialDirection} from "../CelestialMath";
 import {degrees} from "../utils";
 import {getLocalUpVector, pointAltitude} from "../SphericalMath";
@@ -125,8 +125,6 @@ export class CNodeSunlight extends CNode {
 
         const blue = new Vector3(0.53,0.81,0.92)
         blue.multiplyScalar(sunTotal)
-         infoDiv.innerHTML=`<br>Sky Color: ${blue.x.toFixed(2)} ${blue.y.toFixed(2)} ${blue.z.toFixed(2)}`
-        infoDiv.innerHTML+=`<br>Sun Total: ${sunTotal.toFixed(2)}`
         return new Color(blue.x, blue.y, blue.z)
     }
 
