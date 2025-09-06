@@ -200,6 +200,19 @@ export class CFileManager extends CManager {
             }).moveAfter("Save with Permalink")
                 .tooltip("Load a saved sitch from your personal folder on the server");
 
+            // Create alphabetically sorted version for Open (A-Z)
+            this.userSavesAlphabetical = [...this.userSaves]; // copy the array
+            // Sort alphabetically, but keep "-" at the beginning
+            const dashEntry = this.userSavesAlphabetical.shift(); // remove "-" from beginning
+            this.userSavesAlphabetical.sort((a, b) => a.localeCompare(b)); // sort alphabetically
+            this.userSavesAlphabetical.unshift(dashEntry); // put "-" back at the beginning
+
+            this.loadNameAlphabetical = this.userSavesAlphabetical[0];
+            this.guiLoadAlphabetical = this.guiServer.add(this, "loadNameAlphabetical", this.userSavesAlphabetical).name("Open (A-Z)").perm().onChange((value) => {
+                this.loadSavedFile(value)
+            }).moveAfter("Open")
+                .tooltip("Load a saved sitch from your personal folder on the server (alphabetical order)");
+
             // this.userVersions = "-";
             // this.guiVersions = this.guiServer.add(this, "userVersions", this.userVersions).name("Versions").perm().onChange((value) => {
             //
@@ -208,7 +221,7 @@ export class CFileManager extends CManager {
             this.deleteName = this.userSaves[0];
             this.guiDelete = this.guiServer.add(this, "deleteName", this.userSaves).name("Delete").perm().onChange((value) => {
                 this.deleteSitch(value)
-            }).moveAfter("Open")
+            }).moveAfter("Open (A-Z)")
                 .tooltip("Delete a saved sitch from your personal folder on the server");
 
         })
@@ -276,9 +289,13 @@ export class CFileManager extends CManager {
             if (this.loadName === value) {
                 this.loadName = "-";
             }
+            if (this.loadNameAlphabetical === value) {
+                this.loadNameAlphabetical = "-";
+            }
             // the remove calls will also update the GUI
             // to account for the "-" selection
             removeOptionFromGUIMenu(this.guiLoad, value);
+            removeOptionFromGUIMenu(this.guiLoadAlphabetical, value);
             removeOptionFromGUIMenu(this.guiDelete, value);
         });
 
@@ -374,6 +391,7 @@ export class CFileManager extends CManager {
                 return this.saveSitchNamed(Sit.sitchName, local);  // return the Promise here
             }).then(() => {
                 addOptionToGUIMenu(this.guiLoad, Sit.sitchName);
+                addOptionToGUIMenu(this.guiLoadAlphabetical, Sit.sitchName);
                 addOptionToGUIMenu(this.guiDelete, Sit.sitchName);
             }).catch((error) => {
                 console.log("Failed to input sitch name:", error);
