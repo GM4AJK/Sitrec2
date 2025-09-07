@@ -13,7 +13,7 @@ import {
     Units
 } from "./Globals";
 import {isKeyHeld, toggler} from "./KeyBoardHandler";
-import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_Sphere, EUSToECEF} from "./LLA-ECEF-ENU";
 import {createCustomModalWithCopy, saveFilePrompted} from "./CFileManager";
 import {DragDropHandler} from "./DragDropHandler";
 import {par} from "./par";
@@ -32,6 +32,7 @@ import {DebugArrowAB} from "./threeExt";
 import {TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
+import {configParams} from "./login";
 
 
 export class CCustomManager {
@@ -105,10 +106,19 @@ export class CCustomManager {
             });
         });
 
+        // configParmas.extraHelpFunctions has and object keyed on function name
+        if (configParams.extraHelpFunctions) {
+            // iterate over k, value of configParmas.extraHelpFunctions
+            for (const funcName in configParams.extraHelpFunctions) {
+                const funcVars = configParams.extraHelpFunctions[funcName];
+                // create a new function in CCustomManager with the function name
+                this[funcName] = () => {
+                    funcVars[0]();
+                }
 
-        guiMenus.help.add(this, "adsbReplay").name('ADSB Replay for this time and location')
-        guiMenus.help.add(this, "googleMapsLink").name('Google Maps for this location')
-        guiMenus.help.add(this, "inTheSkyLink").name('In-The-Sky for this time and location')
+                guiMenus["help"].add(this, funcName).name(funcVars[1]).listen().tooltip(funcVars[2]);
+            }
+        }
 
 
         // TODO - Multiple events passed to EventManager.addEventListener
@@ -314,88 +324,6 @@ export class CCustomManager {
         }, 1000);
     }
 
-    adsbReplay() {
-        // get want a URL like this:
-        // https://globe.adsbexchange.com/?replay=2025-07-02-20:31&lat=32.996&lon=-96.715&zoom=11.9
-        // which matches the current camera position and date/time
-
-        const date = GlobalDateTimeNode.frameToDate(par.frame);
-
-        // check to see if it's withing 30 minutes of the current time
-        // and if so, give an alert saying that's too soon for replay
-
-        const now = new Date();
-        const diffMinutes = Math.abs((now - date) / 60000); // difference in minutes
-        if (diffMinutes < 30) {
-            alert("ADSB Replay is not available for the last 30 minutes.\nPlease wait until the data is available.");
-            return;
-        }
-
-
-
-        // get the current camera position from the lookCamera in Lat and Lon
-        const lookCamera = NodeMan.get("lookCamera");
-        const pos = lookCamera.p(par.frame);
-        const LLA = EUSToLLA(pos);
-
-        // get date and time from the current frame
-        const dateString = date.toISOString().slice(0, 16).replace("T", "-");
-        const lat = LLA.x.toFixed(3);
-        const lon = LLA.y.toFixed(3);
-        const zoom = 13; // a fixed zoom level for the replay
-        const url = `https://globe.adsbexchange.com/?replay=${dateString}&lat=${lat}&lon=${lon}&zoom=${zoom}`;
-        console.log("ADSB Replay URL: " + url);
-        // just open it in a new tab
-        window.open(url, "_blank");
-
-    }
-
-    googleMapsLink() {
-        // example:
-        // https://www.google.com/maps/@40.6729927,-74.7598043,27767
-
-        // get the current camera position from the lookCamera in Lat and Lon
-        const lookCamera = NodeMan.get("lookCamera");
-        const pos = lookCamera.p(par.frame);
-        const LLA = EUSToLLA(pos);
-
-
-
-        //const url = `https://www.google.com/maps/@${LLA.x.toFixed(6)},${LLA.y.toFixed(6)},30000m`;
-
-        // like:
-        // https://www.google.com/maps/place/40%C2%B040'22.8%22N+74%C2%B045'35.3%22W/@40.6728307,-74.794137,12543m/
-
-        const url = `https://www.google.com/maps/place/${LLA.x.toFixed(6)},${LLA.y.toFixed(6)}/@${LLA.x.toFixed(6)},${LLA.y.toFixed(6)},30000m`;
-
-
-
-        console.log("Google Maps URL: " + url);
-        window.open(url, "_blank");
-
-    }
-
-    inTheSkyLink() {
-        // https://in-the-sky.org/satmap_worldmap.php?year=2025&month=7&day=9&hour=22&min=37&latitude=40&longitude=0&timezone=0
-        // get the current camera position from the lookCamera in Lat and Lon
-        const lookCamera = NodeMan.get("lookCamera");
-        const pos = lookCamera.p(par.frame);
-        const LLA = EUSToLLA(pos);
-        // get the current date and time from the GlobalDateTimeNode
-        const date = GlobalDateTimeNode.frameToDate(par.frame);
-        const year = date.getUTCFullYear();
-        const month = date.getUTCMonth() + 1; // months are 0-indexed
-        const day = date.getUTCDate();
-        const hour = date.getUTCHours();
-        const min = date.getUTCMinutes();
-        const latitude = LLA.x.toFixed(6);
-        const longitude = LLA.y.toFixed(6);
-        const timezone = 0; // UTC
-        const url = `https://in-the-sky.org/satmap_worldmap.php?year=${year}&month=${month}&day=${day}&hour=${hour}&min=${min}&latitude=${latitude}&longitude=${longitude}&timezone=${timezone}`;
-        console.log("In The Sky URL: " + url);
-        window.open(url, "_blank");
-
-    }
 
 
     updateViewFromPreset() {
