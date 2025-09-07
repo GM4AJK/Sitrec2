@@ -2,6 +2,7 @@ import {CNodeViewText} from "./CNodeViewText.js";
 import {GlobalDateTimeNode, guiMenus} from "../Globals";
 import {SITREC_SERVER} from "../configUtils";
 import {sitrecAPI} from "../CSitrecAPI";
+import {parseBoolean} from "../utils";
 
 class CNodeViewChat extends CNodeViewText {
     constructor(v) {
@@ -11,6 +12,13 @@ class CNodeViewChat extends CNodeViewText {
         v.hideOnFileDrop = true; // Chat should hide when files are dropped
 
         super(v);
+
+        // There's no mechanism to disable it in SitCustom,
+        // so if it's not flagged enabled, just hide it
+        if (!parseBoolean(process.env.CHATBOT_ENABLED)) {
+            this.hide();
+            return;
+        }
 
         // Rename outputArea to chatLog for consistency with existing code
         this.chatLog = this.outputArea;
