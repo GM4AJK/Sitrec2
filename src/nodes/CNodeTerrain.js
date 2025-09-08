@@ -1,19 +1,18 @@
 import {CNode} from "./CNode";
 import {pointAbove, propagateLayerMaskObject} from "../threeExt";
 import {cos, radians} from "../utils";
-import {Globals, guiMenus, NodeMan, Sit} from "../Globals";
+import {Globals, NodeMan, Sit} from "../Globals";
 import {EUSToLLA, RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
 import {Group, Raycaster} from "three";
 import {GlobalScene} from "../LocalFrame";
-import {CNodeSwitch} from "./CNodeSwitch";
 import {V3} from "../threeUtils";
 import {assert} from "../assert";
-import {isLocal, SITREC_APP} from "../configUtils";
 import {configParams} from "../login";
 import {CTileMappingGoogleCRS84Quad, CTileMappingGoogleMapsCompatible} from "../WMSUtils";
 import {EventManager} from "../CEventManager";
 import {QuadTreeMapTexture} from "../QuadTreeMapTexture";
 import {QuadTreeMapElevation} from "../QuadTreeMapElevation";
+import {CNodeTerrainUI} from "./CNodeTerrainUI";
 
 const terrainGUIColor = "#c0ffc0";
 
@@ -25,527 +24,7 @@ const terrainGUIColor = "#c0ffc0";
  */
 
 
-let local = {}
-
-export class CNodeTerrainUI extends CNode {
-    constructor(v) {
-        super(v);
-
-        //this.debugLog = true;
-
-        this.adjustable = v.adjustable ?? true;
-        //
-        // this.lat = 40;
-        // this.lon = -110;
-        // this.zoom = 10;
-        // this.nTiles = 4;
-
-
-        // terrain UI should always be called with the initial terrain node
-        // even though it might make a new one later
-        // this is a bit backwards
-        if (v.terrain) {
-            this.terrainNode = NodeMan.get(v.terrain);
-            this.lat = this.terrainNode.lat;
-            this.lon = this.terrainNode.lon;
-            this.zoom = this.terrainNode.zoom;
-            this.nTiles = this.terrainNode.nTiles;
-            this.elevationScale = this.terrainNode.elevationScale;
-        } else {
-            assert(0, "CNodeTerrainUI: no terrain node specified, addTerrain is deprecated")
-            this.gui.add(this, "addTerrain")
-        }
-
-
-        this.refresh = false;
-
-
-        if (configParams.customMapSources !== undefined) {
-            // start with the custom map sources
-            this.mapSources = configParams.customMapSources;
-        } else {
-            this.mapSources = {};
-        }
-
-        // add the default map sources, wireframe and flat shading
-        this.mapSources = {
-            ...this.mapSources,
-            wireframe: {
-                name: "Wireframe",
-                mapURL: (z, x, y) => {
-                    return null;
-                },
-                maxZoom: 14,
-            },
-            FlatShading: {
-                name: "Flat Shading",
-                mapURL: (z, x, y) => {
-                    return SITREC_APP + "data/images/grey-256x256.png?v=1";
-                },
-                maxZoom: 14,
-            },
-            OceanSurface: {
-                name: "Ocean Surface",
-                mapURL: (z, x, y) => {
-                    return SITREC_APP + "data/images/28_sea water texture-seamless.jpg?v=3";
-                },
-                maxZoom: 14,
-            }
-        }
-
-        // local debugging, add a color test map
-        if (isLocal) {
-            this.mapSources = {
-                ...this.mapSources,
-                RGBTest: {
-                    name: "RGB Test",
-                    mapURL: (z, x, y) => {
-                        return SITREC_APP + "data/images/colour_bars_srgb-255-128-64.png?v=1";
-                    },
-                    maxZoom: 14,
-                },
-                GridTest: {
-                    name: "Grid Test",
-                    mapURL: (z, x, y) => {
-                        return SITREC_APP + "data/images/grid.png?v=1";
-                    },
-                    maxZoom: 14,
-                },
-                ElevationBitmap: {
-                    name: "Elevation Bitmap",
-                    mapURL: (z, x, y) => {
-                        return `https://s3.amazonaws.com/elevation-tiles-prod/terrarium/${z}/${x}/${y}.png`
-                    },
-                },
-
-                Debug: {
-                    name: "Debug Info",
-                    isDebug: true,
-                }
-
-
-            }
-        }
-
-
-        // extract a K/V pair from the mapSources
-        // for use in the GUI.
-        // key is the name, value is the id
-        this.mapTypesKV = {}
-        for (const mapType in this.mapSources) {
-            const mapDef = this.mapSources[mapType]
-            this.mapTypesKV[mapDef.name] = mapType
-
-        }
-
-        this.gui = guiMenus.terrain;
-        this.mapTypeMenu = this.gui.add(local, "mapType", this.mapTypesKV).listen().name("Map Type")
-            .tooltip("Map type for terrain textures (seperate from elevation data)")
-
-//////////////////////////////////////////////////////////////////////////////////////////
-        // same for elevation sources
-        if (configParams.customElevationSources !== undefined) {
-            this.elevationSources = configParams.customElevationSources;
-        } else {
-            this.elevationSources = {};
-        }
-
-        this.elevationSources = {
-            ...this.elevationSources,
-            // and some defaults
-            Flat: {
-                name: "Flat",
-                url: "",
-                maxZoom: 14,
-                minZoom: 0,
-                tileSize: 256,
-                attribution: "",
-            },
-        }
-        // and the KV pair for the GUI
-        this.elevationTypesKV = {}
-        for (const elevationType in this.elevationSources) {
-            const elevationDef = this.elevationSources[elevationType]
-            this.elevationTypesKV[elevationDef.name] = elevationType
-        }
-        // set the type to the first one to the
-//        local.elevationType = Object.keys(this.elevationTypesKV)[0]
-        local.elevationType = Object.keys(this.elevationSources)[0]
-        // add the menu
-        this.elevationTypeMenu = this.gui.add(local, "elevationType", this.elevationTypesKV).listen().name("Elevation Type")
-            .tooltip("Elevation data source for terrain height data")
-
-        this.elevationTypeMenu.onChange(v => {
-
-            // elevation map has changed, so kill the old one
-            this.log("Elevation type changed to " + v + " so unloading the elevation map")
-            this.terrainNode.reloadMap(local.mapType)
-        })
-
-
-/////////////////////////////////////////////////////
-
-
-        this.oldLat = this.lat;
-        this.oldLon = this.lon;
-        this.oldZoom = this.zoom;
-        this.oldNTiles = this.nTiles;
-        this.oldElevationScale = this.elevationScale;
-
-
-        this.mapTypeMenu.onChange(v => {
-
-            // do this async, as we might need to wait for the capabilities to be loaded
-            this.setMapType(v).then(() => {
-                ;
-                this.terrainNode.loadMapTexture(v)
-
-            })
-        })
-
-        this.debugElevationGrid = false;
-
-        if (v.fullUI) {
-
-            this.latController = this.gui.add(this, "lat", -85, 85, .001).onChange(v => {
-                this.flagForRecalculation()
-                this.startLoading = false;
-            }).onFinishChange(v => {
-                this.startLoading = true
-            }).tooltip("Latitude of the center of the terrain")
-
-
-            this.lonController = this.gui.add(this, "lon", -180, 180, .001).onChange(v => {
-                this.flagForRecalculation()
-                this.startLoading = false;
-            }).onFinishChange(v => {
-                this.startLoading = true
-            }).tooltip("Longitude of the center of the terrain")
-
-            this.zoomController = this.gui.add(this, "zoom", 2, 15, 1).onChange(v => {
-                this.flagForRecalculation()
-                this.startLoading = false;
-            }).onFinishChange(v => {
-                this.startLoading = true
-            }).tooltip("Zoom level of the terrain. 2 is the whole world, 15 is few city blocks")
-
-            this.nTilesController = this.gui.add(this, "nTiles", 1, 8, 1).onChange(v => {
-                this.flagForRecalculation()
-                this.startLoading = false;
-            }).onFinishChange(v => {
-                this.startLoading = true
-            }).tooltip("Number of tiles in the terrain. More tiles means more detail, but slower loading. (NxN)")
-
-
-            // adds a button to refresh the terrain
-            this.gui.add(this, "doRefresh").name("Refresh")
-                .tooltip("Refresh the terrain with the current settings. Use for network glitches that might have caused a failed load")
-
-
-            this.gui.add(this.terrainNode, "dynamic").name("Dynamic Subdivision").onChange(v => {
-                this.terrainNode.reloadMap(local.mapType)
-            });
-
-            // a toggle to show or hide the debug elevation grid
-
-            this.gui.add(this, "debugElevationGrid").name("Debug Grids").onChange(v => {
-                this.terrainNode.refreshDebugGrids();
-            }).tooltip("Show a grid of ground textures (Green) and elevation data (Blue)")
-
-
-            this.zoomToTrackSwitchObject = new CNodeSwitch({
-                id: "zoomToTrack", kind: "Switch",
-                inputs: {"-": "null"}, desc: "Zoom to track",
-                tip: "Zoom to the extents of the selected track (for the duration of the Sitch frames)",
-            }, this.gui).onChange(track => {
-                this.zoomToTrack(track)
-            })
-        }
-
-        this.elevationScaleController = this.gui.add(this, "elevationScale", 0, 10, 0.1).onFinishChange(v => {
-            this.flagForRecalculation()
-            this.startLoading = true
-        }).elastic(10, 100)
-            .tooltip("Scale factor for the elevation data. 1 is normal, 0.5 is half height, 2 is double height")
-
-        this.disableDynamicSubdivision = false;
-        if (isLocal) {
-            this.gui.add(this, "disableDynamicSubdivision").name("Disable Dynamic Subdivision")
-                .tooltip("Disable dynamic subdivision of terrain tiles. Freezes the terrain at the current level of detail. Useful for debugging.")
-        }
-
-
-        this.addSimpleSerial("debugElevationGrid")
-        this.addSimpleSerial("elevationScale")
-        this.addSimpleSerial("elevationScale")
-
-
-
-    }
-
-    getSourceDef() {
-        // get the mapSource for the current mapType
-        const sourceDef = this.mapSources[local.mapType];
-        assert(sourceDef !== undefined, "CNodeTerrain: sourceDef for " + local.mapType + " not found in mapSources")
-        return sourceDef;
-    }
-
-
-    async setMapType(v) {
-        const mapType = v;
-        const mapDef = this.mapSources[mapType];
-
-        assert(mapDef !== undefined, "CNodeTerrainUI: mapDef for " + mapType + " not found in mapSources");
-
-        // does it have pre-listed layers in the mapDef?
-        if (mapDef.layers !== undefined) {
-            // nothing needed here
-        } else {
-            // no layers, so we check for WMS capabilities
-            // if there's one, then we load it
-            // and extract the layers from it
-
-            // also, if we have a capabilities URL, then start loading it
-            if (mapDef.capabilities !== undefined) {
-                const response = await fetch(mapDef.capabilities);
-                const data = await response.text();
-                console.log("Capabilities for " + mapType)
-                //console.log(data)
-                // convert XML to object
-                const parser = new DOMParser();
-                const xmlDoc = parser.parseFromString(data, "text/xml");
-
-                // two different types of WMS capabilities
-                // WMS uses "Layer" and WMTS uses "Contents"
-                // so we need to check for both
-                const contents = xmlDoc.getElementsByTagName("Contents");
-                mapDef.layers = {}
-
-                if (contents.length > 0) {
-                    console.log("Contents:")
-                    const layers = xmlDoc.getElementsByTagName("Layer");
-                    for (let layer of layers) {
-                        const layerName = layer.getElementsByTagName("ows:Identifier")[0].textContent;
-                        mapDef.layers[layerName] = {
-                            // nothing yet, extract more later
-                        }
-                    }
-                } else {
-                    const layers = xmlDoc.getElementsByTagName("Layer");
-                    for (let layer of layers) {
-                        const layerName = layer.getElementsByTagName("Name")[0].childNodes[0].nodeValue;
-                        mapDef.layers[layerName] = {}
-                    }
-                }
-            }
-        }
-
-        // use either the passed in mapDef, or the one we just extracted from the capabilities
-        this.mapDef = mapDef;
-        this.layer = this.mapDef.layer;
-        // Remove any layer menu now, as this might not have on
-        this.layersMenu?.destroy()
-        this.layersMenu = null;
-        this.updateLayersMenu(mapDef.layers);
-    }
-
-    updateLayersMenu(layers) {
-        // layers is an array of layer names
-        // we want a KV pair for the GUI
-        // where both K and V are the layer name
-        this.localLayers = {}
-
-        // iterate over keys (layer names) to make the identicak KV pair for the GUI
-        for (let layer in layers) {
-            this.localLayers[layer] = layer
-        }
-
-        // set the layer to the specified default, or the first one in the capabilities
-        if (this.mapDef.layer !== undefined) {
-            this.layer = this.mapDef.layer;
-        } else {
-            this.layer = Object.keys(this.localLayers)[0]
-        }
-        this.layersMenu = this.gui.add(this, "layer", this.localLayers).listen().name("Layer")
-            .tooltip("Layer for the current map type's terrain textures")
-
-        // if the layer has changed, then unload the map and reload it
-        // new layer will be handled by the mapDef.layer
-        this.layersMenu.onChange(v => {
-
-            this.terrainNode.unloadMap(local.mapType)
-            this.terrainNode.loadMap(local.mapType)
-        })
-
-    }
-
-    // note this is not the most elegant way to do this
-    // but if the terrain is being removed, then we assume the GUI is too
-    // this might not be the case, in the future
-    dispose() {
-        super.dispose();
-    }
-
-
-    zoomToTrack(v) {
-        if (Globals.dontAutoZoom) return;
-        const trackNode = NodeMan.get(v);
-        assert(trackNode.getLLAExtents !== undefined, "Track does not have getLLAExtents")
-        const {minLat, maxLat, minLon, maxLon, minAlt, maxAlt} = trackNode.getLLAExtents();
-
-        this.zoomToLLABox(minLat, maxLat, minLon, maxLon)
-
-    }
-
-    // given two Vector3s, zoom to the box they define
-    zoomToBox(min, max) {
-        // min and max are in EUS, so convert to LLA
-        const minLLA = EUSToLLA(min);
-        const maxLLA = EUSToLLA(max);
-        this.zoomToLLABox(minLLA.x, maxLLA.x, minLLA.y, maxLLA.y)
-    }
-
-    zoomToLLABox(minLat, maxLat, minLon, maxLon) {
-        this.lat = (minLat + maxLat) / 2;
-        this.lon = (minLon + maxLon) / 2;
-
-        const maxZoom = 15;
-        const minZoom = 3;
-
-        // find the zoom level that fits the track, ignore altitude
-        // clamp to maxZoom
-        // NOTE THIS IS NOT ACCOUNTING FOR WEB MERCATOR PROJECTION
-        const latDiff = maxLat - minLat;
-        const lonDiff = maxLon - minLon;
-        if (latDiff < 0.0001 || lonDiff < 0.0001) {
-            this.zoom = maxZoom;
-        } else {
-            const latZoom = Math.log2(360 / latDiff);
-            const lonZoom = Math.log2(180 / lonDiff);
-            this.zoom = Math.min(maxZoom, Math.floor(Math.min(latZoom, lonZoom) - 1));
-            this.zoom = Math.max(minZoom, this.zoom);
-        }
-        this.latController.updateDisplay();
-        this.lonController.updateDisplay();
-        this.zoomController.updateDisplay();
-        this.nTilesController.updateDisplay();
-
-        // reset the switch
-        this.zoomToTrackSwitchObject.selectFirstOptionQuietly();
-
-
-        this.doRefresh();
-    }
-
-
-    doRefresh() {
-        this.log("Refreshing terrain")
-        assert(this.terrainNode.maps[local.mapType].map !== undefined, "Terrain map not defined when trying the set startLoading")
-        this.startLoading = true;
-        this.flagForRecalculation();
-    }
-
-    flagForRecalculation() {
-        this.recalculateSoon = true;
-    }
-
-    update() {
-        if (this.recalculateSoon) {
-            console.log("Recalculating terrain as recalculatedSoon is true. startLoading=" + this.startLoading)
-
-            // something of a patch with terrain, as it's often treated as a global
-            // by other nodes (like the track node, when using accurate terrain for KML polygons)
-            // so we recalculate it first, and then recalculate all the other nodes
-            this.recalculate();
-
-            this.recalculateSoon = false;
-        }
-
-        // we need to wait for this.terrainNode.maps[local.mapType].map to be defined
-        // because it's set async in setMapType
-        // setMapType can be waiting for the capabilities to be loaded
-        // if (this.startLoading && this.terrainNode.maps[local.mapType].map !== undefined) {
-        //     console.log("Starting to load terrain as startLoading is true, recalulateSoon=" + this.recalculateSoon)
-        //     this.startLoading = false;
-        //     assert(this.terrainNode.maps[local.mapType].map !== undefined, "Terrain map not defined")
-        //     this.terrainNode.maps[local.mapType].map.startLoadingTiles();
-        //     assert(this.terrainNode.elevationMap !== undefined, "Elevation map not defined")
-        //     this.terrainNode.elevationMap.startLoadingTiles();
-        // }
-
-
-        if (this.terrainNode.dynamic & !this.disableDynamicSubdivision) {
-            if (this.terrainNode.maps[local.mapType].map !== undefined) {
-                this.terrainNode.maps[local.mapType].map.subdivideTiles();
-            }
-            if (this.terrainNode.elevationMap !== undefined) {
-                this.terrainNode.elevationMap.subdivideTiles();
-            }
-        }
-
-    }
-
-    recalculate() {
-        // if the values have changed, then we need to make a new terrain node
-        if (this.lat === this.oldLat && this.lon === this.oldLon && this.zoom === this.oldZoom
-            && this.nTiles === this.oldNTiles
-            && !this.refresh) {
-
-            if (this.elevationScale === this.oldElevationScale)
-                return;
-
-            // // so JUST the elevation scale has changed, so we can just update the elevation map
-            // // and recalculate the curves for the tiles in the current map
-
-            const map = this.terrainNode.maps[local.mapType].map;
-            map.options.zScale = this.elevationScale;
-
-            //also set the elevation scale on the elevation map
-            // (probably only need to do this)
-            if (this.terrainNode.elevationMap) {
-                this.terrainNode.elevationMap.options.zScale = this.elevationScale;
-            }
-
-            map.recalculateCurveMap(this.radius, true)
-
-            return;
-
-        }
-        this.oldLat = this.lat;
-        this.oldLon = this.lon;
-        this.oldZoom = this.zoom;
-        this.oldNTiles = this.nTiles;
-        this.oldElevationScale = this.elevationScale;
-        this.refresh = false;
-
-
-        let terrainID = "TerrainModel"
-        // remove the old terrain
-        if (this.terrainNode) {
-            terrainID = this.terrainNode.id;
-            NodeMan.disposeRemove(this.terrainNode)
-        }
-        // and make a new one
-        this.terrainNode = new CNodeTerrain({
-                id: terrainID, lat: this.lat, lon: this.lon,
-                zoom: this.zoom, nTiles: this.nTiles, deferLoad: true,
-                elevationScale: this.elevationScale,
-                mapTypeMenu: this.mapTypeMenu, terrainGUI: this.gui,
-                mapTypes: this.mapSources,
-                mapType: local.mapType,
-                UINode: this,
-                dynamic: this.terrainNode ? this.terrainNode.dynamic : false,
-            }
-        )
-    }
-
-    // one time button to add a terrain node
-    addTerrain() {
-        this.recalculate();
-        this.gui.remove(this.addTerrain)
-    }
-
-}
+// Removed global local object - mapType and elevationType are now instance properties
 
 //////////////////////////////////////////////////////////////////////////////////////
 //                                                                                  //
@@ -555,6 +34,8 @@ export class CNodeTerrainUI extends CNode {
 
 export class CNodeTerrain extends CNode {
     constructor(v) {
+
+        console.log("CNodeTerrain: constructor with \n" + JSON.stringify(v));
 
         // for bac reasons, we need to set the id to TerrainModel
         // unless another is specified
@@ -639,13 +120,14 @@ export class CNodeTerrain extends CNode {
         }
 
         // get the map type from the config, or use the default
-        // or use mapbox if beigther set (unlikely)
-        local.mapType = v.mapType ?? configParams.defaultMapType ?? "mapbox";
+        // or use mapbox if neither set (unlikely)
+        const initialMapType = v.mapType ?? configParams.defaultMapType ?? "mapbox";
 
         // always create a terrainUI, just with limited options for the legacy sitches
         // but for now, everything is include (will need to flag "everything" in custom)
         this.UINode = v.UINode ?? null;
         if (!this.UINode) {
+            console.log("CNodeTerrain: creating missing CNodeTerrainUI with defaults")
             this.UINode = new CNodeTerrainUI({id: "terrainUI", terrain: v.id, fullUI: v.fullUI})
         }
 
@@ -665,9 +147,10 @@ export class CNodeTerrain extends CNode {
         // the newly created UI node will not have the mapType set
         // so we need to set it here. It can be an async process if we need to load capabilities
         // so we need to wait for it to finish before the map is loaded
-        this.UINode.setMapType(local.mapType).then(() => {
-            this.log("Calling loadMap from constructor with local.mapType=" + local.mapType)
-            this.loadMap(local.mapType, (this.deferLoad !== undefined) ? this.deferLoad : false)
+        this.UINode.mapType = initialMapType;
+        this.UINode.setMapType(initialMapType).then(() => {
+            this.log("Calling loadMap from constructor with mapType=" + this.UINode.mapType)
+            this.loadMap(this.UINode.mapType, (this.deferLoad !== undefined) ? this.deferLoad : false)
         })
     }
 
@@ -682,15 +165,15 @@ export class CNodeTerrain extends CNode {
                 this.maps[mapID].map.removeDebugGrid();
             }
         }
-        this.maps[local.mapType].map.refreshDebugGrid("#00ff00"); // green for ground
+        this.maps[this.UINode.mapType].map.refreshDebugGrid("#00ff00"); // green for ground
     }
 
     // a single point for map33 to get the URL of the map tiles
 
     textureURLDirect(z, x, y) {
         // get the mapSource for the current mapType
-        const sourceDef = this.UINode.mapSources[local.mapType];
-        assert(sourceDef !== undefined, "CNodeTerrain: sourceDef for " + local.mapType + " not found in mapSources")
+        const sourceDef = this.UINode.mapSources[this.UINode.mapType];
+        assert(sourceDef !== undefined, "CNodeTerrain: sourceDef for " + this.UINode.mapType + " not found in mapSources")
 
         if (sourceDef.isDebug) {
             return null; // no URL for debug maps
@@ -711,7 +194,7 @@ export class CNodeTerrain extends CNode {
 
     elevationURLDirect(z, x, y) {
         // get the elevation source for the current type
-        const sourceDef = this.UINode.elevationSources[local.elevationType];
+        const sourceDef = this.UINode.elevationSources[this.UINode.elevationType];
 
         if (!sourceDef.mapURL) {
             if (sourceDef.url === "" || sourceDef.url === undefined) {
@@ -774,7 +257,7 @@ export class CNodeTerrain extends CNode {
         const mapDef = this.maps[id].sourceDef;
 
 
-        const elevationDef = this.UINode.elevationSources[local.elevationType];
+        const elevationDef = this.UINode.elevationSources[this.UINode.elevationType];
         if (elevationDef.mapping === 4326) {
             this.mapProjectionElevation = new CTileMappingGoogleCRS84Quad();
         } else {
@@ -928,7 +411,7 @@ export class CNodeTerrain extends CNode {
 
     applyElevationTo(z,x,y) {
         // TODO - make it work for differnt subdivisions
-        const terrainMap = this.maps[local.mapType].map;
+        const terrainMap = this.maps[this.UINode.mapType].map;
         const key = z + "/" + x + "/" + y;
 
         // if the corresponding tile is active, then recalculate the curve map
@@ -1011,7 +494,7 @@ export class CNodeTerrain extends CNode {
 //        console.log("CNodeTerrain: elevation tile loaded " + tile.z + "/" + tile.x + "/" + tile.y)
 
         // get the terrain map for the current map type
-        if (this.maps[local.mapType].map === undefined) {
+        if (this.maps[this.UINode.mapType].map === undefined) {
             console.warn("CNodeTerrain: map is undefined, called elevationTileLoaded while still loading - ignoring")
             return;
         }
@@ -1028,7 +511,7 @@ export class CNodeTerrain extends CNode {
 
     recalculate() {
 
-        if (this.maps[local.mapType].map === undefined) {
+        if (this.maps[this.UINode.mapType].map === undefined) {
             console.warn("CNodeTerrain: map is undefined, called recalculate while still loading - ignoring")
             return;
         }
@@ -1050,16 +533,16 @@ export class CNodeTerrain extends CNode {
 
         }
         Sit.originECEF = RLLAToECEFV_Sphere(radians(Sit.lat), radians(Sit.lon), 0, radius)
-        assert(this.maps[local.mapType].map !== undefined, "CNodeTerrain: map is undefined")
-        this.maps[local.mapType].map.recalculateCurveMap(this.radius, true)
+        assert(this.maps[this.UINode.mapType].map !== undefined, "CNodeTerrain: map is undefined")
+        this.maps[this.UINode.mapType].map.recalculateCurveMap(this.radius, true)
 
-        propagateLayerMaskObject(this.maps[local.mapType].group)
+        propagateLayerMaskObject(this.maps[this.UINode.mapType].group)
 
     }
 
     // return current group, for collision detection, etc
     getGroup() {
-        return this.maps[local.mapType].group;
+        return this.maps[this.UINode.mapType].group;
     }
 
     getIntersects(raycaster) {
@@ -1101,8 +584,8 @@ export class CNodeTerrain extends CNode {
         const LLA = EUSToLLA(A)
         // elevation is the height above the wgs84 sphere
         let elevation = 0; // 0 if map not loaded
-        if (this.maps[local.mapType].map !== undefined)
-            elevation = this.maps[local.mapType].map.getElevationInterpolated(LLA.x, LLA.y)
+        if (this.maps[this.UINode.mapType].map !== undefined)
+            elevation = this.maps[this.UINode.mapType].map.getElevationInterpolated(LLA.x, LLA.y)
 
         if (elevation < 0) {
             // if the elevation is negative, then we assume it's below sea level
