@@ -5,7 +5,7 @@ import {GlobalScene} from "./LocalFrame";
 import {pointOnSphereBelow} from "./SphericalMath";
 import {loadTextureWithRetries} from "./js/map33/material/QuadTextureMaterial";
 import {convertTIFFToElevationArray} from "./TIFFUtils";
-import { fromArrayBuffer } from 'geotiff';
+import {fromArrayBuffer} from 'geotiff';
 import {getPixels} from "./js/get-pixels-mick";
 import {MeshBasicMaterial} from "three/src/materials/MeshBasicMaterial";
 import {PlaneGeometry} from "three/src/geometries/PlaneGeometry";
@@ -468,6 +468,10 @@ export class QuadTreeTile {
 
 
         if (!elevationURL) {
+            // No elevation URL - this is normal for flat terrain
+            // Mark the tile as having no elevation data
+            this.elevation = null;
+            this.elevationLoadFailed = false; // Not a failure, just no elevation source
             return this;
         }
 
