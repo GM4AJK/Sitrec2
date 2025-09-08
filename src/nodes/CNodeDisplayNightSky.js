@@ -1431,7 +1431,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         var nowDate = this.in.startTime.dateNow
 
-        let observer = new Astronomy.Observer(Sit.lat, Sit.lon, 0);
+        // Use lookCamera position for observer instead of fixed Sit coordinates
+        const cameraPos = this.camera.position;
+        const cameraEcef = EUSToECEF(cameraPos);
+        const cameraLLA = ECEFToLLAVD_Sphere(cameraEcef);
+        let observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
         // update the planets position for the current time
         for (const [name, planet] of Object.entries(this.planetSprites)) {
             // Update both the regular sprite and day sky sprite in one call
@@ -2217,7 +2221,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         let date = this.in.startTime.dateNow;
 
-        let observer = new Astronomy.Observer(Sit.lat, Sit.lon, 0);
+        // Use lookCamera position for observer instead of fixed Sit coordinates
+        const cameraPos = this.camera.position;
+        const cameraEcef = EUSToECEF(cameraPos);
+        const cameraLLA = ECEFToLLAVD_Sphere(cameraEcef);
+        let observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
 
         this.planetSprites = {}
 
