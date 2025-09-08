@@ -2,7 +2,9 @@
 $filename = '../shared.env.php';
 
 if (!file_exists($filename)) {
-    die("Error: File '$filename' not found.\n");
+    // Log the error but don't die - this allows the application to continue
+    error_log("Warning: File '$filename' not found. Environment variables will not be loaded.");
+    return;
 }
 
 // Read the file line by line, ignoring empty lines
