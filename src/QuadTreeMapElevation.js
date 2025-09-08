@@ -65,6 +65,14 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                     return Promise.resolve('Aborted');
                 }
                 this.terrainNode.elevationTileLoaded(tile);
+            }).catch(error => {
+                console.error(`Failed to load elevation tile ${key}:`, error);
+                console.error(`Elevation URL was: ${tile.elevationURL()}`);
+                // Mark tile as having no elevation data so it doesn't keep trying
+                tile.elevation = null;
+                tile.elevationLoadFailed = true;
+                // Still call elevationTileLoaded to trigger mesh updates with fallback elevation
+                this.terrainNode.elevationTileLoaded(tile);
             })
         }
         tile.active = true; // mark the tile as active
@@ -107,7 +115,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
         // quick check to see if it matches the last tile we found
         // this is for when we do bulk operations and we want to avoid finding the same tile again
-        if (this.lastGeoTile && this.lastGeoTile.elevation && (desiredZoom === null || desiredZoom === this.lastGeoTile.z)) {
+        if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === null || desiredZoom === this.lastGeoTile.z)) {
             let zoom = this.lastGeoTile.z;
             const maxTile = Math.pow(2, zoom);
             var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
@@ -135,7 +143,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             // if we have a tile cache, check if the tile is in the cache
             const tileKey = `${desiredZoom}/${xInt}/${yInt}`;
             const tile = this.tileCache[tileKey];
-            if (tile !== undefined && tile.active && tile.elevation) {
+            if (tile !== undefined && tile.active && tile.elevation && !tile.elevationLoadFailed) {
                 this.lastGeoTile = tile; // keep track of the last tile found
                 return {x, y, zoom: desiredZoom};
             }
@@ -152,7 +160,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                 // if we have a tile cache, check if the tile is in the cache
                 const tileKey = `${zoom}/${xInt}/${yInt}`;
                 const tile = this.tileCache[tileKey];
-                if (tile !== undefined && tile.elevation) {
+                if (tile !== undefined && tile.elevation && !tile.elevationLoadFailed) {
                     this.lastGeoTile = tile; // keep track of the last tile found
 
                     const maxTile = Math.pow(2, zoom);

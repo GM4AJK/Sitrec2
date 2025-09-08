@@ -1,19 +1,14 @@
-// loader object for a
 import {CNode} from "./CNode";
 import {pointAbove, propagateLayerMaskObject} from "../threeExt";
 import {cos, radians} from "../utils";
 import {Globals, guiMenus, NodeMan, Sit} from "../Globals";
 import {EUSToLLA, RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
 import {Group, Raycaster} from "three";
-
-// note for QuadTreeMap.js to not give errors, had to  add
-// const process = require('process');
-// to path.js
 import {GlobalScene} from "../LocalFrame";
 import {CNodeSwitch} from "./CNodeSwitch";
 import {V3} from "../threeUtils";
 import {assert} from "../assert";
-import {isLocal, SITREC_APP, SITREC_SERVER} from "../configUtils";
+import {isLocal, SITREC_APP} from "../configUtils";
 import {configParams} from "../login";
 import {CTileMappingGoogleCRS84Quad, CTileMappingGoogleMapsCompatible} from "../WMSUtils";
 import {EventManager} from "../CEventManager";
@@ -21,6 +16,14 @@ import {QuadTreeMapTexture} from "../QuadTreeMapTexture";
 import {QuadTreeMapElevation} from "../QuadTreeMapElevation";
 
 const terrainGUIColor = "#c0ffc0";
+
+/*
+ * A terrain is composed of two parts:
+ * A QuadTreeMapElevation which contains the geometry of the terrain
+ * A QuadTreeMapTexture which contains the textures of the terrain
+ *
+ */
+
 
 let local = {}
 
@@ -270,6 +273,12 @@ export class CNodeTerrainUI extends CNode {
             this.gui.add(this, "disableDynamicSubdivision").name("Disable Dynamic Subdivision")
                 .tooltip("Disable dynamic subdivision of terrain tiles. Freezes the terrain at the current level of detail. Useful for debugging.")
         }
+
+
+        this.addSimpleSerial("debugElevationGrid")
+        this.addSimpleSerial("elevationScale")
+        this.addSimpleSerial("elevationScale")
+
 
 
     }

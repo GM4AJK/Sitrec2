@@ -185,7 +185,10 @@ class QuadTreeMapTexture extends QuadTreeMap {
             this.tileCache[key] = tile;
 
             // can async load textures here
-            tile.applyMaterial();
+            tile.applyMaterial().catch(error => {
+                console.error(`Failed to load texture for tile ${key}:`, error);
+                // Tile will remain with wireframe material if texture loading fails
+            });
             this.refreshDebugGeometry(tile);
 
 
