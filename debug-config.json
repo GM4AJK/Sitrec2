@@ -1,0 +1,42 @@
+{
+  "name": "VS Code Debug Configuration for Sitrec Standalone",
+  "description": "Copy this configuration to your .vscode/launch.json file",
+  "configurations": [
+    {
+      "name": "Debug Sitrec Standalone Server",
+      "type": "node",
+      "request": "launch",
+      "program": "${workspaceFolder}/standalone-server.js",
+      "env": {
+        "NODE_ENV": "development",
+        "DEBUG": "*"
+      },
+      "console": "integratedTerminal",
+      "restart": true,
+      "runtimeArgs": ["--inspect"],
+      "skipFiles": [
+        "<node_internals>/**"
+      ]
+    },
+    {
+      "name": "Debug Sitrec Frontend (Chrome)",
+      "type": "chrome",
+      "request": "launch",
+      "url": "http://localhost:3000/sitrec",
+      "webRoot": "${workspaceFolder}/src",
+      "sourceMapPathOverrides": {
+        "webpack://sitrec/*": "${workspaceFolder}/*",
+        "webpack:///*": "${workspaceFolder}/*"
+      }
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug Sitrec Full Stack",
+      "configurations": [
+        "Debug Sitrec Standalone Server",
+        "Debug Sitrec Frontend (Chrome)"
+      ]
+    }
+  ]
+}

@@ -9,7 +9,13 @@
     "build": "npx webpack --config webpack.dev.js",
     "deploy": "npx webpack --config webpack.prod.js",
     "start": "webpack serve --config webpack.dev.js --mode development",
-    "copy": "npx webpack --config webpack.copy-files.js"
+    "copy": "npx webpack --config webpack.copy-files.js",
+    "build-standalone": "npx webpack --config webpack.standalone.js",
+    "build-standalone-debug": "npx webpack --config webpack.standalone.js --mode development --devtool eval-source-map",
+    "start-standalone": "node standalone-server.js",
+    "start-standalone-debug": "NODE_ENV=development DEBUG=* node --inspect standalone-server.js",
+    "dev-standalone": "npm run build-standalone && npm run start-standalone",
+    "dev-standalone-debug": "npm run build-standalone-debug && npm run start-standalone-debug"
   },
   "jest": {
     "testPathIgnorePatterns": [
@@ -45,8 +51,10 @@
     "copy-webpack-plugin": "^13.0.1",
     "css-loader": "^7.1.2",
     "dotenv-webpack": "^8.1.1",
+    "express": "^4.21.2",
     "fs-extra": "^11.3.1",
     "html-webpack-plugin": "^5.6.4",
+    "http-proxy-middleware": "^3.0.3",
     "jest": "^29.7.0",
     "jest-environment-jsdom": "^30.0.4",
     "jest-image-snapshot": "^6.5.1",
