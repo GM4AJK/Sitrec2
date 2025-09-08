@@ -1,6 +1,6 @@
 # Sitrec2
 
-![sitrec](https://github.com/mickwest/sitrec/actions/workflows/ci.yml/badge.svg?event=push)
+![sitrec](https://github.com/mickwest/sitrec2/actions/workflows/ci.yml/badge.svg?event=push)
 
 Sitrec (Situation recreation) is a web application that allows for the real-time interactive 3D recreation of various situations. It was created initially to analyze the US Navy UAP/UFO video (Gimbal, GoFast, and FLIR1/Nimitz), but has expanded to include several other situations (referred to as "sitches"). It's written mostly by [Mick West](https://github.com/MickWest), with a lot of input from the members of [Metabunk](https://www.metabunk.org).
 
@@ -63,25 +63,54 @@ Install Docker Desktop from https://www.docker.com/ and run it.
 
 Mac/Linux
 ```bash
-git clone https://github.com/MickWest/sitrec sitrec-test-dev
+git clone https://github.com/MickWest/sitrec2 sitrec-test-dev
 cd sitrec-test-dev
 for f in config/*.example; do cp "$f" "${f%.example}"; done
-cd sitrec
 docker compose -p sitrec up -d --build
 open http://localhost:6425/
 ```
 
 Windows
 ```bat
-git clone https://github.com/mickwest/sitrec sitrec-test-dev
+git clone https://github.com/mickwest/sitrec2 sitrec-test-dev
 cd sitrec-test-dev
 for %f in (config\*.example) do copy /Y "%f" "%~dpnf"
-cd sitrec
 docker compose -p sitrec up -d --build
 start http://localhost:6425/
 ```
 
 This will be running on http://localhost:6425/. The "open" or "start" commands above should open a browser window. 
+
+# Quick node.js dev server install 
+**Prerequisites:** Node.js (with npm) and PHP 8.3+
+
+Mac/Linux
+```bash
+git clone https://github.com/MickWest/sitrec2 sitrec-test-dev
+cd sitrec-test-dev
+for f in config/*.example; do cp "$f" "${f%.example}"; done
+npm install
+npm run dev-standalone-debug
+```
+
+Windows
+```bat
+git clone https://github.com/MickWest/sitrec2 sitrec-test-dev
+cd sitrec-test-dev
+for %f in (config\*.example) do copy /Y "%f" "%~dpnf"
+npm install
+npm run dev-standalone-debug
+```
+
+If successfull this will run a temporary server from the CLI, displaying:
+```
+🚀 Sitrec standalone server is running!
+📱 Frontend: http://localhost:3000/sitrec
+🐘 PHP Backend: http://localhost:8000
+Press Ctrl+C to stop the server
+```
+So go to: http://localhost:3000/sitrec to test
+
 
 # Local Server Installation
 
@@ -99,7 +128,7 @@ If you want to install and run directly from a local server, and not use Docker,
 Assuming we want to install the build environment in "sitrec-test-dev", run:
 
 ```bash
-git clone https://github.com/MickWest/sitrec sitrec-test-dev
+git clone https://github.com/MickWest/sitrec2 sitrec-test-dev
 cd sitrec-test-dev
 for f in config/*.example; do cp "$f" "${f%.example}"; done
 npm install
@@ -136,7 +165,7 @@ npm run build
 ## Server Install Windows
 
 ```bat
-git clone https://github.com/mickwest/sitrec sitrec-test-dev
+git clone https://github.com/mickwest/sitrec2 sitrec-test-dev
 cd sitrec-test-dev
 for %f in (config\*.example) do copy /Y "%f" "%~dpnf"
 npm install
