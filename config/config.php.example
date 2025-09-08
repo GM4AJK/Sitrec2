@@ -47,7 +47,7 @@ require_once __DIR__ . '/injectEnv.php';
 // or 0 if the user is not authenticated
 // if no authentication is needed, I return 99999999
 // if you want per-user authentication like this, then you'll need to modify this function
-// or just delete this file, so user.php will return 99999998
+// or just delete this function, so user.php will return 99999998
 //
 // Note, calling this twice in one session seems to crash Xenforo
 function getUserIDCustom()
