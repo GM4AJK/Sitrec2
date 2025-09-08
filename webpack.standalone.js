@@ -1,11 +1,31 @@
 const { merge } = require('webpack-merge');
 const common = require('./webpack.common.js');
 const path = require('path');
+const fs = require('fs');
 const CopyPlugin = require("copy-webpack-plugin");
 const copyPatterns = require('./webpackCopyPatterns');
 
 // Create a standalone build directory
 const standalonePath = path.resolve(__dirname, 'dist-standalone');
+
+// Custom plugin to create required directories
+class CreateDirectoriesPlugin {
+    apply(compiler) {
+        compiler.hooks.afterEmit.tap('CreateDirectoriesPlugin', () => {
+            const directories = [
+                path.resolve(standalonePath, 'sitrec-upload'),
+                path.resolve(standalonePath, 'u')
+            ];
+            
+            directories.forEach(dir => {
+                if (!fs.existsSync(dir)) {
+                    fs.mkdirSync(dir, { recursive: true });
+                    console.log(`Created directory: ${dir}`);
+                }
+            });
+        });
+    }
+}
 
 // Create a modified common config for standalone build
 const standaloneCommon = merge(common, {
@@ -29,6 +49,7 @@ const standaloneCommon = merge(common, {
                 },
             ],
         }),
+        new CreateDirectoriesPlugin(),
     ]
 });
 

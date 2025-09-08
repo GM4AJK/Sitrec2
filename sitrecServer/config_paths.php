@@ -2,6 +2,14 @@
 
 require_once __DIR__ . '/injectEnv.php';
 
+// Set fallback values for missing $_SERVER variables when using PHP built-in server
+if (!isset($_SERVER['REQUEST_SCHEME'])) {
+    $_SERVER['REQUEST_SCHEME'] = 'http'; // Default to http for local development
+}
+if (!isset($_SERVER['SERVER_ADDR'])) {
+    $_SERVER['SERVER_ADDR'] = '127.0.0.1'; // Default to localhost IP
+}
+
 // $APP_URL is the base URL for the site, e.g. "https://www.metabunk.org/sitrec" or "https://www.metabunk.org/somepath/another/sitrec/"
 $APP_URL =  $_SERVER['REQUEST_SCHEME'] . "://" . $_SERVER['HTTP_HOST'] . $_SERVER['REQUEST_URI'];
 // remove everything after the last slash (including the slash), that will give use the URL of the server directory
