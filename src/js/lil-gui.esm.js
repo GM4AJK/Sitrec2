@@ -2144,6 +2144,8 @@ class GUI {
 
         }
 
+        assert( object, "Object must exist in order to add property " + property + "!")
+
         const initialValue = object[ property ];
 
         switch ( typeof initialValue ) {

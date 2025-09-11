@@ -19,7 +19,7 @@ import {par} from "./par";
 import {CNodeViewUI} from "./nodes/CNodeViewUI";
 import {AddTimeDisplayToUI, AddTimeDisplayToUIOld} from "./UIHelpers";
 import {SetupGUIFrames} from "./JetGUI";
-import {addTracks, makeTrackFromDataFile, TrackManager} from "./TrackManager";
+import {TrackManager} from "./TrackManager";
 import {CNodeWind} from "./nodes/CNodeWind";
 import {curveChanged, initJetVariables, initViews, SetupTraverseNodes, UIChangedAz} from "./JetStuff";
 import {addNightSky} from "./nodes/CNodeDisplayNightSky";
@@ -38,6 +38,7 @@ import {registerNodeConsole} from "./RegisterNodes.js"
 import {Frame2Az} from "./JetUtils";
 import {isConsole} from "./configUtils";
 import {CNodeMirrorVideoView} from "./nodes/CNodeMirrorVideoView";
+import {CNodeTerrainUI} from "./nodes/CNodeTerrainUI";
 
 export async function SituationSetup(runDeferred = false) {
     console.log("++++++ SituationSetup")
@@ -1359,6 +1360,20 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
             //    guiMenus.physics.add(TrackManager, "swapTargetAndCameraTracks").name("Swap Target and Camera Tracks");
 
             break;
+
+
+        // we are overrifing Terrain, which previously created a CNodeTerrain
+        // now it creates a CNodeTerrainUI instead, which allows the CNodeTerrainUI to handle creation of the CNodeTerrain
+        case "Terrain":
+            SSLog();
+            // example usage:  TerrainModel: {kind: "Terrain", lat: 34, lon: -118.3, zoom: 7, nTiles: 3, fullUI: true, dynamic: false},
+
+            node = new CNodeTerrainUI({
+                ...data,
+                // can add more here
+            })
+            break;
+
 
         default:
             // what if it's a controller???

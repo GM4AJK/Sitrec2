@@ -9,29 +9,25 @@ import {CNodeTerrain} from "./CNodeTerrain";
 
 export class CNodeTerrainUI extends CNode {
     constructor(v) {
+
+        // Hijack the ID as we want to use it for the terain node
+        const initialID = v.id
+        v.id = "terrainUI"
         super(v);
 
         console.log("CNodeTerrainUI: constructor with \n" + JSON.stringify(v));
 
+        assert (v.terrain === undefined, "CNodeTerrainUI: terrain node already exists, please remove it from the sit file")
 
         //this.debugLog = true;
 
-        this.adjustable = v.adjustable ?? true;
+        this.lat = v.lat;
+        this.lon = v.lon;
+        this.nTiles = v.nTiles;
+        this.zoom = v.zoom;
+        this.elevationScale = v.elevationScale ?? 1;
 
-        // terrain UI should always be called with the initial terrain node
-        // even though it might make a new one later
-        // this is a bit backwards
-        if (v.terrain) {
-            this.terrainNode = NodeMan.get(v.terrain);
-            this.lat = this.terrainNode.lat;
-            this.lon = this.terrainNode.lon;
-            this.zoom = this.terrainNode.zoom;
-            this.nTiles = this.terrainNode.nTiles;
-            this.elevationScale = this.terrainNode.elevationScale;
-        } else {
-            assert(0, "CNodeTerrainUI: no terrain node specified, addTerrain is deprecated")
-            this.gui.add(this, "addTerrain")
-        }
+        this.adjustable = v.adjustable ?? true;
 
 
         this.refresh = false;
@@ -222,9 +218,6 @@ export class CNodeTerrainUI extends CNode {
                 .tooltip("Refresh the terrain with the current settings. Use for network glitches that might have caused a failed load")
 
 
-            this.gui.add(this.terrainNode, "dynamic").name("Dynamic Subdivision").onChange(v => {
-                this.terrainNode.reloadMap(this.mapType)
-            });
 
             // a toggle to show or hide the debug elevation grid
 
@@ -261,6 +254,15 @@ export class CNodeTerrainUI extends CNode {
         this.addSimpleSerial("elevationType")
 
 
+        this.terrainNode = new CNodeTerrain({
+            ...v,
+            id: initialID,
+            UINode: this});
+
+        this.gui.add(this.terrainNode, "dynamic").name("Dynamic Subdivision").onChange(v => {
+            this.terrainNode.reloadMap(this.mapType)
+        });
+
     }
 
     getSourceDef() {
@@ -273,6 +275,7 @@ export class CNodeTerrainUI extends CNode {
 
     async setMapType(v) {
         const mapType = v;
+        assert(this.mapSources, "CNodeTerrainUI: mapSources not defined");
         const mapDef = this.mapSources[mapType];
 
         assert(mapDef !== undefined, "CNodeTerrainUI: mapDef for " + mapType + " not found in mapSources");

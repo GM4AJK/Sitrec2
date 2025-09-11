@@ -12,7 +12,6 @@ import {CTileMappingGoogleCRS84Quad, CTileMappingGoogleMapsCompatible} from "../
 import {EventManager} from "../CEventManager";
 import {QuadTreeMapTexture} from "../QuadTreeMapTexture";
 import {QuadTreeMapElevation} from "../QuadTreeMapElevation";
-import {CNodeTerrainUI} from "./CNodeTerrainUI";
 
 const terrainGUIColor = "#c0ffc0";
 
@@ -35,9 +34,7 @@ const terrainGUIColor = "#c0ffc0";
 export class CNodeTerrain extends CNode {
     constructor(v) {
 
-        console.log("CNodeTerrain: constructor with \n" + JSON.stringify(v));
-
-        // for bac reasons, we need to set the id to TerrainModel
+        // for backwards compatibility reasons, we need to set the id to TerrainModel
         // unless another is specified
         if (v.id === undefined) {
             v.id = "TerrainModel"
@@ -123,13 +120,7 @@ export class CNodeTerrain extends CNode {
         // or use mapbox if neither set (unlikely)
         const initialMapType = v.mapType ?? configParams.defaultMapType ?? "mapbox";
 
-        // always create a terrainUI, just with limited options for the legacy sitches
-        // but for now, everything is include (will need to flag "everything" in custom)
         this.UINode = v.UINode ?? null;
-        if (!this.UINode) {
-            console.log("CNodeTerrain: creating missing CNodeTerrainUI with defaults")
-            this.UINode = new CNodeTerrainUI({id: "terrainUI", terrain: v.id, fullUI: v.fullUI})
-        }
 
         // Create a single group that will be reused for all QuadTreeMapTexture objects
         this.group = new Group();
