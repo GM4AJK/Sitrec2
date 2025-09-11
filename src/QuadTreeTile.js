@@ -149,7 +149,7 @@ export class QuadTreeTile {
 
         this.removeDebugGeometry()
 
-        if (!this.map.terrainNode.UINode.debugElevationGrid) return;
+        if (!this.map.terrainNode.UI.debugElevationGrid) return;
 
 
         const xTile = this.x;
@@ -420,7 +420,7 @@ export class QuadTreeTile {
     }
 
     applyMaterial() {
-        const sourceDef = this.map.terrainNode.UINode.getSourceDef();
+        const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (sourceDef.isDebug) {
 
 

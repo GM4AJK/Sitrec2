@@ -32,7 +32,7 @@ export class QuadTreeMap {
     }
 
     refreshDebugGeometry(tile) {
-        if (this.terrainNode.UINode.debugElevationGrid) {
+        if (this.terrainNode.UI.debugElevationGrid) {
             tile.buildDebugGeometry(this.debugColor, this.debugAltitude)
         }
     }

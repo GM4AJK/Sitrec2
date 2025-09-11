@@ -514,7 +514,6 @@ export class CNodeTerrainUI extends CNode {
                 zoom: this.zoom, nTiles: this.nTiles, deferLoad: true,
                 elevationScale: this.elevationScale,
                 mapTypeMenu: this.mapTypeMenu, terrainGUI: this.gui,
-                mapTypes: this.mapSources,
                 mapType: this.mapType,
                 elevationType: this.elevationType,
 

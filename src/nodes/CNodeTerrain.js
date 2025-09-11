@@ -42,6 +42,8 @@ export class CNodeTerrain extends CNode {
 
         super(v);
 
+        this.UI = v.UINode ?? null;
+
         //   this.debugLog = true;
 
         this.dynamic = v.dynamic ?? false; // if true, then init the terrain as 1x1 and use dynamic subdivision
@@ -120,17 +122,16 @@ export class CNodeTerrain extends CNode {
         // or use mapbox if neither set (unlikely)
         const initialMapType = v.mapType ?? configParams.defaultMapType ?? "mapbox";
 
-        this.UINode = v.UINode ?? null;
 
         // Create a single group that will be reused for all QuadTreeMapTexture objects
         this.group = new Group();
         GlobalScene.add(this.group);
 
         this.maps = []
-        for (const mapName in this.UINode.mapTypesKV) {
-            const mapID = this.UINode.mapTypesKV[mapName]
+        for (const mapName in this.UI.mapTypesKV) {
+            const mapID = this.UI.mapTypesKV[mapName]
             this.maps[mapID] = {
-                sourceDef: this.UINode.mapSources[mapID],
+                sourceDef: this.UI.mapSources[mapID],
             }
         }
 
@@ -139,10 +140,10 @@ export class CNodeTerrain extends CNode {
         // the newly created UI node will not have the mapType set
         // so we need to set it here. It can be an async process if we need to load capabilities
         // so we need to wait for it to finish before the map is loaded
-        this.UINode.mapType = initialMapType;
-        this.UINode.setMapType(initialMapType).then(() => {
-            this.log("Calling loadMap from constructor with mapType=" + this.UINode.mapType)
-            this.loadMap(this.UINode.mapType, (this.deferLoad !== undefined) ? this.deferLoad : false)
+        this.UI.mapType = initialMapType;
+        this.UI.setMapType(initialMapType).then(() => {
+            this.log("Calling loadMap from constructor with mapType=" + this.UI.mapType)
+            this.loadMap(this.UI.mapType, (this.deferLoad !== undefined) ? this.deferLoad : false)
         })
     }
 
@@ -152,9 +153,9 @@ export class CNodeTerrain extends CNode {
         this.elevationMap.refreshDebugGrid("#4040FF",1000); // sky blue for elevation
 
         // refresh debug grid for the currently active map
-        if (this.maps[this.UINode.mapType].map !== undefined) {
-            this.maps[this.UINode.mapType].map.removeDebugGrid();
-            this.maps[this.UINode.mapType].map.refreshDebugGrid("#00ff00"); // green for ground
+        if (this.maps[this.UI.mapType].map !== undefined) {
+            this.maps[this.UI.mapType].map.removeDebugGrid();
+            this.maps[this.UI.mapType].map.refreshDebugGrid("#00ff00"); // green for ground
         }
     }
 
@@ -162,8 +163,8 @@ export class CNodeTerrain extends CNode {
 
     textureURLDirect(z, x, y) {
         // get the mapSource for the current mapType
-        const sourceDef = this.UINode.mapSources[this.UINode.mapType];
-        assert(sourceDef !== undefined, "CNodeTerrain: sourceDef for " + this.UINode.mapType + " not found in mapSources")
+        const sourceDef = this.UI.mapSources[this.UI.mapType];
+        assert(sourceDef !== undefined, "CNodeTerrain: sourceDef for " + this.UI.mapType + " not found in mapSources")
 
         if (sourceDef.isDebug) {
             return null; // no URL for debug maps
@@ -174,7 +175,7 @@ export class CNodeTerrain extends CNode {
             return sourceDef.mapURL.bind(this)(z, x, y)
         }
 
-        const layerName = this.UINode.layer;
+        const layerName = this.UI.layer;
         const layerDef = sourceDef.layers[layerName];
         assert(layerDef !== undefined, "CNodeTerrain: layer def for " + layerName + " not found in sourceDef")
         // run it bound to this, so we can access the terrain node
@@ -184,7 +185,7 @@ export class CNodeTerrain extends CNode {
 
     elevationURLDirect(z, x, y) {
         // get the elevation source for the current type
-        const sourceDef = this.UINode.elevationSources[this.UINode.elevationType];
+        const sourceDef = this.UI.elevationSources[this.UI.elevationType];
 
         if (!sourceDef.mapURL) {
             if (sourceDef.url === "" || sourceDef.url === undefined) {
@@ -249,7 +250,7 @@ export class CNodeTerrain extends CNode {
         const mapDef = this.maps[id].sourceDef;
 
 
-        const elevationDef = this.UINode.elevationSources[this.UINode.elevationType];
+        const elevationDef = this.UI.elevationSources[this.UI.elevationType];
         if (elevationDef.mapping === 4326) {
             this.mapProjectionElevation = new CTileMappingGoogleCRS84Quad();
         } else {
@@ -404,7 +405,7 @@ export class CNodeTerrain extends CNode {
 
     applyElevationTo(z,x,y) {
         // TODO - make it work for differnt subdivisions
-        const terrainMap = this.maps[this.UINode.mapType].map;
+        const terrainMap = this.maps[this.UI.mapType].map;
         const key = z + "/" + x + "/" + y;
 
         // if the corresponding tile is active, then recalculate the curve map
@@ -487,7 +488,7 @@ export class CNodeTerrain extends CNode {
 //        console.log("CNodeTerrain: elevation tile loaded " + tile.z + "/" + tile.x + "/" + tile.y)
 
         // get the terrain map for the current map type
-        if (this.maps[this.UINode.mapType].map === undefined) {
+        if (this.maps[this.UI.mapType].map === undefined) {
             console.warn("CNodeTerrain: map is undefined, called elevationTileLoaded while still loading - ignoring")
             return;
         }
@@ -504,7 +505,7 @@ export class CNodeTerrain extends CNode {
 
     recalculate() {
 
-        if (this.maps[this.UINode.mapType].map === undefined) {
+        if (this.maps[this.UI.mapType].map === undefined) {
             console.warn("CNodeTerrain: map is undefined, called recalculate while still loading - ignoring")
             return;
         }
@@ -526,8 +527,8 @@ export class CNodeTerrain extends CNode {
 
         }
         Sit.originECEF = RLLAToECEFV_Sphere(radians(Sit.lat), radians(Sit.lon), 0, radius)
-        assert(this.maps[this.UINode.mapType].map !== undefined, "CNodeTerrain: map is undefined")
-        this.maps[this.UINode.mapType].map.recalculateCurveMap(this.radius, true)
+        assert(this.maps[this.UI.mapType].map !== undefined, "CNodeTerrain: map is undefined")
+        this.maps[this.UI.mapType].map.recalculateCurveMap(this.radius, true)
 
         propagateLayerMaskObject(this.group)
 
@@ -577,8 +578,8 @@ export class CNodeTerrain extends CNode {
         const LLA = EUSToLLA(A)
         // elevation is the height above the wgs84 sphere
         let elevation = 0; // 0 if map not loaded
-        if (this.maps[this.UINode.mapType].map !== undefined)
-            elevation = this.maps[this.UINode.mapType].map.getElevationInterpolated(LLA.x, LLA.y)
+        if (this.maps[this.UI.mapType].map !== undefined)
+            elevation = this.maps[this.UI.mapType].map.getElevationInterpolated(LLA.x, LLA.y)
 
         if (elevation < 0) {
             // if the elevation is negative, then we assume it's below sea level
