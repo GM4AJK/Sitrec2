@@ -253,15 +253,18 @@ export class CNodeTerrainUI extends CNode {
         this.addSimpleSerial("mapType")
         this.addSimpleSerial("elevationType")
 
+        this.dynamic = v.dynamic ?? false;
+        this.gui.add(this, "dynamic").name("Dynamic Subdivision").onChange(v => {
+            this.terrainNode.reloadMap(this.mapType)
+        });
+
 
         this.terrainNode = new CNodeTerrain({
             ...v,
             id: initialID,
             UINode: this});
 
-        this.gui.add(this.terrainNode, "dynamic").name("Dynamic Subdivision").onChange(v => {
-            this.terrainNode.reloadMap(this.mapType)
-        });
+
 
     }
 
@@ -457,7 +460,7 @@ export class CNodeTerrainUI extends CNode {
         // }
 
 
-        if (this.terrainNode.dynamic & !this.disableDynamicSubdivision) {
+        if (this.dynamic & !this.disableDynamicSubdivision) {
             if (this.terrainNode.maps[this.mapType].map !== undefined) {
                 this.terrainNode.maps[this.mapType].map.subdivideTiles();
             }
@@ -518,7 +521,6 @@ export class CNodeTerrainUI extends CNode {
                 elevationType: this.elevationType,
 
                 UINode: this,
-                dynamic: this.terrainNode ? this.terrainNode.dynamic : false,
             }
         )
     }

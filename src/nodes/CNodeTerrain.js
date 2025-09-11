@@ -46,8 +46,6 @@ export class CNodeTerrain extends CNode {
 
         //   this.debugLog = true;
 
-        this.dynamic = v.dynamic ?? false; // if true, then init the terrain as 1x1 and use dynamic subdivision
-
         this.loaded = false;
 
         this.radius = wgs84.RADIUS;
@@ -313,7 +311,7 @@ export class CNodeTerrain extends CNode {
                 // mapProjection: new CTileMappingGoogleMapsCompatible(), // works with AWS
 
                 mapProjection: this.mapProjectionElevation,
-                dynamic: this.dynamic, // if true, then init the terrain as 1x1 and use dynamic subdivision
+                dynamic: this.UI.dynamic, // if true, then init the terrain as 1x1 and use dynamic subdivision
 
                 elOnly: true,
             })
@@ -358,7 +356,7 @@ export class CNodeTerrain extends CNode {
         Globals.loadingTerrain = true;
 //        console.log("CNodeTerrain: loading map "+id+" deferLoad = "+deferLoad)
         this.maps[id].map = new QuadTreeMapTexture(this.group, this, this.position, {
-                dynamic: this.dynamic, // if true, then init the terrain as 1x1 and use dynamic subdivision
+                dynamic: this.UI.dynamic, // if true, then init the terrain as 1x1 and use dynamic subdivision
                 nTiles: this.nTiles,
                 zoom: this.zoom,
                 tileSize: this.tileSize,
@@ -412,7 +410,7 @@ export class CNodeTerrain extends CNode {
         // we can then return, as an active has no children
         const terrainTile = terrainMap.tileCache[key];
         this.applyElevationToTile(terrainTile, terrainMap)
-        if (this.dynamic) {
+        if (this.UI.dynamic) {
             this.applyElevationToParents(terrainTile, terrainMap);
         }
 
