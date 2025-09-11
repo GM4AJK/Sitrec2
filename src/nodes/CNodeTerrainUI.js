@@ -260,11 +260,8 @@ export class CNodeTerrainUI extends CNode {
 
 
         this.terrainNode = new CNodeTerrain({
-            ...v,
             id: initialID,
             UINode: this});
-
-
 
     }
 
@@ -514,16 +511,9 @@ export class CNodeTerrainUI extends CNode {
         // and make a new one
         this.terrainNode = new CNodeTerrain({
             id: terrainID,
-            lat: this.lat,
-            lon: this.lon,
-            nTiles: this.nTiles,
             deferLoad: true,
-            elevationScale: this.elevationScale,
-            mapTypeMenu: this.mapTypeMenu,
-            terrainGUI: this.gui,
-            mapType: this.mapType,
-            elevationType: this.elevationType,
             UINode: this,
+
             }
         )
     }

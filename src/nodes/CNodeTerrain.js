@@ -53,28 +53,24 @@ export class CNodeTerrain extends CNode {
         this.input("flattening", true) //optional
 
         // attempt to load it from mapBox.
-        this.lat = v.lat
-        this.lon = v.lon
         // so maybe want to snap this to a grid?
-        this.position = [this.lat, this.lon]
+        this.position = [this.UI.lat, this.UI.lon]
 
         // Tile resolution = length of line of latitude / (2^zoom)
         // ref: https://docs.mapbox.com/help/glossary/zoom-level/
         // Tiles in Mapbox GL are 512x512
-        this.nTiles = v.nTiles;
-        this.elevationScale = v.elevationScale ?? 1;
         this.tileSegments = v.tileSegments ?? 100;
 
 
         if (Globals.quickTerrain) {
-            this.nTiles = 1;
+            this.UI.nTiles = 1;
         }
 
         // Important: The tile size calculation assumes a SPHERICAL Earth, not ellipsoid
         // and it uses the WGS84 circumference, radius 6378137, -> 40075016
         // rounded slightly to 40075000
         // this circumference is for the tile APIs, and does NOT change with radius
-        let circumference = 40075000 * cos(radians(this.lat));
+        let circumference = 40075000 * cos(radians(this.UI.lat));
         this.tileSize = circumference / Math.pow(2, this.UI.zoom) // tileSize is the width and height of the tile in meters
 
 
@@ -110,8 +106,8 @@ export class CNodeTerrain extends CNode {
             if (Sit.lat === undefined) {
                 // Sit.lat = lat0
                 // Sit.lon = lon0
-                Sit.lat = this.lat
-                Sit.lon = this.lon
+                Sit.lat = this.UI.lat
+                Sit.lon = this.UI.lon
             }
         }
 
@@ -254,7 +250,7 @@ export class CNodeTerrain extends CNode {
             this.mapProjectionElevation = new CTileMappingGoogleMapsCompatible();
         }
 
-        let elevationNTiles = this.nTiles;
+        let elevationNTiles = this.UI.nTiles;
         // if they are different projections, add two tiles to the elevation map (adding a border of one tile)
         if (mapDef.mapping !== elevationDef.mapping) {
             elevationNTiles += 2;
@@ -282,7 +278,7 @@ export class CNodeTerrain extends CNode {
                 zoom: this.UI.zoom,
                 tileSize: this.tileSize,
                 tileSegments: this.tileSegments,
-                zScale: this.elevationScale,
+                zScale: this.UI.elevationScale,
                 radius: this.radius,
                 maxZoom: mapDef.maxZoom ?? 14, // default to 14 if not set
                 loadedCallback: () => {
@@ -356,7 +352,7 @@ export class CNodeTerrain extends CNode {
 //        console.log("CNodeTerrain: loading map "+id+" deferLoad = "+deferLoad)
         this.maps[id].map = new QuadTreeMapTexture(this.group, this, this.position, {
                 dynamic: this.UI.dynamic, // if true, then init the terrain as 1x1 and use dynamic subdivision
-                nTiles: this.nTiles,
+                nTiles: this.UI.nTiles,
                 zoom: this.UI.zoom,
                 tileSize: this.tileSize,
                 tileSegments: this.tileSegments,   // this can go up to 256, with no NETWORK bandwidth.
