@@ -131,15 +131,16 @@ export class CNodeTerrain extends CNode {
             this.UINode = new CNodeTerrainUI({id: "terrainUI", terrain: v.id, fullUI: v.fullUI})
         }
 
+        // Create a single group that will be reused for all QuadTreeMapTexture objects
+        this.group = new Group();
+        GlobalScene.add(this.group);
+
         this.maps = []
         for (const mapName in this.UINode.mapTypesKV) {
             const mapID = this.UINode.mapTypesKV[mapName]
             this.maps[mapID] = {
-                group: new Group(),
                 sourceDef: this.UINode.mapSources[mapID],
-
             }
-            GlobalScene.add(this.maps[mapID].group)
         }
 
         this.deferLoad = v.deferLoad;
@@ -159,13 +160,11 @@ export class CNodeTerrain extends CNode {
         this.elevationMap.removeDebugGrid();
         this.elevationMap.refreshDebugGrid("#4040FF",1000); // sky blue for elevation
 
-        // we might have multiple maps, so remove any existing debug grids
-        for (const mapID in this.maps) {
-            if (this.maps[mapID].map !== undefined) {
-                this.maps[mapID].map.removeDebugGrid();
-            }
+        // refresh debug grid for the currently active map
+        if (this.maps[this.UINode.mapType].map !== undefined) {
+            this.maps[this.UINode.mapType].map.removeDebugGrid();
+            this.maps[this.UINode.mapType].map.refreshDebugGrid("#00ff00"); // green for ground
         }
-        this.maps[this.UINode.mapType].map.refreshDebugGrid("#00ff00"); // green for ground
     }
 
     // a single point for map33 to get the URL of the map tiles
@@ -217,8 +216,12 @@ export class CNodeTerrain extends CNode {
                 this.maps[mapID].map.clean()
                 this.maps[mapID].map = undefined
             }
-            GlobalScene.remove(this.maps[mapID].group)
-            this.maps[mapID].group = undefined;
+        }
+
+        // Clean up the single group
+        if (this.group !== undefined) {
+            GlobalScene.remove(this.group);
+            this.group = undefined;
         }
 
         if (this.elevationMap !== undefined) {
@@ -236,10 +239,8 @@ export class CNodeTerrain extends CNode {
             this.maps[mapID].map.clean()
             this.maps[mapID].map = undefined
         }
-        // we are just unloading it, so the group remains
-        // might be better to not create all the groups at the start
-        // GlobalScene.remove(this.maps[mapID].group)
-        // this.maps[mapID].group = undefined;
+        // Clear the shared group when unloading
+        this.group.clear();
     }
 
 
@@ -351,18 +352,20 @@ export class CNodeTerrain extends CNode {
 
         }
 
+        // Clean up the group when switching maps - remove all children
+        this.group.clear();
 
-        // make the correct group visible
-        for (const mapID in this.maps) {
-            assert(this.maps[mapID].group !== undefined, "CNodeTerrain: map group is undefined")
-            this.maps[mapID].group.visible = (mapID === id);
-        }
         // check to see if the map has already been loaded
-        // and if so we do nothing (other than the visibility setting)
-        if (this.maps[id].map === undefined) {
-            Globals.loadingTerrain = true;
-//            console.log("CNodeTerrain: loading map "+id+" deferLoad = "+deferLoad)
-            this.maps[id].map = new QuadTreeMapTexture(this.maps[id].group, this, this.position, {
+        // if it has, we need to clean it up first since we're reusing the group
+        if (this.maps[id].map !== undefined) {
+            this.maps[id].map.clean();
+            this.maps[id].map = undefined;
+        }
+
+        // Always create a new map since we're reusing the group
+        Globals.loadingTerrain = true;
+//        console.log("CNodeTerrain: loading map "+id+" deferLoad = "+deferLoad)
+        this.maps[id].map = new QuadTreeMapTexture(this.group, this, this.position, {
                 dynamic: this.dynamic, // if true, then init the terrain as 1x1 and use dynamic subdivision
                 nTiles: this.nTiles,
                 zoom: this.zoom,
@@ -389,7 +392,7 @@ export class CNodeTerrain extends CNode {
                         o.recalculateCascade()
                     })
 //                    console.log("CNodeTerrain: id = "+id+" map loaded");
-                    propagateLayerMaskObject(this.maps[id].group)
+                    propagateLayerMaskObject(this.group)
 
                     // call the terrainLoadedCallback on any node that has it
                     NodeMan.iterate((id, n) => {
@@ -405,7 +408,6 @@ export class CNodeTerrain extends CNode {
                 },
                 deferLoad: deferLoad,
             })
-        }
     }
 
 
@@ -536,13 +538,13 @@ export class CNodeTerrain extends CNode {
         assert(this.maps[this.UINode.mapType].map !== undefined, "CNodeTerrain: map is undefined")
         this.maps[this.UINode.mapType].map.recalculateCurveMap(this.radius, true)
 
-        propagateLayerMaskObject(this.maps[this.UINode.mapType].group)
+        propagateLayerMaskObject(this.group)
 
     }
 
     // return current group, for collision detection, etc
     getGroup() {
-        return this.maps[this.UINode.mapType].group;
+        return this.group;
     }
 
     getIntersects(raycaster) {
