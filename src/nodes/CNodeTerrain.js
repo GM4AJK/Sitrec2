@@ -61,7 +61,6 @@ export class CNodeTerrain extends CNode {
         // Tile resolution = length of line of latitude / (2^zoom)
         // ref: https://docs.mapbox.com/help/glossary/zoom-level/
         // Tiles in Mapbox GL are 512x512
-        this.zoom = v.zoom;
         this.nTiles = v.nTiles;
         this.elevationScale = v.elevationScale ?? 1;
         this.tileSegments = v.tileSegments ?? 100;
@@ -76,7 +75,7 @@ export class CNodeTerrain extends CNode {
         // rounded slightly to 40075000
         // this circumference is for the tile APIs, and does NOT change with radius
         let circumference = 40075000 * cos(radians(this.lat));
-        this.tileSize = circumference / Math.pow(2, this.zoom) // tileSize is the width and height of the tile in meters
+        this.tileSize = circumference / Math.pow(2, this.UI.zoom) // tileSize is the width and height of the tile in meters
 
 
         // the origin is in the middle of the first tile
@@ -90,10 +89,10 @@ export class CNodeTerrain extends CNode {
             // like the splines in Agua
             // these all use GoogleMapsCompatible projection
             const mapProjection = new CTileMappingGoogleMapsCompatible();
-            var tilex = Math.floor(mapProjection.lon2Tile(this.position[1], this.zoom)) + 0.5 // this is probably correct
-            var tiley = Math.floor(mapProjection.lat2Tile(this.position[0], this.zoom)) + 0.5 // this might be a bit off, as not linear?
-            var lon0 = mapProjection.tile2Lon(tilex, this.zoom)
-            var lat0 = mapProjection.tile2Lat(tiley, this.zoom)
+            var tilex = Math.floor(mapProjection.lon2Tile(this.position[1], this.UI.zoom)) + 0.5 // this is probably correct
+            var tiley = Math.floor(mapProjection.lat2Tile(this.position[0], this.UI.zoom)) + 0.5 // this might be a bit off, as not linear?
+            var lon0 = mapProjection.tile2Lon(tilex, this.UI.zoom)
+            var lat0 = mapProjection.tile2Lat(tiley, this.UI.zoom)
             console.log("LL Tile" + tilex + "," + tiley + " = (Lat,Lon)" + lat0 + "," + lon0)
 
             // we need to adjust the LL origin to match the 3D map
@@ -280,7 +279,7 @@ export class CNodeTerrain extends CNode {
             this.log("CNodeTerrain: creating elevation map")
             this.elevationMap = new QuadTreeMapElevation(this, this.position, {
                 nTiles: elevationNTiles,  // +2 to ensure we cover the image map areas when using different projections
-                zoom: this.zoom,
+                zoom: this.UI.zoom,
                 tileSize: this.tileSize,
                 tileSegments: this.tileSegments,
                 zScale: this.elevationScale,
@@ -358,7 +357,7 @@ export class CNodeTerrain extends CNode {
         this.maps[id].map = new QuadTreeMapTexture(this.group, this, this.position, {
                 dynamic: this.UI.dynamic, // if true, then init the terrain as 1x1 and use dynamic subdivision
                 nTiles: this.nTiles,
-                zoom: this.zoom,
+                zoom: this.UI.zoom,
                 tileSize: this.tileSize,
                 tileSegments: this.tileSegments,   // this can go up to 256, with no NETWORK bandwidth.
                 zScale: 1,
