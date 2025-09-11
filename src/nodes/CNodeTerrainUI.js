@@ -111,8 +111,8 @@ export class CNodeTerrainUI extends CNode {
 
         }
 
-        // Initialize mapType - will be set properly later in CNodeTerrain constructor
-        this.mapType = Object.keys(this.mapTypesKV)[0] || "wireframe";
+        // map type from the terrain object in a a saved sitch, or default to the first one
+        this.mapType = v.mapType ?? Object.keys(this.mapSources)[0];
 
         this.gui = guiMenus.terrain;
         this.mapTypeMenu = this.gui.add(this, "mapType", this.mapTypesKV).listen().name("Map Type")
@@ -144,9 +144,7 @@ export class CNodeTerrainUI extends CNode {
             const elevationDef = this.elevationSources[elevationType]
             this.elevationTypesKV[elevationDef.name] = elevationType
         }
-        // set the type to the first one to the
-//        this.elevationType = Object.keys(this.elevationTypesKV)[0]
-        this.elevationType = Object.keys(this.elevationSources)[0]
+        this.elevationType = v.elevationType ?? Object.keys(this.elevationSources)[0]
         // add the menu
         this.elevationTypeMenu = this.gui.add(this, "elevationType", this.elevationTypesKV).listen().name("Elevation Type")
             .tooltip("Elevation data source for terrain height data")
@@ -161,6 +159,7 @@ export class CNodeTerrainUI extends CNode {
 
 /////////////////////////////////////////////////////
 
+        assert(this.lat !== undefined, "CNodeTerrainUI: lat must be defined")
 
         this.oldLat = this.lat;
         this.oldLon = this.lon;
@@ -258,10 +257,13 @@ export class CNodeTerrainUI extends CNode {
             this.terrainNode.reloadMap(this.mapType)
         });
 
+        // setMapType is async because it loads the capabilities
+        this.setMapType(this.mapType).then(() => {
+            this.terrainNode = new CNodeTerrain({
+                id: initialID,
+                UINode: this});
+        })
 
-        this.terrainNode = new CNodeTerrain({
-            id: initialID,
-            UINode: this});
 
     }
 

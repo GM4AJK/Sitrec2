@@ -604,7 +604,10 @@ export class CCustomManager {
             // modify the terrain model directly, as we don't want to load terrain twice
             // For a modded sitch this has probably not changed
             if (out.TerrainModel !== undefined) {
-                const terrainModel = NodeMan.get("TerrainModel");
+                // note we now get these from the TerrainUI node
+                // previously they were duplicated in both nodes, but now just in the TerrainUI node
+                // the naming convention is to support historical saves.
+                const terrainModel = NodeMan.get("terrainUI");
                 out.TerrainModel = {
                     ...out.TerrainModel,
                     lat: terrainModel.lat,

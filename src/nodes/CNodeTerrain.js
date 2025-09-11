@@ -7,7 +7,6 @@ import {Group, Raycaster} from "three";
 import {GlobalScene} from "../LocalFrame";
 import {V3} from "../threeUtils";
 import {assert} from "../assert";
-import {configParams} from "../login";
 import {CTileMappingGoogleCRS84Quad, CTileMappingGoogleMapsCompatible} from "../WMSUtils";
 import {EventManager} from "../CEventManager";
 import {QuadTreeMapTexture} from "../QuadTreeMapTexture";
@@ -111,11 +110,6 @@ export class CNodeTerrain extends CNode {
             }
         }
 
-        // get the map type from the config, or use the default
-        // or use mapbox if neither set (unlikely)
-        const initialMapType = v.mapType ?? configParams.defaultMapType ?? "mapbox";
-
-
         // Create a single group that will be reused for all QuadTreeMapTexture objects
         this.group = new Group();
         GlobalScene.add(this.group);
@@ -130,14 +124,9 @@ export class CNodeTerrain extends CNode {
 
         this.deferLoad = v.deferLoad;
 
-        // the newly created UI node will not have the mapType set
-        // so we need to set it here. It can be an async process if we need to load capabilities
-        // so we need to wait for it to finish before the map is loaded
-        this.UI.mapType = initialMapType;
-        this.UI.setMapType(initialMapType).then(() => {
-            this.log("Calling loadMap from constructor with mapType=" + this.UI.mapType)
-            this.loadMap(this.UI.mapType, (this.deferLoad !== undefined) ? this.deferLoad : false)
-        })
+
+        this.log("Calling loadMap from constructor with mapType=" + this.UI.mapType)
+        this.loadMap(this.UI.mapType, (this.deferLoad !== undefined) ? this.deferLoad : false)
     }
 
     refreshDebugGrids() {
