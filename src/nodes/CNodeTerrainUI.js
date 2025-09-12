@@ -247,10 +247,11 @@ export class CNodeTerrainUI extends CNode {
         }
 
 
-        this.addSimpleSerial("debugElevationGrid")
-        this.addSimpleSerial("elevationScale")
-        this.addSimpleSerial("mapType")
-        this.addSimpleSerial("elevationType")
+        // terrain serializaton is handled by CustomSupport.js getCustomSitchString()
+        // this.addSimpleSerial("debugElevationGrid")
+        // this.addSimpleSerial("elevationScale")
+        // this.addSimpleSerial("mapType")
+        // this.addSimpleSerial("elevationType")
 
         this.dynamic = v.dynamic ?? false;
         this.gui.add(this, "dynamic").name("Dynamic Subdivision").onChange(v => {

@@ -615,7 +615,10 @@ export class CCustomManager {
                     zoom: terrainModel.zoom,
                     nTiles: terrainModel.nTiles,
                     tileSegments: terrainModel.tileSegments,
-                    mapType: terrainModel.mapType // TODO, fix confusion between CnodeTerrain and CNodeTerrainUI, so maptype works
+                    mapType: terrainModel.mapType,
+                    elevationType: terrainModel.elevationType,
+                    elevationScale: terrainModel.elevationScale,
+                    dynamic: terrainModel.dynamic,
                 }
             }
 
