@@ -56,6 +56,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         const key = `${z}/${x}/${y}`;
         let tile = this.tileCache[key];
         if (tile) {
+            // Tile already exists, just reactivate it
+            this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
         } else {
             tile = new QuadTreeTile(this, z, x, y);
             this.tileCache[key] = tile;

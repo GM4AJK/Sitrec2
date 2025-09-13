@@ -1,5 +1,5 @@
 import {assert} from "./assert";
-import {DebugArrowAB, removeDebugArrow} from "./threeExt";
+import {boxMark, DebugArrowAB, removeDebugArrow} from "./threeExt";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {GlobalScene} from "./LocalFrame";
 import {pointOnSphereBelow} from "./SphericalMath";
@@ -34,6 +34,8 @@ export class QuadTreeTile {
         this.elevation = null
         this.seamX = false
         this.seamY = false
+        this.isLoading = false // Track if this tile is currently loading textures
+        this.isLoadingElevation = false // Track if this tile is currently loading elevation data
     }
 
 
@@ -134,6 +136,31 @@ export class QuadTreeTile {
             })
         }
         this.debugArrows = []
+        
+        // Remove loading indicators if they exist
+        if (this.loadingIndicator !== undefined) {
+            GlobalScene.remove(this.loadingIndicator);
+            this.loadingIndicator.geometry.dispose();
+            this.loadingIndicator.material.dispose();
+            this.loadingIndicator = undefined;
+        }
+        
+        if (this.elevationLoadingIndicator !== undefined) {
+            GlobalScene.remove(this.elevationLoadingIndicator);
+            this.elevationLoadingIndicator.geometry.dispose();
+            this.elevationLoadingIndicator.material.dispose();
+            this.elevationLoadingIndicator = undefined;
+        }
+    }
+
+    // Update debug geometry when loading state changes
+    updateDebugGeometry() {
+        if (this.map && this.map.terrainNode && this.map.terrainNode.UI && this.map.terrainNode.UI.debugElevationGrid) {
+            // Get the current debug color from the map
+            const debugColor = this.map.debugColor || "#FF00FF";
+            const debugAltitude = this.map.debugAltitude || 0;
+            this.buildDebugGeometry(debugColor, debugAltitude);
+        }
     }
 
 
@@ -220,6 +247,39 @@ export class QuadTreeTile {
         DebugArrowAB(id7, vertexSE, vertexSED, color, true, GlobalScene)
         DebugArrowAB(id8, vertexNE, vertexNED, color, true, GlobalScene)
 
+        // Add loading indicators in top-left corner
+        const offsetFactor = 0.1; // 10% inward from corner
+        const indicatorSize = Math.abs(vertexNE.x - vertexNW.x) * 0.08; // 8% of tile width
+        
+        // Red square for texture loading
+        if (this.isLoading) {
+            const loadingX = vertexNW.x + (vertexNE.x - vertexNW.x) * offsetFactor;
+            const loadingY = vertexNW.y + (vertexSW.y - vertexNW.y) * offsetFactor;
+            const loadingZ = vertexNW.z;
+            
+            this.loadingIndicator = boxMark(
+                {x: loadingX, y: loadingY, z: loadingZ}, 
+                indicatorSize, indicatorSize, indicatorSize, 
+                "#FF0000", // Red color for texture loading
+                GlobalScene
+            );
+            this.loadingIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
+        }
+        
+        // Blue square for elevation loading (positioned next to red square)
+        if (this.isLoadingElevation) {
+            const elevationX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.12); // Offset to the right
+            const elevationY = vertexNW.y + (vertexSW.y - vertexNW.y) * offsetFactor;
+            const elevationZ = vertexNW.z;
+            
+            this.elevationLoadingIndicator = boxMark(
+                {x: elevationX, y: elevationY, z: elevationZ}, 
+                indicatorSize, indicatorSize, indicatorSize, 
+                "#0000FF", // Blue color for elevation loading
+                GlobalScene
+            );
+            this.elevationLoadingIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
+        }
 
     }
 
@@ -432,7 +492,9 @@ export class QuadTreeTile {
 
         }
 
-
+        // Set loading state and update debug geometry
+        this.isLoading = true;
+        this.updateDebugGeometry();
 
         return new Promise((resolve, reject) => {
             if (this.textureUrl(0, 0, 0) != null) {
@@ -440,14 +502,24 @@ export class QuadTreeTile {
                     this.mesh.material = material
                     if (! this.map.scene) {
                         console.warn("QuadTreeTile.applyMaterial: map.scene is not defined, not adding mesh to scene (changed levels?)")
+                        this.isLoading = false;
+                        this.updateDebugGeometry();
                         return resolve(material);
                     }
                     this.map.scene.add(this.mesh); // add the mesh to the scene
                     this.added = true; // mark the tile as added to the scene
                     this.loaded = true;
+                    this.isLoading = false; // Clear loading state
+                    this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
                     resolve(material)
-                }).catch(reject)
+                }).catch((error) => {
+                    this.isLoading = false; // Clear loading state on error
+                    this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
+                    reject(error);
+                })
             } else {
+                this.isLoading = false;
+                this.updateDebugGeometry();
                 resolve(null)
             }
         });
@@ -466,12 +538,17 @@ export class QuadTreeTile {
             throw new Error('Aborted');
         }
 
+        // Set elevation loading state and update debug geometry
+        this.isLoadingElevation = true;
+        this.updateDebugGeometry();
 
         if (!elevationURL) {
             // No elevation URL - this is normal for flat terrain
             // Mark the tile as having no elevation data
             this.elevation = null;
             this.elevationLoadFailed = false; // Not a failure, just no elevation source
+            this.isLoadingElevation = false;
+            this.updateDebugGeometry();
             return this;
         }
 
@@ -483,9 +560,13 @@ export class QuadTreeTile {
             } else {
                 await this.handleGeoTIFFElevation(elevationURL);
             }
+            this.isLoadingElevation = false; // Clear elevation loading state
+            this.updateDebugGeometry(); // Update debug geometry to remove elevation loading indicator
             return this;
         } catch (error) {
             console.error('Error fetching elevation data:', error);
+            this.isLoadingElevation = false; // Clear elevation loading state on error
+            this.updateDebugGeometry(); // Update debug geometry to remove elevation loading indicator
             throw error;
         }
     }

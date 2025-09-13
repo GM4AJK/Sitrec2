@@ -188,6 +188,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
 //      console.log("Activating tile", key, "already exists in cache");
             this.scene.add(tile.mesh); // add the mesh to the scene
             tile.added = true; // mark the tile as added to the scene
+            this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
         } else {
             // create a new tile
 //        console.log("Creating new tile", key);
