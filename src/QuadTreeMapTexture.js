@@ -14,25 +14,48 @@ class QuadTreeMapTexture extends QuadTreeMap {
         this.elOnly = options.elOnly ?? false;
         this.elevationMap = options.elevationMap;
 
+        // Track loading promises to properly call loadedCallback when all tiles are loaded
+        // This only makes sense if not dynamic
+        this.pendingTileLoads = new Set();
+
         // this.initTilePositions(this.options.deferLoad) // now in super
 
         this.initTiles();
-
-
-        // not really loaded, this is a patch.
-        // really would need to collate the promises from applyMaterial and then await them.
+        
+        // Call loadedCallback when all initial tiles have finished loading their materials
         if (this.loadedCallback) {
-            // wait a loop and call the callback
+            // Use setTimeout to allow initTiles() to complete and any initial tiles to be created
             setTimeout(() => {
-                console.warn("QuadTreeMapTexture: calling loadedCallback (fake, too early)");
-                this.loadedCallback();
-                this.loaded = true;
-            }, 0) // execute after the current event loop
+                this.checkAndCallLoadedCallback();
+            }, 0);
         }
 
 
     }
 
+    // Check if all tiles have finished loading and call the loadedCallback if so
+    checkAndCallLoadedCallback() {
+        // If there are no pending tile loads and we haven't called the callback yet
+        if (this.pendingTileLoads.size === 0 && !this.loaded && this.loadedCallback) {
+            this.loaded = true;
+            this.loadedCallback();
+        }
+    }
+
+    // Track a tile's loading promise
+    trackTileLoading(tileKey, promise) {
+        // Only track loading if we haven't already called the loaded callback
+        if (!this.loaded) {
+            this.pendingTileLoads.add(tileKey);
+            
+            promise.finally(() => {
+                this.pendingTileLoads.delete(tileKey);
+                this.checkAndCallLoadedCallback();
+            });
+        }
+        
+        return promise;
+    }
 
     canSubdivide(tile) {
         return (tile.mesh !== undefined && tile.mesh.geometry !== undefined)
@@ -116,6 +139,8 @@ class QuadTreeMapTexture extends QuadTreeMap {
             }
         })
         this.tileCache = {}
+        this.pendingTileLoads.clear(); // Clear pending loads when cleaning up
+        this.loaded = false; // Reset loaded state
         this.scene = null; // MICK - added to help with memory management
     }
 
@@ -184,11 +209,14 @@ class QuadTreeMapTexture extends QuadTreeMap {
             tile.recalculateCurve(wgs84.RADIUS)
             this.tileCache[key] = tile;
 
-            // can async load textures here
-            tile.applyMaterial().catch(error => {
+            // Track the async texture loading
+            const materialPromise = tile.applyMaterial().catch(error => {
                 console.error(`Failed to load texture for tile ${key}:`, error);
                 // Tile will remain with wireframe material if texture loading fails
             });
+            
+            // Track this tile's loading promise
+            this.trackTileLoading(key, materialPromise);
             this.refreshDebugGeometry(tile);
 
 
