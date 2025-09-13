@@ -1,25 +1,20 @@
 // CameraControls
 
-import {
-	Vector2,
-	Vector3,
-	Matrix4,
-	Plane,
-	Raycaster
-
-} from "three";
+import {Matrix4, Plane, Raycaster, Sphere, Vector2, Vector3} from "three";
 import {degrees, radians, vdump} from "../utils";
 import {DebugArrowAB, DebugSphere, intersectMSL, pointAbove} from "../threeExt";
 import {par} from "../par";
-import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA, wgs84} from "../LLA-ECEF-ENU";
-import {Sphere} from "three";
+import {ECEFToLLAVD_Sphere, EUSToECEF, wgs84} from "../LLA-ECEF-ENU";
 import {
 	altitudeAboveSphere,
 	getAzElFromPositionAndMatrix,
-	getLocalDownVector, getLocalEastVector, getLocalNorthVector,
-	getLocalUpVector, pointOnSphereBelow,
+	getLocalDownVector,
+	getLocalEastVector,
+	getLocalNorthVector,
+	getLocalUpVector,
+	pointOnSphereBelow,
 } from "../SphericalMath";
-import {Globals, NodeFactory, NodeMan, setRenderOne, Sit} from "../Globals";
+import {NodeFactory, NodeMan, setRenderOne, Sit} from "../Globals";
 import {CNodeControllerPTZUI} from "../nodes/CNodeControllerPTZUI";
 import {intersectSphere2, V3} from "../threeUtils";
 import {onDocumentMouseMove} from "../mouseMoveView";
@@ -329,16 +324,32 @@ class CameraMapControls {
 
 
 		// debug trail of droppings if 'p' key is held
+		// cursorSprite is calculated from a colliusion with the terrain model
 		if (isKeyHeld('p') && isLocal) {
-			const cursprPos = this.view.cursorSprite.position.clone();
+			const cursorPos = this.view.cursorSprite.position.clone();
 
-			DebugSphere("Mouse"+event.clientX*1000+event.clientY, cursprPos, 5, 0x00FF00)
+			DebugSphere("Mouse"+event.clientX*1000+event.clientY, cursorPos, 5, 0x00FF00)
 
 			// check intersection with the terrain
 			// red sphere should be 2.5m above the green sphere
-			const groundPoint = pointAbove(cursprPos, 5,)
+			const groundPoint = pointAbove(cursorPos, 5)
 
-			DebugSphere("Mouse2"+event.clientX*1000+event.clientY, groundPoint, 5, 0xFF0000)
+
+			if (groundPoint !== null) {
+
+				DebugSphere("Mouse2"+event.clientX*1000+event.clientY, groundPoint, 5, 0xFF0000)
+
+			// sample get the elevation at that point
+			// and do a blue sphere based on that.
+
+				const terrainNode = NodeMan.get("TerrainModel", false);
+				if (terrainNode !== undefined) {
+					const eus = terrainNode.getPointBelow(cursorPos)
+					DebugSphere("Mouse3"+event.clientX*1000+event.clientY, eus, 5, 0x0000FF)
+				}
+			}
+
+
 			setRenderOne(true);
 
 
