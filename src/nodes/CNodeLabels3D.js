@@ -7,7 +7,7 @@ import * as LAYER from "../LayerMasks";
 import {calculateAltitude, DebugArrowAB, propagateLayerMaskObject, removeDebugArrow} from "../threeExt";
 import {altitudeAboveSphere, pointOnSphereBelow} from "../SphericalMath";
 import {CNodeMunge} from "./CNodeMunge";
-import {Globals, guiShowHide, infoDiv, NodeMan, setRenderOne, Units} from "../Globals";
+import {Globals, guiShowHide, NodeMan, setRenderOne, Units} from "../Globals";
 import {CNode3DGroup} from "./CNode3DGroup";
 import {par} from "../par";
 import {LLAToEUS} from "../LLA-ECEF-ENU";
@@ -193,6 +193,9 @@ export class CNodeLabel3D extends CNode3DGroup {
     // Since this is a simple fixed size, we code just use sizeAttenuation:false in the sprite material
     // however I might want to change the size based on distance in the future.
     updateScale(view) {
+        if (!this.group.visible) {
+            return;
+        }
 
         const camera = view.camera
 
@@ -301,6 +304,12 @@ export class CNodeMeasureAB extends CNodeLabel3D {
     }
 
     update(f) {
+
+        // no need to update if it's parent group is not visible
+        if (!this.group.visible)
+            return;
+
+
         this.A = this.in.A.p(f);
         this.B = this.in.B.p(f);
         const midPoint = this.A.clone().add(this.B).multiplyScalar(0.5);
