@@ -286,7 +286,8 @@ export class QuadTreeTile {
 
     // recalculate the X,Y, Z values for all the verticles of a tile
     // at this point we are Z-up
-    recalculateCurve(radius) {
+    // OLD VERSION - inefficient for tiles of different sizes
+    recalculateCurveOld(radius) {
         var geometry = this.geometry;
         if (this.mesh !== undefined) {
             geometry = this.mesh.geometry;
@@ -370,6 +371,119 @@ export class QuadTreeTile {
         geometry.computeBoundingSphere()
 
         geometry.attributes.position.needsUpdate = true;
+    }
+
+    // NEW OPTIMIZED VERSION - works for tiles of the same coordinates but different sizes
+    // Applies elevation data directly from the matching elevation tile with bilinear interpolation
+    recalculateCurve(radius) {
+
+        // test just the old general method
+        return this.recalculateCurveOld(radius)
+
+
+        var geometry = this.geometry;
+        if (this.mesh !== undefined) {
+            geometry = this.mesh.geometry;
+        }
+
+        assert(geometry !== undefined, 'Geometry not defined in QuadTreeTile.js')
+
+        // Get the tile center for relative positioning
+        const tileCenter = this.mesh.position;
+
+        // Find the matching elevation tile with the same coordinates
+        const elevationTile = this.map.elevationMap?.tileCache?.[this.key()];
+        
+        if (!elevationTile || !elevationTile.elevation) {
+            // No matching elevation tile found, fall back to old method
+            console.warn(`No matching elevation tile found for ${this.key()}, falling back to interpolated method`);
+            return this.recalculateCurveOld(radius);
+        }
+
+        // Get dimensions
+        const nPosition = Math.sqrt(geometry.attributes.position.count); // size of side of mesh in points
+        const elevationSize = Math.sqrt(elevationTile.elevation.length); // size of elevation data
+
+        // Log the tile sizes for debugging (only when sizes are different)
+        if (nPosition !== elevationSize && nPosition !== elevationSize + 1) {
+            console.log(`Tile ${this.key()}: geometry ${nPosition}x${nPosition} vertices, elevation ${elevationSize}x${elevationSize} data points`);
+        }
+
+        // Apply elevation data directly to vertices
+        for (let i = 0; i < geometry.attributes.position.count; i++) {
+            const xIndex = i % nPosition;
+            const yIndex = Math.floor(i / nPosition);
+
+            // Calculate the fraction of the tile that the vertex is in
+            let yTileFraction = yIndex / (nPosition - 1);
+            let xTileFraction = xIndex / (nPosition - 1);
+
+            // Clamp fractions to tile bounds
+            if (xTileFraction >= 1) xTileFraction = 1 - 1e-6;
+            if (yTileFraction >= 1) yTileFraction = 1 - 1e-6;
+
+            // Get world tile coordinates
+            const xWorld = this.x + xTileFraction;
+            const yWorld = this.y + yTileFraction;
+
+            // Convert to lat/lon
+            const lat = this.map.options.mapProjection.getNorthLatitude(yWorld, this.z);
+            const lon = this.map.options.mapProjection.getLeftLongitude(xWorld, this.z);
+
+            // Get elevation with bilinear interpolation from the elevation tile data
+            // Map vertex position to elevation data coordinates (continuous)
+            const elevationX = xTileFraction * (elevationSize - 1);
+            const elevationY = yTileFraction * (elevationSize - 1);
+            
+            // Get the four surrounding elevation data points for interpolation
+            const x0 = Math.floor(elevationX);
+            const x1 = Math.min(elevationSize - 1, x0 + 1);
+            const y0 = Math.floor(elevationY);
+            const y1 = Math.min(elevationSize - 1, y0 + 1);
+            
+            // Get the fractional parts for interpolation
+            const fx = elevationX - x0;
+            const fy = elevationY - y0;
+            
+            // Sample the four corner elevation values
+            const e00 = elevationTile.elevation[y0 * elevationSize + x0];
+            const e01 = elevationTile.elevation[y0 * elevationSize + x1];
+            const e10 = elevationTile.elevation[y1 * elevationSize + x0];
+            const e11 = elevationTile.elevation[y1 * elevationSize + x1];
+            
+            // Bilinear interpolation
+            const e0 = e00 + (e01 - e00) * fx;
+            const e1 = e10 + (e11 - e10) * fx;
+            let elevation = e0 + (e1 - e0) * fy;
+            
+            // Apply z-scale if available
+            if (this.map.elevationMap.options.zScale) {
+                elevation *= this.map.elevationMap.options.zScale;
+            }
+
+            // Clamp to sea level to avoid z-fighting with ocean tiles
+            if (elevation < 0) elevation = 0;
+
+            // Convert to EUS coordinates
+            const vertexESU = LLAToEUS(lat, lon, elevation);
+
+            // Subtract the center of the tile for relative positioning
+            const vertex = vertexESU.sub(tileCenter);
+
+            assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
+            assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeTile.js');
+            assert(!isNaN(vertex.z), 'vertex.z is NaN in QuadTreeTile.js');
+
+            // Set the vertex position in tile space
+            geometry.attributes.position.setXYZ(i, vertex.x, vertex.y, vertex.z);
+        }
+
+        // Update geometry
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        geometry.attributes.position.needsUpdate = true;
+
     }
 
 
@@ -479,6 +593,22 @@ export class QuadTreeTile {
         });
     }
 
+    updateWireframeMaterial() {
+        // Create a wireframe material
+        const material = new MeshBasicMaterial({
+            color: "#ffffff",
+            wireframe: true
+        });
+
+        this.mesh.material = material;
+        this.mesh.material.needsUpdate = true; // ensure the material is updated
+
+        // return the material wrapped in a Promise
+        return new Promise((resolve) => {
+            resolve(material);
+        });
+    }
+
     applyMaterial() {
         const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (sourceDef.isDebug) {
@@ -489,7 +619,21 @@ export class QuadTreeTile {
 
             this.map.scene.add(this.mesh); // add the mesh to the scene
             this.added = true; // mark the tile as added to the scene
+            
+            // Return early for debug materials
+            return Promise.resolve(this.mesh.material);
+        }
+        
+        // Handle wireframe material
+        if (sourceDef.name === "Wireframe") {
+            this.updateWireframeMaterial();
+            this.loaded = true; // mark the tile as loaded
 
+            this.map.scene.add(this.mesh); // add the mesh to the scene
+            this.added = true; // mark the tile as added to the scene
+            
+            // Return early for wireframe materials
+            return Promise.resolve(this.mesh.material);
         }
 
         // Set loading state and update debug geometry

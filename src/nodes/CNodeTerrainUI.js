@@ -427,8 +427,9 @@ export class CNodeTerrainUI extends CNode {
     doRefresh() {
         this.log("Refreshing terrain")
         assert(this.terrainNode.maps[this.mapType].map !== undefined, "Terrain map not defined when trying the set startLoading")
-        this.startLoading = true;
-        this.flagForRecalculation();
+        // this.startLoading = true;
+        // this.flagForRecalculation();
+        this.terrainNode.reloadMap(this.mapType)
     }
 
     flagForRecalculation() {
@@ -461,12 +462,17 @@ export class CNodeTerrainUI extends CNode {
 
 
         if (this.dynamic & !this.disableDynamicSubdivision) {
-            if (this.terrainNode.maps[this.mapType].map !== undefined) {
-                this.terrainNode.maps[this.mapType].map.subdivideTiles();
-            }
+
+            // subdivide the elevation first so elevation requests will come before texutres
+            // this makes it more likely that the elevation will be ready when the texture is ready to make a tile.
             if (this.terrainNode.elevationMap !== undefined) {
                 this.terrainNode.elevationMap.subdivideTiles();
             }
+
+            if (this.terrainNode.maps[this.mapType].map !== undefined) {
+                this.terrainNode.maps[this.mapType].map.subdivideTiles();
+            }
+
         }
 
     }

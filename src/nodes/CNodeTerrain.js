@@ -204,6 +204,11 @@ export class CNodeTerrain extends CNode {
             this.elevationMap = undefined;
         }
 
+        // Clear any pending elevation updates
+        if (this.pendingElevationUpdates) {
+            this.pendingElevationUpdates = [];
+        }
+
         super.dispose();
     }
 
@@ -379,6 +384,22 @@ export class CNodeTerrain extends CNode {
 
                     this.refreshDebugGrids()
 
+                    // WHY IS THIS NEEDED - IF WE HAVE WIREFRAME MODE
+                    // THEN IT SHOULD ALWAYS HAVE GEOMETRY
+
+
+                    // The elevation system might have tried to apply elevation to this tile before
+                    // and failed because there's no geometry yet.
+                    // Process any pending elevation updates that arrived before the texture map was ready
+                    if (this.pendingElevationUpdates && this.pendingElevationUpdates.length > 0) {
+                        this.log("CNodeTerrain: processing " + this.pendingElevationUpdates.length + " pending elevation updates")
+                        this.pendingElevationUpdates.forEach(update => {
+                            this.applyElevationTo(update.z, update.x, update.y);
+                        });
+                        this.pendingElevationUpdates = []; // Clear the pending updates
+                        EventManager.dispatchEvent("elevationChanged", this)
+                    }
+
                 },
                 deferLoad: deferLoad,
             })
@@ -427,9 +448,6 @@ export class CNodeTerrain extends CNode {
         this.applyElevationToParents(parentTile, terrainMap);
     }
 
-
-//    WHY NO terrainMap ??? NOT laoded?
-
     applyElevationToTile(tile, terrainMap) {
 
         assert (terrainMap !== undefined, "CNodeTerrain: terrainMap is undefined, cannot apply elevation to tile");
@@ -464,25 +482,26 @@ export class CNodeTerrain extends CNode {
 
 
     // when an elevation tile is loaded, we need to recalculate the terrain elevation
-    // for the correspoinding region
+    // for the corresponding region
     // assume for now the quadtrees match
     elevationTileLoaded(tile) {
 //        console.log("CNodeTerrain: elevation tile loaded " + tile.z + "/" + tile.x + "/" + tile.y)
 
         // get the terrain map for the current map type
         if (this.maps[this.UI.mapType].map === undefined) {
-            console.warn("CNodeTerrain: map is undefined, called elevationTileLoaded while still loading - ignoring")
+            // Store pending elevation updates for when the texture map is ready
+            if (!this.pendingElevationUpdates) {
+                this.pendingElevationUpdates = [];
+            }
+            this.pendingElevationUpdates.push({z: tile.z, x: tile.x, y: tile.y});
+            console.warn("CNodeTerrain: map is undefined, storing elevation update for later application")
             return;
         }
 
+        // NOTE: ASSUMING THE QUADTREES MATCH
         this.applyElevationTo(tile.z, tile.x, tile.y);
 
-
         EventManager.dispatchEvent("elevationChanged", this)
-
-
-
-
     }
 
     recalculate() {
