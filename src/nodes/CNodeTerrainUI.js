@@ -183,7 +183,7 @@ export class CNodeTerrainUI extends CNode {
 
         this.debugElevationGrid = false;
 
-        if (v.fullUI) {
+       // if (v.fullUI) {
 
             this.latController = this.gui.add(this, "lat", -85, 85, .001).onChange(v => {
                 this.flagForRecalculation()
@@ -235,7 +235,7 @@ export class CNodeTerrainUI extends CNode {
             }, this.gui).onChange(track => {
                 this.zoomToTrack(track)
             })
-        }
+        // }
 
         this.elevationScaleController = this.gui.add(this, "elevationScale", 0, 10, 0.1).onFinishChange(v => {
             this.flagForRecalculation()
