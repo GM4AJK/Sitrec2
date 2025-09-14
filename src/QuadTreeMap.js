@@ -124,8 +124,32 @@ export class QuadTreeMap {
         //})
 
 
+        // First pass: Check for parent tiles that can now be deactivated because their children are loaded
+        // Only do this for texture maps, not elevation maps, since elevation tiles are used by texture tiles at different zoom levels
+        if (this.constructor.name === 'QuadTreeMapTexture') {
+            for (const key in this.tileCache) {
+                const tile = this.tileCache[key];
+
+                // Skip if tile is not active or doesn't have potential children
+                if (!tile.active || tile.z >= this.maxZoom) continue;
+
+                // Check if all four children exist and are loaded
+                const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
+                const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
+                const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
+                const child4 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`];
+
+                if (child1 && child2 && child3 && child4 &&
+                    child1.active && child2.active && child3.active && child4.active &&
+                    child1.loaded && child2.loaded && child3.loaded && child4.loaded) {
+                    // All children are active and loaded, safe to deactivate parent texture tile
+                    this.deactivateTile(tile.x, tile.y, tile.z);
+                }
+            }
+        }
+
         let checkedOne = false; // flag to indicate if we have checked one tile
-        // go over the tile cache
+        // Second pass: go over the tile cache for subdivision/merging
         for (const key in this.tileCache) {
 
 
@@ -230,8 +254,22 @@ export class QuadTreeMap {
                 this.activateTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1); // activate the child tile
                 this.activateTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1); // activate the child tile
 
-                // Todo - don't deactive until all children are loaded
-                this.deactivateTile(tile.x, tile.y, tile.z); // deactivate this tile
+                // Only deactivate parent if all children are loaded to prevent gaps in coverage
+                if (this.constructor.name === 'QuadTreeMapTexture') {
+                    const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
+                    const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
+                    const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
+                    const child4 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`];
+
+                    if (child1 && child2 && child3 && child4 &&
+                        child1.loaded && child2.loaded && child3.loaded && child4.loaded) {
+                        this.deactivateTile(tile.x, tile.y, tile.z); // deactivate parent texture tile only when children are ready
+                    }
+                } else {
+                    // original logic for elevation tiles
+                    this.deactivateTile(tile.x, tile.y, tile.z); // deactivate this tile
+                }
+
 
                 return; // just doing one tile at a time, might want to change this later
             }
