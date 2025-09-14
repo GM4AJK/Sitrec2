@@ -1,5 +1,4 @@
 import {wgs84} from "./LLA-ECEF-ENU";
-import {NodeMan} from "./Globals";
 import {Matrix4} from "three/src/math/Matrix4";
 import {Frustum} from "three/src/math/Frustum";
 
@@ -105,15 +104,7 @@ export class QuadTreeMap {
     // we use multiple views to handle multiple cameras
     // this is used to dynamically subdivide tiles based on the camera view
     // so we account for ALL active camera (typically one or two)
-    subdivideTiles(views) {
-
-        if (views === undefined || views.length === 0) {
-            views = [
-                NodeMan.get("lookView"),
-                NodeMan.get("mainView")
-
-            ]; // default to the look camera and main if no views provided
-        }
+    subdivideTiles(views, subdivideSize  = 2000) {
 
         // get array of cameras from the views
 
@@ -222,8 +213,6 @@ export class QuadTreeMap {
                 }
             }
 
-
-            const subdivideSize = 2000;
 
             if (tile.z < 3) {
                 screenSize = 10000000000; // force subdivision of first three

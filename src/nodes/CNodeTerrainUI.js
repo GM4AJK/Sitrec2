@@ -464,14 +464,20 @@ export class CNodeTerrainUI extends CNode {
 
         if (this.dynamic & !this.disableDynamicSubdivision) {
 
+            const views = [
+                NodeMan.get("lookView"),
+                NodeMan.get("mainView")
+
+            ];
+
             // subdivide the elevation first so elevation requests will come before texutres
             // this makes it more likely that the elevation will be ready when the texture is ready to make a tile.
             if (this.terrainNode.elevationMap !== undefined) {
-                this.terrainNode.elevationMap.subdivideTiles();
+                this.terrainNode.elevationMap.subdivideTiles(views, 4000);
             }
 
             if (this.terrainNode.maps[this.mapType].map !== undefined) {
-                this.terrainNode.maps[this.mapType].map.subdivideTiles();
+                this.terrainNode.maps[this.mapType].map.subdivideTiles(views, 2000);
             }
 
         }
