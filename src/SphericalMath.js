@@ -368,3 +368,10 @@ export function getCompassHeading(position, forward, camera) {
 
 }
 
+export function distanceToHorizon(h, r = wgs84.RADIUS) {
+    return Math.sqrt((r + h) * (r + h) - r * r)
+}
+
+export function hiddenByGlobe(h, d, r = wgs84.RADIUS) {
+    return r / Math.cos(d / r - Math.acos(r / (r + h))) - r
+}
