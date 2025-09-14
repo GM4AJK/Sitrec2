@@ -373,8 +373,9 @@ export class QuadTreeTile {
         geometry.attributes.position.needsUpdate = true;
     }
 
-    // NEW OPTIMIZED VERSION - works for tiles of the same coordinates but different sizes
-    // Applies elevation data directly from the matching elevation tile with bilinear interpolation
+    // NEW OPTIMIZED VERSION - works with elevation tiles at same or lower zoom levels
+    // Tries exact coordinate match first, then searches parent tiles (lower zoom) and uses tile fractions
+    // Applies elevation data directly from elevation tiles with bilinear interpolation
     recalculateCurve(radius) {
 
         var geometry = this.geometry;
@@ -387,12 +388,47 @@ export class QuadTreeTile {
         // Get the tile center for relative positioning
         const tileCenter = this.mesh.position;
 
-        // Find the matching elevation tile with the same coordinates
-        const elevationTile = this.map.elevationMap?.tileCache?.[this.key()];
+        // Find elevation tile - try exact match first, then higher zoom levels
+        let elevationTile = null;
+        let elevationZoom = this.z;
+        let tileOffsetX = 0;
+        let tileOffsetY = 0;
+        let tileFractionX = 1.0;
+        let tileFractionY = 1.0;
+        
+        // First try exact match
+        elevationTile = this.map.elevationMap?.tileCache?.[this.key()];
         
         if (!elevationTile || !elevationTile.elevation) {
-            // No matching elevation tile found, fall back to old method
-            console.warn(`No matching elevation tile found for ${this.key()}, falling back to interpolated method`);
+            // Try lower zoom levels (parent tiles with less detailed but available elevation data)
+            for (let searchZoom = this.z - 1; searchZoom >= 0; searchZoom--) {
+                // Calculate which parent tile covers this tile
+                const zoomDiff = this.z - searchZoom;
+                const tilesPerParent = Math.pow(2, zoomDiff);
+                
+                // Find the parent tile coordinates
+                const elevationX = Math.floor(this.x / tilesPerParent);
+                const elevationY = Math.floor(this.y / tilesPerParent);
+                const elevationKey = `${searchZoom}/${elevationX}/${elevationY}`;
+                const candidateTile = this.map.elevationMap.tileCache[elevationKey];
+                
+                if (candidateTile && candidateTile.elevation) {
+                    elevationTile = candidateTile;
+                    elevationZoom = searchZoom;
+                    // Calculate which portion of the parent tile this texture tile represents
+                    tileOffsetX = this.x % tilesPerParent;
+                    tileOffsetY = this.y % tilesPerParent;
+                    tileFractionX = 1.0 / tilesPerParent;
+                    tileFractionY = 1.0 / tilesPerParent;
+                    console.log(`Using parent elevation tile ${elevationKey} (zoom ${searchZoom}) for texture tile ${this.key()}`);
+                    break;
+                }
+            }
+        }
+        
+        if (!elevationTile || !elevationTile.elevation) {
+            // No elevation tile found at any zoom level, fall back to old method
+            console.warn(`No elevation tile found for ${this.key()} at any zoom level, falling back to interpolated method`);
             return this.recalculateCurveOld(radius);
         }
 
@@ -400,9 +436,11 @@ export class QuadTreeTile {
         const nPosition = Math.sqrt(geometry.attributes.position.count); // size of side of mesh in points
         const elevationSize = Math.sqrt(elevationTile.elevation.length); // size of elevation data
 
-        // Log the tile sizes for debugging (only when sizes are different)
-        if (nPosition !== elevationSize && nPosition !== elevationSize + 1) {
-            console.log(`Tile ${this.key()}: geometry ${nPosition}x${nPosition} vertices, elevation ${elevationSize}x${elevationSize} data points`);
+        // Log the tile information for debugging
+        if (elevationZoom !== this.z) {
+            console.log(`Tile ${this.key()}: using elevation zoom ${elevationZoom} (${elevationSize}x${elevationSize}) for texture zoom ${this.z} (${nPosition}x${nPosition}), fraction: ${tileFractionX.toFixed(3)}x${tileFractionY.toFixed(3)}`);
+        } else if (nPosition !== elevationSize && nPosition !== elevationSize + 1) {
+//            console.log(`Tile ${this.key()}: geometry ${nPosition}x${nPosition} vertices, elevation ${elevationSize}x${elevationSize} data points`);
         }
 
         // Apply elevation data directly to vertices
@@ -427,19 +465,32 @@ export class QuadTreeTile {
             const lon = this.map.options.mapProjection.getLeftLongitude(xWorld, this.z);
 
             // Get elevation with bilinear interpolation from the elevation tile data
-            // Map vertex position to elevation data coordinates (continuous)
-            const elevationX = xTileFraction * (elevationSize - 1);
-            const elevationY = yTileFraction * (elevationSize - 1);
+            // Map vertex position to elevation data coordinates, accounting for tile fraction and offset
+            // If we're using a higher-zoom elevation tile, we need to map to the correct portion
+            let elevationLocalX, elevationLocalY;
+            
+            if (elevationZoom === this.z) {
+                // Same zoom level - direct mapping
+                elevationLocalX = xTileFraction * (elevationSize - 1);
+                elevationLocalY = yTileFraction * (elevationSize - 1);
+            } else {
+                // Lower zoom level (parent tile) - map to the specific portion of the parent
+                // Calculate the offset within the parent tile and add the texture tile fraction
+                const parentOffsetX = (tileOffsetX + xTileFraction) * tileFractionX;
+                const parentOffsetY = (tileOffsetY + yTileFraction) * tileFractionY;
+                elevationLocalX = parentOffsetX * (elevationSize - 1);
+                elevationLocalY = parentOffsetY * (elevationSize - 1);
+            }
             
             // Get the four surrounding elevation data points for interpolation
-            const x0 = Math.floor(elevationX);
+            const x0 = Math.floor(elevationLocalX);
             const x1 = Math.min(elevationSize - 1, x0 + 1);
-            const y0 = Math.floor(elevationY);
+            const y0 = Math.floor(elevationLocalY);
             const y1 = Math.min(elevationSize - 1, y0 + 1);
             
             // Get the fractional parts for interpolation
-            const fx = elevationX - x0;
-            const fy = elevationY - y0;
+            const fx = elevationLocalX - x0;
+            const fy = elevationLocalY - y0;
             
             // Sample the four corner elevation values
             const e00 = elevationTile.elevation[y0 * elevationSize + x0];
