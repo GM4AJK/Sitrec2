@@ -377,10 +377,6 @@ export class QuadTreeTile {
     // Applies elevation data directly from the matching elevation tile with bilinear interpolation
     recalculateCurve(radius) {
 
-        // test just the old general method
-        return this.recalculateCurveOld(radius)
-
-
         var geometry = this.geometry;
         if (this.mesh !== undefined) {
             geometry = this.mesh.geometry;

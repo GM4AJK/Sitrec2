@@ -274,7 +274,7 @@ export class CNodeTerrain extends CNode {
                 tileSegments: this.tileSegments,
                 zScale: this.UI.elevationScale,
                 radius: this.radius,
-                maxZoom: mapDef.maxZoom ?? 14, // default to 14 if not set
+                maxZoom: elevationDef.maxZoom ?? 14, // default to 14 if not set
                 loadedCallback: () => {
                     this.log("CNodeTerrain: elevation map loaded")
                     this.recalculate();

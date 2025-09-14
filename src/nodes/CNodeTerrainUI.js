@@ -94,6 +94,7 @@ export class CNodeTerrainUI extends CNode {
                 Debug: {
                     name: "Debug Info",
                     isDebug: true,
+                    maxZoom: 20,
                 }
 
 

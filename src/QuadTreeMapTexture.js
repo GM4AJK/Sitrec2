@@ -183,6 +183,10 @@ class QuadTreeMapTexture extends QuadTreeMap {
         const key = `${z}/${x}/${y}`;
         let tile = this.tileCache[key];
         if (tile) {
+            if (tile.active) {
+                // tile is already activated, do nothing
+                return;
+            }
             // tile already exists, just activate it
             // maybe later rebuild a mesh if we unloaded it
 //      console.log("Activating tile", key, "already exists in cache");
