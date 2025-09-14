@@ -37,6 +37,7 @@ export class QuadTreeTile {
         this.loaded = false // Track if this tile has finished loading
         this.isLoading = false // Track if this tile is currently loading textures
         this.isLoadingElevation = false // Track if this tile is currently loading elevation data
+        this.highestAltitude = 0;
     }
 
 
@@ -348,6 +349,10 @@ export class QuadTreeTile {
             // clamp to sea level to avoid z-fighting with ocean tiles
             if (elevation < 0) elevation = 0;
 
+            if (elevation > this.highestAltitude) {
+                this.highestAltitude = elevation;
+            }
+
            // elevation = Math.random()*100000
 
             // convert that to EUS
@@ -378,6 +383,8 @@ export class QuadTreeTile {
     // Tries exact coordinate match first, then searches parent tiles (lower zoom) and uses tile fractions
     // Applies elevation data directly from elevation tiles with bilinear interpolation
     recalculateCurve(radius) {
+
+        this.highestAltitude = 0;
 
         var geometry = this.geometry;
         if (this.mesh !== undefined) {
@@ -511,6 +518,10 @@ export class QuadTreeTile {
 
             // Clamp to sea level to avoid z-fighting with ocean tiles
             if (elevation < 0) elevation = 0;
+
+            if (elevation > this.highestAltitude) {
+                this.highestAltitude = elevation;
+            }
 
             // Convert to EUS coordinates
             const vertexESU = LLAToEUS(lat, lon, elevation);

@@ -3,6 +3,7 @@ import {Matrix4} from "three/src/math/Matrix4";
 import {Frustum} from "three/src/math/Frustum";
 import {debugLog} from "./Globals";
 import {isLocal} from "./configUtils";
+import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./SphericalMath";
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -229,7 +230,6 @@ export class QuadTreeMap {
                 continue; // skip tiles that are not active and don't have active children
             }
 
-
             // the tile of the world sphere is used to
             // 1) determine visibility
             // 2) calculate the size of the tile on screen (using the radius and distance)
@@ -242,26 +242,46 @@ export class QuadTreeMap {
                 // First check the frustum intersection with the tile's world sphere
                 // this gives us a ROUGH (but conservative) estimate of whether the tile is visible
                 if (camera.viewFrustum.intersectsSphere(worldSphere)) {
+                    const radius = worldSphere.radius;
                     const distance = camera.position.distanceTo(worldSphere.center);
 
-                    // get the size of the tile on screen
-                    const radius = worldSphere.radius;
-                    const fov = camera.getEffectiveFOV() * Math.PI / 180; // radians
+                    // now check to see if the tile is hidden behind the curve of the earth
+                    const cameraPos = camera.position.clone(); // clone the position vector
+                    const cameraAltitude = altitudeAboveSphere(cameraPos)
 
-                    const height = 2 * Math.tan(fov / 2) * distance;
-                    const screenFraction = (2 * radius) / height;
-                    const thisScreenSize = screenFraction * 1024; // DUMMY: assume 1024 is the screen size in pixels, this should be configurable
+                    // closest possible distance would be a near corner of the tile
+                    const closestDistance = Math.max(0,distance - radius);
+                    // we are going to check if the highest point, set at the closest distance
+                    // is visible behind the curve of the earth
 
-                    if (thisScreenSize > screenSize) {
+                    // Globe hidden amount from altitude and distance
+                    const horizon = distanceToHorizon(cameraAltitude);
+
+                    // we do the check if the closest distance is nearer than the horizon
+                    // or if the amount hiddens is less than the highest point of the tile
+                    if (horizon > closestDistance
+                        || hiddenByGlobe(cameraAltitude, closestDistance) <= tile.highestAltitude ) {
 
 
-                        largestVisible = true;
-                        screenSize = thisScreenSize; // take the largest screen size from all cameras
+                        // get the size of the tile on screen
 
-                        // if (this.constructor.name === 'QuadTreeMapTexture') {
-                        //     DebugSphere("Subdivider", worldSphere.center.clone(), radius, "#ff0000", undefined, undefined, true)
-                        // }
+                        const fov = camera.getEffectiveFOV() * Math.PI / 180; // radians
 
+                        const height = 2 * Math.tan(fov / 2) * distance;
+                        const screenFraction = (2 * radius) / height;
+                        const thisScreenSize = screenFraction * 1024; // DUMMY: assume 1024 is the screen size in pixels, this should be configurable
+
+                        if (thisScreenSize > screenSize) {
+
+
+                            largestVisible = true;
+                            screenSize = thisScreenSize; // take the largest screen size from all cameras
+
+                            // if (this.constructor.name === 'QuadTreeMapTexture') {
+                            //     DebugSphere("Subdivider", worldSphere.center.clone(), radius, "#ff0000", undefined, undefined, true)
+                            // }
+
+                        }
                     }
                 }
             }
