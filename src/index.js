@@ -1180,8 +1180,17 @@ function renderMain(elapsed) {
 
     DragDropHandler.checkDropQueue();
 
-//    if (par.paused && !par.renderOne && !par.noLogic) return;
-    if (par.paused && !par.renderOne) return;
+    // early out if paused, but first check if any nodes are flagged to run their update function
+    // even when paused. Example CNodeTerrainUI, which needs to keep subdividing tiles to load them
+    if (par.paused && !par.renderOne) {
+        NodeMan.iterate((key, node) => {
+            if (node.update !== undefined && node.updateWhilePaused) {
+                node.update(par.frame)
+            }
+        })
+
+        return;
+    }
 
     // par.renderOne is a flag set whenever something is done that forces an update.
     if (par.renderOne === true) {

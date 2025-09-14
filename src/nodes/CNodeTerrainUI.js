@@ -29,6 +29,8 @@ export class CNodeTerrainUI extends CNode {
 
         this.adjustable = v.adjustable ?? true;
 
+        this.updateWhilePaused = true;
+
 
         this.refresh = false;
 
