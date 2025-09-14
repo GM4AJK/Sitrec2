@@ -420,7 +420,7 @@ export class QuadTreeTile {
                     tileOffsetY = this.y % tilesPerParent;
                     tileFractionX = 1.0 / tilesPerParent;
                     tileFractionY = 1.0 / tilesPerParent;
-                    console.log(`Using parent elevation tile ${elevationKey} (zoom ${searchZoom}) for texture tile ${this.key()}`);
+//                    console.log(`Using parent elevation tile ${elevationKey} (zoom ${searchZoom}) for texture tile ${this.key()}`);
                     break;
                 }
             }
@@ -438,7 +438,7 @@ export class QuadTreeTile {
 
         // Log the tile information for debugging
         if (elevationZoom !== this.z) {
-            console.log(`Tile ${this.key()}: using elevation zoom ${elevationZoom} (${elevationSize}x${elevationSize}) for texture zoom ${this.z} (${nPosition}x${nPosition}), fraction: ${tileFractionX.toFixed(3)}x${tileFractionY.toFixed(3)}`);
+//            console.log(`Tile ${this.key()}: using elevation zoom ${elevationZoom} (${elevationSize}x${elevationSize}) for texture zoom ${this.z} (${nPosition}x${nPosition}), fraction: ${tileFractionX.toFixed(3)}x${tileFractionY.toFixed(3)}`);
         } else if (nPosition !== elevationSize && nPosition !== elevationSize + 1) {
 //            console.log(`Tile ${this.key()}: geometry ${nPosition}x${nPosition} vertices, elevation ${elevationSize}x${elevationSize} data points`);
         }
