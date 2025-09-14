@@ -1,6 +1,8 @@
 import {wgs84} from "./LLA-ECEF-ENU";
 import {Matrix4} from "three/src/math/Matrix4";
 import {Frustum} from "three/src/math/Frustum";
+import {debugLog} from "./Globals";
+import {isLocal} from "./configUtils";
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -98,20 +100,48 @@ export class QuadTreeMap {
     }
 
 
-    // go thorugh the tile cache and subdivide or merge each tile if needed
+    // go through the tile cache and subdivide or merge each tile if needed
     // "needed" is based on the zoom level and the tile size on screen
-    // passd in an array of views, from which we get the cameras and viewports sizes
+    // passed in an array of views, from which we get the cameras and viewports sizes
     // we use multiple views to handle multiple cameras
-    // this is used to dynamically subdivide tiles based on the camera view
+    // this is used to dynamically subdivide tiles based on the camera views
     // so we account for ALL active camera (typically one or two)
+    // different quadtrees (i.e. tesxtures and elevations) can have diferent subdivideSize
+    // which is the screen size (of a bounding sphere) above which we start subdividing tiles
     subdivideTiles(views, subdivideSize  = 2000) {
+
+
+        // debug counting and output to debugLog
+        if (isLocal) {
+            let totalTileCount = Object.keys(this.tileCache).length; // count of tiles in the cache
+            let pendingLoads = 0; // count of pending loads
+            let activeTileCount = 0; // count of active tiles
+            let inactiveTileCount = 0; // count of inactive tiles
+
+            for (const key in this.tileCache) {
+                const tile = this.tileCache[key];
+
+                if (tile.active) {
+                    activeTileCount++;
+                } else {
+                    inactiveTileCount++;
+                }
+
+                if (tile.isLoading) {
+                    pendingLoads++; // increment the pending load counter
+                }
+            }
+
+            if (pendingLoads > 0) {
+                debugLog(`Total Tiles: ${totalTileCount}, Active Tiles: ${activeTileCount}, Inactive Tiles: ${inactiveTileCount}, Pending Loads: ${pendingLoads}`);
+            }
+        }
+
+
 
         // get array of cameras from the views
 
         const cameras = views.map(view => view.cameraNode.camera);
-
-        // calculate an array of frustums from the cameras
-        //const frustrums = cameras.map(camera => {
 
         for (const camera of cameras) {
             camera.updateMatrixWorld();
@@ -148,15 +178,10 @@ export class QuadTreeMap {
             }
         }
 
-        let checkedOne = false; // flag to indicate if we have checked one tile
         // Second pass: go over the tile cache for subdivision/merging
+
         for (const key in this.tileCache) {
-
-
             const tile = this.tileCache[key];
-
-
-
 
             // if the tile is active, but not visible, then we can deactivate it
             // if it has a mesh and all the children are loaded
@@ -204,36 +229,40 @@ export class QuadTreeMap {
                 continue; // skip tiles that are not active and don't have active children
             }
 
-            //checkedOne = true; // we have checked one tile, so we can stop (after this iteration)
 
-
-            let worldSphere = tile.getWorldSphere(); // get the world sphere of the tile
+            // the tile of the world sphere is used to
+            // 1) determine visibility
+            // 2) calculate the size of the tile on screen (using the radius and distance)
+            let worldSphere = tile.getWorldSphere();
 
             let screenSize = 0;           // largest size on screen in pixels
-            let visible = false;          // flag to indicate if the tile is visible in any camera
             let largestVisible = false;   // true if the tile is visible in the camera that gives the largest screen size
-
             for (const camera of cameras) {
-                let thisVisible = false;
 
+                // First check the frustum intersection with the tile's world sphere
+                // this gives us a ROUGH (but conservative) estimate of whether the tile is visible
                 if (camera.viewFrustum.intersectsSphere(worldSphere)) {
-                    thisVisible = true; // the tile is visible in this camera
-                    visible = true; // the tile is visible in some camera
-                }
+                    const distance = camera.position.distanceTo(worldSphere.center);
 
-                const distance = camera.position.distanceTo(worldSphere.center);
+                    // get the size of the tile on screen
+                    const radius = worldSphere.radius;
+                    const fov = camera.getEffectiveFOV() * Math.PI / 180; // radians
 
-                // get the size of the tile on screen
-                const radius = worldSphere.radius;
-                const fov = camera.getEffectiveFOV() * Math.PI / 180; // radians
+                    const height = 2 * Math.tan(fov / 2) * distance;
+                    const screenFraction = (2 * radius) / height;
+                    const thisScreenSize = screenFraction * 1024; // DUMMY: assume 1024 is the screen size in pixels, this should be configurable
 
-                const height = 2 * Math.tan(fov / 2) * distance;
-                const screenFraction = (2 * radius) / height;
-                const thisScreenSize = screenFraction * 1024; // DUMMY: assume 1024 is the screen size in pixels, this should be configurable
+                    if (thisScreenSize > screenSize) {
 
-                if (thisScreenSize > screenSize) {
-                    largestVisible = thisVisible; // if this camera is visible, we take it as the largest visible
-                    screenSize = thisScreenSize; // take the largest screen size from all cameras
+
+                        largestVisible = true;
+                        screenSize = thisScreenSize; // take the largest screen size from all cameras
+
+                        // if (this.constructor.name === 'QuadTreeMapTexture') {
+                        //     DebugSphere("Subdivider", worldSphere.center.clone(), radius, "#ff0000", undefined, undefined, true)
+                        // }
+
+                    }
                 }
             }
 
@@ -256,6 +285,10 @@ export class QuadTreeMap {
 
                 // Only deactivate parent if all children are loaded to prevent gaps in coverage
                 if (this.constructor.name === 'QuadTreeMapTexture') {
+
+
+
+
                     const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
                     const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
                     const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
@@ -271,7 +304,7 @@ export class QuadTreeMap {
                 }
 
 
-                return; // just doing one tile at a time, might want to change this later
+               // return; // just doing one tile at a time, might want to change this later
             }
 
             if (!tile.active && (!largestVisible || screenSize <= subdivideSize)) {
@@ -303,6 +336,8 @@ export class QuadTreeMap {
 
 
         }
+
+
     }
 
 

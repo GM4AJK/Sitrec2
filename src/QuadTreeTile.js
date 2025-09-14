@@ -34,6 +34,7 @@ export class QuadTreeTile {
         this.elevation = null
         this.seamX = false
         this.seamY = false
+        this.loaded = false // Track if this tile has finished loading
         this.isLoading = false // Track if this tile is currently loading textures
         this.isLoadingElevation = false // Track if this tile is currently loading elevation data
     }
@@ -688,11 +689,12 @@ export class QuadTreeTile {
         this.updateDebugGeometry();
 
         return new Promise((resolve, reject) => {
-            if (this.textureUrl(0, 0, 0) != null) {
+            if (this.textureUrl() != null) {
                 this.buildMaterial().then((material) => {
                     this.mesh.material = material
                     if (! this.map.scene) {
                         console.warn("QuadTreeTile.applyMaterial: map.scene is not defined, not adding mesh to scene (changed levels?)")
+                        this.loaded = true; // Mark as loaded even if scene is not available
                         this.isLoading = false;
                         this.updateDebugGeometry();
                         return resolve(material);
@@ -704,11 +706,15 @@ export class QuadTreeTile {
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
                     resolve(material)
                 }).catch((error) => {
+                    // Even if material loading fails, mark tile as "loaded" to prevent infinite pending state
+                    this.loaded = true;
                     this.isLoading = false; // Clear loading state on error
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
                     reject(error);
                 })
             } else {
+                // No texture URL available, but tile is still considered "loaded"
+                this.loaded = true;
                 this.isLoading = false;
                 this.updateDebugGeometry();
                 resolve(null)

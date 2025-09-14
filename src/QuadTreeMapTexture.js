@@ -2,6 +2,7 @@ import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
 import {assert} from "./assert";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
+import {setRenderOne} from "./Globals";
 
 class QuadTreeMapTexture extends QuadTreeMap {
     constructor(scene, terrainNode, geoLocation, options = {}) {
@@ -62,41 +63,6 @@ class QuadTreeMapTexture extends QuadTreeMap {
     }
 
 
-    // generate the geometry for all tiles in the tile cache
-    // note this does not load the textures, just generates the geometry
-    // so initially we get wireframe tiles
-    generateTileGeometry() {
-        Object.values(this.tileCache).forEach(tile => {
-            tile.buildGeometry()
-            tile.buildMesh()
-            tile.setPosition(this.center)
-            tile.recalculateCurve(wgs84.RADIUS)
-            this.scene.add(tile.mesh)
-            tile.active = true; // mark the tile as active
-        })
-    }
-
-
-    // startLoadingTiles() {
-    //
-    //     // for each tile call applyMaterial
-    //     // that will asynchronously fetch the map tile then apply the material to the mesh
-    //
-    //     Object.values(this.tileCache).forEach(tile => {
-    //         tile.applyMaterial()
-    //     })
-    //
-    //     // not really loaded, this is a patch.
-    //     // really would need to collate the promises from applyMaterial and then await them.
-    //     if (this.loadedCallback) {
-    //         // wait a loop and call the callback
-    //         setTimeout(() => {
-    //             this.loadedCallback();
-    //             this.loaded = true;
-    //         }, 0) // execute after the current event loop
-    //     }
-    // }
-
     recalculateCurveMap(radius, force = false) {
 
         if (!force && radius == this.radius) {
@@ -112,6 +78,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         Object.values(this.tileCache).forEach(tile => {
             tile.recalculateCurve(radius)
         })
+        setRenderOne(true);
     }
 
 
@@ -158,13 +125,13 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
 
     deactivateTile(x, y, z, instant = false) {
+
         const key = `${z}/${x}/${y}`;
         let tile = this.tileCache[key];
         if (tile === undefined) {
             return;
         }
         if (tile.active) {
-//      console.log("Deactivating tile", key, "from cache");
             tile.active = false; // mark the tile as inactive
 
             if (instant) {
@@ -182,6 +149,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
     activateTile(x, y, z) {
         const key = `${z}/${x}/${y}`;
         let tile = this.tileCache[key];
+
         if (tile) {
             if (tile.active) {
                 // tile is already activated, do nothing
@@ -189,10 +157,12 @@ class QuadTreeMapTexture extends QuadTreeMap {
             }
             // tile already exists, just activate it
             // maybe later rebuild a mesh if we unloaded it
-//      console.log("Activating tile", key, "already exists in cache");
+
+            // console.log("Activating tile", key, "already exists in cache");
             this.scene.add(tile.mesh); // add the mesh to the scene
             tile.added = true; // mark the tile as added to the scene
             this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
+            setRenderOne(true);
         } else {
             // create a new tile
 //        console.log("Creating new tile", key);
@@ -223,7 +193,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // Track this tile's loading promise
             this.trackTileLoading(key, materialPromise);
             this.refreshDebugGeometry(tile);
-
+            setRenderOne(true);
 
         }
 
