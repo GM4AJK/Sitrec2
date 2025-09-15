@@ -980,6 +980,10 @@ export class CCustomManager {
             // like the CSwitches turning off if they are not used
             // which they don't know immediately
             NodeMan.recalculateAllRootFirst()
+
+            // and we do it twice as sometimes there's initialization ordering issues
+            // like the Tracking overlay depending on the FOV, but coming before the lookCamera
+            NodeMan.recalculateAllRootFirst()
             setRenderOne(3);
 
         })
