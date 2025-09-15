@@ -15,8 +15,8 @@ export class CVideoData {
         this.frames *= this.videoSpeed;
 
         // just give some defaults. actual images will override
-        this.width = 100
-        this.height = 100
+        this.videoWidth = 100
+        this.videoHeight = 100
 
         this.flushEntireCache();
 

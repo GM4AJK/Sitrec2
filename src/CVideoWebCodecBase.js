@@ -108,15 +108,16 @@ export class CVideoWebCodecBase extends CVideoData {
             }
 
             this.imageCache[frameNumber] = image;
-            this.width = image.width;
-            this.height = image.height;
-            this.imageWidth = image.width;
-            this.imageHeight = image.height;
+            if (this.videoWidth !== image.width || this.videoHeight !== image.height) {
+                console.log("New per-frame video dimensions detected: width=" + image.width + ", height=" + image.height);
+                this.videoWidth = image.width;
+                this.videoHeight = image.height;
+            }
 
             if (this.c_tmp === undefined) {
                 this.c_tmp = document.createElement("canvas");
-                this.c_tmp.setAttribute("width", this.width);
-                this.c_tmp.setAttribute("height", this.height);
+                this.c_tmp.setAttribute("width", this.videoWidth);
+                this.c_tmp.setAttribute("height", this.videoHeight);
                 this.ctx_tmp = this.c_tmp.getContext("2d");
             }
 
@@ -418,7 +419,7 @@ export class CVideoWebCodecBase extends CVideoData {
     }
 
     createBlankFrame() {
-        if (!this.width || !this.height) {
+        if (!this.videoWidth || !this.videoHeight) {
             const tempCanvas = document.createElement('canvas');
             tempCanvas.width = 1; 
             tempCanvas.height = 1;
@@ -428,16 +429,33 @@ export class CVideoWebCodecBase extends CVideoData {
             return tempCanvas;
         }
 
+        // if the desired dimensions of the blank frame haven't changed, just return it
+        // but if they have, dispose of it, so it gets recreated
+         if (this.blankFrame &&
+             (this.blankFrame.width !== this.videoWidth ||
+            this.blankFrame.height !== this.videoHeight)) {
+            // // Dispose of old blank frame, which is a canvas attached to the DOM (WHY?)
+            // // or a an image bitmap created from a canvas (surely this)
+            if (this.blankFrame instanceof HTMLCanvasElement) {
+                this.blankFrame.remove();
+            } else if (this.blankFrame instanceof ImageBitmap) {
+                this.blankFrame.close();
+            }
+           this.blankFrame = null;
+
+         }
+
+
         if (!this.blankFrame) {
             // Create a blank canvas with video dimensions
             const canvas = document.createElement('canvas');
-            canvas.width = this.width;
-            canvas.height = this.height;
+            canvas.width = this.videoWidth;
+            canvas.height = this.videoHeight;
             const ctx = canvas.getContext('2d');
 
             // Fill with black
             ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, this.width, this.height);
+            ctx.fillRect(0, 0, this.videoWidth, this.videoHeight);
 
             // Convert to ImageBitmap for consistency with decoded frames
             createImageBitmap(canvas).then(bitmap => {
@@ -448,7 +466,7 @@ export class CVideoWebCodecBase extends CVideoData {
                 this.blankFrame = canvas;
             });
 
-            // Return canvas immediately while ImageBitmap is being created
+            // Return canvas immediately while ImageBitmap is being created (HUH?)
             return canvas;
         }
 
@@ -482,7 +500,7 @@ export class CVideoWebCodecBase extends CVideoData {
             const configInfo = this.getDebugConfigInfo();
             d += configInfo + "<br>";
             
-            d += "CVideoView: " + this.width + "x" + this.height + "<br>";
+            d += "CVideoView: " + this.videoWidth + "x" + this.videoHeight + "<br>";
             d += "par.frame = " + par.frame + ", Sit.frames = " + Sit.frames + ", chunks = " + this.chunks.length + "<br>";
             d += this.lastDecodeInfo;
             d += "Decode Queue Size = " + this.decoder.decodeQueueSize + " State = " + this.decoder.state + "<br>";
@@ -530,7 +548,7 @@ export class CVideoWebCodecBase extends CVideoData {
      */
     getDebugConfigInfo() {
         const fps = Sit.fps ? ` @ ${Sit.fps}fps` : '';
-        return "Config: Codec: " + this.config.codec + "  format:" + this.format + " " + (this.imageWidth || this.width) + "x" + (this.imageHeight || this.height) + fps;
+        return "Config: Codec: " + this.config.codec + "  format:" + this.format + " " + this.videoWidth + "x" + this.videoHeight + fps;
     }
 
     /**

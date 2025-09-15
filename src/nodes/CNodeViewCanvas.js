@@ -2,7 +2,7 @@
 // we use this for the CNodeViewUI and the (upcoming) CNodeVideoView
 // passing in an "overlayView" parameter will attache
 import {CNodeView} from "./CNodeView";
-import {gui, guiMenus} from "../Globals";
+import {guiMenus} from "../Globals";
 import {CNodeGUIValue} from "./CNodeGUIValue";
 
 
@@ -111,7 +111,7 @@ export class CNodeViewCanvas extends CNodeView {
             // this.canvas.style.height =  ((this.div.clientHeight/height)*100)+'%'; // Stretch to fill the parent div
 
             // console.log("this.div.clientWidth,Height", this.div.clientWidth +","+this.div.clientHeight)
-            // console.log("Canvas resized to ", width, height, this.canvas.style.width, this.canvas.style.height + "from " + oldWidth + "," + oldHeight);
+            console.log("Canvas resized to ", width, height, this.canvas.style.width, this.canvas.style.height + "from " + oldWidth + "," + oldHeight);
 
             // bit of a patch to redraw the editor/graph, as resizing clears
             if (this.editor) {

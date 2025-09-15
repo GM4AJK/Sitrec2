@@ -190,12 +190,12 @@ export class CVideoWebCodecData extends CVideoData {
 //                console.log(frameNumber+ " Timestamp: "+frame.timestamp)
                 createImageBitmap(videoFrame).then(image => {
                     this.imageCache[frameNumber] = image
-                    this.width = image.width;
-                    this.height = image.height;
+                    this.videoWidth = image.width;
+                    this.videoHeight = image.height;
                     if (this.c_tmp === undefined) {
                         this.c_tmp = document.createElement("canvas")
-                        this.c_tmp.setAttribute("width", this.width)
-                        this.c_tmp.setAttribute("height", this.height)
+                        this.c_tmp.setAttribute("width", this.videoWidth)
+                        this.c_tmp.setAttribute("height", this.videoHeight)
                         this.ctx_tmp = this.c_tmp.getContext("2d")
                     }
 
@@ -433,7 +433,7 @@ export class CVideoWebCodecData extends CVideoData {
         if (this.config !== undefined) {
             const fps = Sit.fps ? ` @ ${Sit.fps}fps` : '';
             d += "Config: Codec: " + this.config.codec + "  format:" + this.format + " " + this.config.codedWidth + "x" + this.config.codedHeight + fps + "<br>";
-            d += "CVideoView: " + this.width + "x" + this.height + "<br>";
+            d += "CVideoView: " + this.videoWidth + "x" + this.videoHeight + "<br>";
             d += "par.frame = " + par.frame + ", Sit.frames = " + Sit.frames + ", chunks = " + this.chunks.length + "<br>";
             d += this.lastDecodeInfo;
             d += "Decode Queue Size = " + this.decoder.decodeQueueSize + " State = " + this.decoder.state + "<br>";
@@ -553,7 +553,7 @@ export class CVideoWebCodecData extends CVideoData {
     updateYUVFilter(frameNumber) {
         const image = this.imageCache[frameNumber]
         const YUV = this.frameCache[frameNumber]
-        const len = this.width * this.height
+        const len = this.videoWidth * this.videoHeight
         if (image && YUV) {
             var newData = new Uint8ClampedArray(len * 4)
             for (let i = 0; i < len; i++) {
@@ -561,9 +561,9 @@ export class CVideoWebCodecData extends CVideoData {
 
                 // calculate offset of the CbCr byte pair (one per 2x2 pixels)
                 // TODO: the row stride might differ for odd dimension videos
-                var row = Math.floor(i / this.width)
-                var col = (i % this.width) & 0xfffffffe
-                let uvOffset = len + this.width * (row >> 1) + col
+                var row = Math.floor(i / this.videoWidth)
+                var col = (i % this.videoWidth) & 0xfffffffe
+                let uvOffset = len + this.videoWidth * (row >> 1) + col
 
                 // this is the YCbCr to RGB conversion matrix.
                 // for BT.709 HDTV
@@ -596,7 +596,7 @@ export class CVideoWebCodecData extends CVideoData {
             }
 
             // creating an ImageData isn't that slow
-            var newImageData = new ImageData(newData, this.width, this.height)
+            var newImageData = new ImageData(newData, this.videoWidth, this.videoHeight)
 
             const localFrameNumber = frameNumber;
             createImageBitmap(newImageData).then(
@@ -620,7 +620,7 @@ export class CVideoWebCodecData extends CVideoData {
                 // i.e. we have the usable images in this.imageCache
                 // and the ImageData version in this.imageDataCache
                 this.ctx_tmp.drawImage(image, 0, 0)
-                const imageData = this.ctx_tmp.getImageData(0, 0, this.width, this.height)
+                const imageData = this.ctx_tmp.getImageData(0, 0, this.videoWidth, this.videoHeight)
                 this.imageDataCache[frameNumber] = imageData
             }
 

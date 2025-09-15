@@ -28,8 +28,6 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.autoFill = v.autoFill ?? true; // default to autofill
         this.shiftDrag = true;
 
-        this.imageWidth = 0;
-        this.imageHeight = 0;
         this.scrubFrame = 0; // storing fractiona accumulation of frames while scrubbing
 
         this.autoClear = (v.autoClear !== undefined)? v.autoClear : false;
@@ -54,6 +52,14 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         }
 
 
+    }
+
+    get videoWidth() {
+        return this.videoData?.videoWidth || 0;
+    }
+
+    get videoHeight() {
+        return this.videoData?.videoHeight || 0;
     }
 
     newVideo(fileName, clearFrames = true) {
@@ -117,11 +123,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
         assert (videoData, "CNodeVideoView loadedCallback called with no videoData, possibly because it's called in the constructor before the this.videoData is assigned");
 
-        // Setting image Width and Height
-        // this will get overwritten later if the frames decode to a different size
-        // however this should be the correct size for the video now
-        this.imageWidth = videoData.imageWidth;
-        this.imageHeight = videoData.imageHeight;
+        console.log("🍿🍿🍿Video loaded, width=" + this.videoWidth + ", height=" + this.videoHeight);
 
         // if we loaded from a mod or custom
         // then we might want to set the frame nubmer
@@ -283,11 +285,11 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
            //  ctx.fillstyle = "#FF00FFFF"
            //  ctx.fillRect(0, 0, this.canvas.width/3, this.canvas.height);
 
-            // image width might change, for example, with the tiny images used by the old Gimbal video
-            if (this.imageWidth !== image.width) {
-          //      console.log("Image width changed from " + this.imageWidth + " to " + image.width)
-                this.imageWidth = image.width;
-                this.imageHeight = image.height;
+            // video width might change, for example, with the tiny images used by the old Gimbal video
+            if (this.videoWidth !== image.width) {
+                console.log("🍿🍿🍿Video width changed from " + this.videoWidth + " to " + image.width)
+                this.videoData.videoWidth = image.width;
+                this.videoData.videoHeight = image.height;
             }
 
             if (!this.positioned) {
@@ -311,8 +313,8 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
 
             if (filter != "") ctx.filter = filter;
 
-            const sourceW = this.imageWidth;
-            const sourceH = this.imageHeight
+            const sourceW = this.videoWidth;
+            const sourceH = this.videoHeight
             // rendering fill the view in at least one direction
             const aspectSource = sourceW / sourceH
             const aspectView = this.widthPx / this.heightPx
@@ -329,7 +331,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
                 // Here the zoom is being controlled by zoomView
                 // which zooming in and out around the mouse
                 ctx.drawImage(image,
-                    0, 0, this.imageWidth, this.imageHeight,
+                    0, 0, this.videoWidth, this.videoHeight,
                     this.widthPx*(0.5+this.posLeft), this.heightPx*0.5+this.widthPx*this.posTop,
                     this.widthPx*(this.posRight-this.posLeft), this.widthPx*(this.posBot-this.posTop))
                 ctx.imageSmoothingEnabled = true;
@@ -368,8 +370,8 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     }
 
     defaultPosition() {
-        const sourceW = this.imageWidth;
-        const sourceH = this.imageHeight
+        const sourceW = this.videoWidth;
+        const sourceH = this.videoHeight
         // rendering fill the view in at least one direction
         const aspectSource = sourceW / sourceH
         const aspectView = this.widthPx / this.heightPx
@@ -401,12 +403,9 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
     getSourceAndDestCoords() {
         assert(this.in.zoom !== undefined, "canvasToVideoCoords requires zoom input to be defined");
 
-//        assert(this.imageWidth > 0 && this.imageHeight > 0, "canvasToVideoCoords requires imageWidth and imageHeight to be set, this="+this.id);
-
-
-        // imageWidth and imageHeight are the original video dimensions
-        let sourceW = this.imageWidth;
-        let sourceH = this.imageHeight
+        // videoWidth and videoHeight are the original video dimensions
+        let sourceW = this.videoWidth;
+        let sourceH = this.videoHeight
 
         if (sourceW <= 0 || sourceH <= 0) {
             // if the sourceW or sourceH is not set, then we can't calculate the coordinates correctly

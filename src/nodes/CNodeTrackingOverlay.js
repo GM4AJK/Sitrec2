@@ -129,7 +129,12 @@ export class CNodeActiveOverlay extends CNodeViewUI {
         this.draggable  = []
 
         EventManager.addEventListener("videoLoaded", (data) => {
+            Globals.debugRecalculate = true
+            console.error("VIDEO LOADED EVENT - START RECALCULATE")
+          //  this.visible = true;
            this.recalculateCascade();
+            console.error("VIDEO LOADED EVENT - END RECALCULATE")
+            Globals.debugRecalculate = false;
            return true;
         });
 
@@ -737,7 +742,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
     modDeserialize(v) {
         this.draggable = [];
-       // super.modDeserialize(v);
+     //   super.modDeserialize(v);
         this.keyframes = v.keyframes.map(k => {
             const newKeyframe = this.add(new CNodeVideoTrackKeyframe({
                 view: this,

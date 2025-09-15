@@ -220,6 +220,8 @@ export class CCustomManager {
 
            }
 
+           NodeMan.recalculateAllRootFirst();
+
 
 
         });

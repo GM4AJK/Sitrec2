@@ -405,8 +405,8 @@ export class CVideoH264Data extends CVideoWebCodecBase {
 
             EventManager.dispatchEvent("videoLoaded", {
                 videoData: this,
-                width: this.imageWidth,
-                height: this.imageHeight
+                width: this.videoWidth,
+                height: this.videoHeight
             });
 
         } catch (error) {

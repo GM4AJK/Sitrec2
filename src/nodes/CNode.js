@@ -730,8 +730,13 @@ class CNode {
         if (Globals.debugRecalculate)
             console.log("|---".repeat(depth) + " Root Recalculating:  " + this.constructor.name +": " +  this.id + " frame " + f)
 
+        if (!this.visible) {
+            console.error("Trying to recalculateCascade invisible node. This will fail as recalculateNodesBreadthFirst " +
+                "calls markMaximumVisibleDepth, which will mark it's depth as -1")
+        }
+
         let listOfOne = [this]
-        recalculateNodesBreadthFirst(listOfOne, f, noControllers, depth)
+        recalculateNodesBreadthFirst(listOfOne, f, noControllers, depth, Globals.debugRecalculate)
         // bit of a patch - whenever we do a recalculateCascade we make sure we render one frame
         // so any changes are reflected in the display
         setRenderOne(true);

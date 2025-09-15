@@ -124,9 +124,12 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
 //            offscreen.height = config.codedHeight;
 //            offscreen.width = config.codedWidth;
 
-            // image width and height are needed for things like the video tracking overlay
-            this.imageWidth = config.codedWidth;
-            this.imageHeight = config.codedHeight;
+            // video width and height are needed for things like the video tracking overlay
+            // it's set for the Image objects created below, but at the start we use the config
+            this.videoWidth = config.codedWidth;
+            this.videoHeight = config.codedHeight;
+
+            console.log("🍿Setting Video width and height to ", config.codedWidth, "x", config.codedHeight )
 
             this.config = config;
             this.decoder.configure(config);
@@ -185,6 +188,7 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
 
             this.loadedCallback();
 
+            console.log("🍿🍿🍿Dispatching videoLoaded event")
             EventManager.dispatchEvent("videoLoaded", {videoData: this, width: config.codedWidth, height: config.codedHeight});
 
         });

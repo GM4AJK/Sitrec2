@@ -8,12 +8,8 @@ export class CVideoImageData extends CVideoData {
         assert(v.img, "CVideoImageData: img is undefined");
         this.img = v.img
 
-        // what are these used for
-        // this.width = this.img.width;
-        // this.height = this.img.height;
-
-        this.imageWidth = this.img.width;
-        this.imageHeight = this.img.height;
+        this.videoWidth = this.img.width;
+        this.videoHeight = this.img.height;
 
         this.filename = v.filename;
         this.deleteAfterUsing = v.deleteAfterUsing ?? true;
