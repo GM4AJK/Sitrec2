@@ -89,7 +89,7 @@ export class CCustomManager {
             .tooltip("Remove all tracks from the scene\nThis will not remove the objects, just the tracks\nYou can add them back later by dragging and dropping the files again")
 
 
-        guiMenus.physics.add(this, "calculateBestPairs").name("Calculate Best Pairs");
+       // guiMenus.physics.add(this, "calculateBestPairs").name("Calculate Best Pairs");
 
 
         if (Globals.objectScale === undefined)
