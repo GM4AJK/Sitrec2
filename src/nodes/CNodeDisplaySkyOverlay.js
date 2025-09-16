@@ -21,8 +21,11 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
         this.showSatelliteNames = false;
         this.showStarNames = false;
 
+        const gui = v.gui ?? guiShowHide;
+
+
         //    guiShowHide.add(this,"showSatelliteNames" ).onChange(()=>{setRenderOne(true);}).name(this.overlayView.id+" Sat names")
-        guiShowHide.add(this, "showStarNames").onChange(() => {
+        gui.add(this, "showStarNames").onChange(() => {
             setRenderOne(true);
         }).name(this.overlayView.id + " Star names").listen();
         this.addSimpleSerial("showStarNames");

@@ -156,8 +156,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.mainCamera = NodeMan.get("mainCamera").camera;
         assert(this.mainCamera, "CNodeDisplayNightSky needs a main camera")
 
-//        const satGUI = guiShowHide.addFolder("Satellites");
-
         satGUI.add(this,"updateLEOSats").name("Load LEO Satellites For Date")
             .onChange(function (x) {this.parent.close()})
             .tooltip("Get the latest LEO Satellite TLE data for the current simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky.")
@@ -194,6 +192,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             .tooltip("When glare is detected, show arrows from camera to satellite, and then satellite to sun")
         this.addSimpleSerial("showSunArrows")
 
+        this.celestialGUI = guiShowHide.addFolder("Celestial").close().tooltip("night sky related things");
 
         this.addCelestialArrow("Venus")
         this.addCelestialArrow("Mars")
@@ -201,6 +200,19 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.addCelestialArrow("Saturn")
         this.addCelestialArrow("Sun")
         this.addCelestialArrow("Moon")
+
+        this.celestialArrowsOnTraverse = false;
+        this.celestialGUI.add(this, "celestialArrowsOnTraverse")
+            .listen()
+            .onChange((x)=>{
+                if (x) {
+                    this.updateCelestialArrowsTo("traverseObject")
+                } else {
+                    this.updateCelestialArrowsTo("lookCamera")
+                }
+            })
+            .name("Celestial Vectors On Traverse")
+            .tooltip("If checked, the vectors are shown relative to the traverse object. Otherwise they are shown relative to the look camera.");
 
 
         this.flareRegionGroup = new Group();
@@ -398,7 +410,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.showEquatorialGrid = (v.showEquatorialGrid !== undefined) ? v.showEquatorialGrid : true;
 
 
-        guiShowHide.add(this,"showEquatorialGrid" ).listen().onChange(()=>{
+        this.celestialGUI.add(this,"showEquatorialGrid" ).listen().onChange(()=>{
             setRenderOne(true);
             this.updateVis()
         }).name("Equatorial Grid")
@@ -408,7 +420,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.constellationsGroup = new Group();
         this.celestialSphere.add(this.constellationsGroup);
         this.showConstellations = (v.showConstellations !== undefined) ? v.showConstellations : true;
-        guiShowHide.add(this,"showConstellations" ).listen().onChange(()=>{
+        this.celestialGUI.add(this,"showConstellations" ).listen().onChange(()=>{
             setRenderOne(true);
             this.updateVis()
         }).name("Constellation Lines")
@@ -423,14 +435,16 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.celestialSphere.layers.enable(LAYER.LOOK);  // probably not needed
         propagateLayerMaskObject(this.celestialSphere)
 
-        this.useDayNight = (v.useDayNight !== undefined) ? v.useDayNight : true;
-        guiShowHide.add(this,"useDayNight" ).listen().onChange(()=>{
-            setRenderOne(true);
-        }).name("Day/Night Sky")
+
+        // Not longer used?
+        // this.useDayNight = (v.useDayNight !== undefined) ? v.useDayNight : true;
+        // guiShowHide.add(this,"useDayNight" ).listen().onChange(()=>{
+        //     setRenderOne(true);
+        // }).name("Day/Night Sky")
 
 
         this.showEquatorialGridLook = (v.showEquatorialGridLook !== undefined) ? v.showEquatorialGridLook : true;
-        guiShowHide.add(this,"showEquatorialGridLook" ).listen().onChange(()=>{
+        this.celestialGUI.add(this,"showEquatorialGridLook" ).listen().onChange(()=>{
             setRenderOne(true);
             this.updateVis()
 
@@ -439,7 +453,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // same for the flare region
         this.showFlareRegionLook =  false;
-        guiShowHide.add(this,"showFlareRegionLook" ).listen().onChange(()=>{
+        satGUI.add(this,"showFlareRegionLook" ).listen().onChange(()=>{
             if (this.showFlareRegionLook) {
                 this.flareRegionGroup.layers.mask=LAYER.MASK_LOOKRENDER;
             } else {
@@ -523,11 +537,25 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         })
 
 
-        guiShowHide.add(this, flagName).listen().onChange(()=>{
+        this.celestialGUI.add(this, flagName).listen().onChange(()=>{
             setRenderOne(true);
             this[groupName].show(this[flagName]);
         }).name(name+" Vector");
         this.addSimpleSerial(flagName)
+    }
+
+    // Update all celestial arrows to use a new start object
+    updateCelestialArrowsTo(startObject) {
+        const celestialObjects = ["Venus", "Mars", "Jupiter", "Saturn", "Sun", "Moon"];
+        
+        celestialObjects.forEach(name => {
+            const obName = name + "ArrowOb";
+            if (this[obName]) {
+                // Remove the old input connection and add the new one
+                this[obName].removeInput("start");
+                this[obName].addInput("start", startObject);
+            }
+        });
     }
 
 
@@ -2914,6 +2942,7 @@ export function addNightSky(def) {
                 overlayView: view,
                 camera: view.camera,
                 nightSky: nightSky,
+                gui: nightSky.celestialGUI,
             });
         }
     })
