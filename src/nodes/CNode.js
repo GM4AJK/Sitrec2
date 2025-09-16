@@ -731,7 +731,7 @@ class CNode {
             console.log("|---".repeat(depth) + " Root Recalculating:  " + this.constructor.name +": " +  this.id + " frame " + f)
 
         if (!this.visible) {
-            console.error("Trying to recalculateCascade invisible node. This will fail as recalculateNodesBreadthFirst " +
+            console.error("Trying to recalculateCascade invisible node. ("+ this.constructor.name +": " + this.id +  ") This will fail as recalculateNodesBreadthFirst " +
                 "calls markMaximumVisibleDepth, which will mark it's depth as -1")
         }
 

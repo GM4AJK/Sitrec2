@@ -9,7 +9,6 @@ import {radians} from "../utils";
 import {extractFOV} from "./CNodeControllerVarious";
 import {mouseToCanvas} from "../ViewUtils";
 import {CNodeVideoView} from "./CNodeVideoView";
-import {EventManager} from "../CEventManager";
 
 /*
     the intent of a tracking overlay is to track point on a video
@@ -127,17 +126,6 @@ export class CNodeActiveOverlay extends CNodeViewUI {
         assert(this.overlayView instanceof CNodeVideoView, "CNodeActiveOverlay:overlayView is not an instance of CNodeVideoView, this should be set in the constructor of the derived class")
 
         this.draggable  = []
-
-        EventManager.addEventListener("videoLoaded", (data) => {
-            Globals.debugRecalculate = true
-            console.error("VIDEO LOADED EVENT - START RECALCULATE")
-          //  this.visible = true;
-           this.recalculateCascade();
-            console.error("VIDEO LOADED EVENT - END RECALCULATE")
-            Globals.debugRecalculate = false;
-           return true;
-        });
-
 
     }
 
