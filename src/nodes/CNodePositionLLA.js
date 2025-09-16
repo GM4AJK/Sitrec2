@@ -16,6 +16,7 @@ import {ViewMan} from "../CViewManager";
 import {EventManager} from "../CEventManager";
 import {guiMenus, NodeMan, setSitchEstablished, Sit} from "../Globals";
 import {getApproximateLocationFromIP} from "../GeoLocation";
+import {customAltitudeFunction, customLocationFunction} from "../../config/config";
 
 export class CNodePositionLLA extends CNode {
     constructor(v) {
@@ -121,70 +122,61 @@ export class CNodePositionLLA extends CNode {
                     this.recalculateCascade()
                 }).listen();
 
+
+
                 this.lookupString = "";
-               gui.add(this, "lookupString").name("Lookup").onFinishChange(() => {
-                    // given a string like "Sacramento, CA"
-                    // fetch the lat, lon, alt from Nominatim
-                    if (this.lookupString.length > 0) {
-                        const url = "https://nominatim.openstreetmap.org/search?format=json&limit=1&q=" + encodeURIComponent(this.lookupString);
-                        fetch(url)
-                            .then(response => response.json())
-                            .then(data => {
-                                if (data.length > 0) {
-                                    const item = data[0];
-                                    this.guiLat.value = parseFloat(item.lat);
-                                    this.guiLon.value = parseFloat(item.lon);
-                                    this._LLA[0] = this.guiLat.value;
-                                    this._LLA[1] = this.guiLon.value;
-                                    // set the altitude to 0
+
+                if (customLocationFunction !== undefined) {
+                    gui.add(this, "lookupString").name("Lookup").onFinishChange(async () => {
+                        // given a string like "Sacramento, CA"
+                        // use the configurable location and altitude functions
+                        if (this.lookupString.length > 0) {
+                            try {
+                                // First, get the location using the configurable function
+                                const location = await customLocationFunction(this.lookupString);
+
+                                if (location) {
+                                    const [lat, lon] = location;
+                                    this.guiLat.value = lat;
+                                    this.guiLon.value = lon;
+                                    this._LLA[0] = lat;
+                                    this._LLA[1] = lon;
+                                    // set the altitude to 0 initially
                                     this._LLA[2] = 0;
-                                    this.guiAlt.setValueWithUnits(this._LLA[2], "metric", "small", true)
+                                    this.guiAlt.setValueWithUnits(this._LLA[2], "metric", "small", true);
                                     this.recalculateCascade();
-                                    EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id})
+                                    EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id});
 
+                                    // Then, get the altitude using the configurable function
+                                    const altitude = await customAltitudeFunction(lat, lon);
+                                    if (altitude > 0) {
+                                        this._LLA[2] = altitude;
+                                        this.guiAlt.setValueWithUnits(this._LLA[2], "metric", "small", true);
+                                        this.recalculateCascade();
+                                    } else {
+                                        console.warn("No elevation data found for " + this.lookupString);
+                                    }
 
-                                    // try to get the altitude from Open-Metro
-                                    const altUrl = `https://api.open-meteo.com/v1/elevation?latitude=${this.guiLat.value}&longitude=${this.guiLon.value}`;
-                                    fetch(altUrl)
-                                        .then(response => response.json())
-                                        .then(altData => {
-                                            if (altData.elevation !== undefined) {
-                                                // add 2m to the elevation, as we want to be above ground
-                                                this._LLA[2] = altData.elevation[0] + 2; // add 2m to the elevation
-                                                this.guiAlt.setValueWithUnits(this._LLA[2], "metric", "small", true);
-                                                this.recalculateCascade();
+                                    this.goTo();
+                                    EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id});
 
-
-                                            } else {
-                                                console.warn("No elevation data found for " + this.lookupString);
-                                            }
-
-                                            this.goTo();
-
-                                            EventManager.dispatchEvent("PositionLLA.onChange", {id: this.id})
-
-                                            if (NodeMan.exists("terrainUI")) {
-                                                const terrainUI = NodeMan.get("terrainUI")
-                                                terrainUI.lat = this._LLA[0]
-                                                terrainUI.lon = this._LLA[1]
-                                                terrainUI.flagForRecalculation();
-                                                terrainUI.startLoading = true;
-
-                                            }
-
-                                        })
-                                        .catch(error => console.error("Error fetching elevation: ", error));
-
-
-
-
+                                    if (NodeMan.exists("terrainUI")) {
+                                        const terrainUI = NodeMan.get("terrainUI");
+                                        terrainUI.lat = this._LLA[0];
+                                        terrainUI.lon = this._LLA[1];
+                                        terrainUI.flagForRecalculation();
+                                        terrainUI.startLoading = true;
+                                    }
                                 } else {
                                     alert("No results found for " + this.lookupString);
                                 }
-                            })
-                            .catch(error => console.error("Error fetching location: ", error));
-                    }
-                });
+                            } catch (error) {
+                                console.error("Error during lookup: ", error);
+                                alert("Error during lookup: " + error.message);
+                            }
+                        }
+                    });
+                }
 
                // geolocate from browse
                 gui.add(this, "geolocate").name("Geolocate from browser")

@@ -436,7 +436,7 @@ export class QuadTreeTile {
         
         if (!elevationTile || !elevationTile.elevation) {
             // No elevation tile found at any zoom level, fall back to old method
-            console.warn(`No elevation tile found for ${this.key()} at any zoom level, falling back to interpolated method`);
+//            console.warn(`No elevation tile found for ${this.key()} at any zoom level, falling back to interpolated method`);
             return this.recalculateCurveOld(radius);
         }
 
