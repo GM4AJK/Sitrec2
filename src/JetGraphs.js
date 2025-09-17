@@ -474,7 +474,7 @@ export function AddValueGraph(v) {
             compare: new CNodeGraphSeries({
                 // Munge node to convert a traverse track to altitude
                 source: source,
-                name: "yLabel",
+                name: yLabel+id,
                 //     min: 20000, max: 26000,
                 color: "#008000",
             })

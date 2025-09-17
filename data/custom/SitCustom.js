@@ -805,6 +805,18 @@ sitch = {
         left: 0.25, top:0, width: .15, height:-1,
     },
 
+    elFromLOS: {kind: "ElFromLOS", LOS: "JetLOSCameraCenter", useRecorded: false, checkDisplayOutputs: true},
+
+    elValueGraph: { kind: "valueGraph",
+        visible: false,
+        label: "Camera El",
+        source: "azFromLOS",
+        title: "Camera Elevation",
+        min:-90, max:90,
+        yStep: 10,
+        left: 0.25, top:.20, width: .15, height:-1,
+    },
+
     speedGraphForCamera: { kind: "speedGraph",
         visible: false,
         label: "Camera Speed",

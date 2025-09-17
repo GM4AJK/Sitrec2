@@ -88,3 +88,28 @@ export class CNodeAzFromLOS extends CNodeEmptyArray {
     }
 
 }
+
+
+export class CNodeElFromLOS extends CNodeEmptyArray {
+    constructor(v) {
+        super(v);
+        this.input("LOS");
+        this.recalculate()
+    }
+
+    recalculate() {
+        this.array = [];
+        this.frames = this.in.LOS.frames
+
+        for (let f = 0; f < this.frames; f++) {
+            const los = this.in.LOS.v(f)
+            const start = los.position.clone();
+            const heading = los.heading.clone();
+
+            const [az, el] = getAzElFromPositionAndForward(start, heading)
+
+            this.array.push(el)
+        }
+    }
+
+}
