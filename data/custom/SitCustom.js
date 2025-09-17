@@ -810,7 +810,7 @@ sitch = {
     elValueGraph: { kind: "valueGraph",
         visible: false,
         label: "Camera El",
-        source: "azFromLOS",
+        source: "elFromLOS",
         title: "Camera Elevation",
         min:-90, max:90,
         yStep: 10,
