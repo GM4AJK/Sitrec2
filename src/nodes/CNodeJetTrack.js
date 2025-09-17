@@ -107,9 +107,6 @@ export class CNodeJetTrack extends CNodeTrack {
                 jetHeading += turnRate / Sit.fps
             }
 
-
-            console.log(`jetHeading ${jetHeading}, turnRate ${turnRate}, jetSpeed ${jetSpeed}, jetPos ${jetPos}`)
-
         }
         assert(this.frames == this.array.length, "frames length mismatch");
     }
