@@ -174,6 +174,8 @@ export class CNodeFrameSlider extends CNode {
         this.sliderInput.style.left = '0';
         this.sliderInput.style.width = '100%';
         this.sliderInput.style.height = '100%';
+        this.sliderInput.style.outline = 'none'; // Remove focus outline
+        this.sliderInput.tabIndex = -1; // Prevent keyboard focus
         this.sliderInput.min = "0";
         this.sliderInput.max = "100"; // Initial max, can be updated later
         this.sliderInput.value = "0";
