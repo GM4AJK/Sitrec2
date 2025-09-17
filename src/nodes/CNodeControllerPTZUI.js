@@ -159,6 +159,8 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
 export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
     constructor(v) {
         super(v);
+        this.input("azSmooth",true);
+        this.input("elSmooth", true);
         this.fallback = NodeMan.get(v.fallback);
         this.frames = Sit.frames;
         this.useSitFrames = true;
@@ -189,16 +191,19 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
 
     recalculate() {
 
+        const azSmooth = this.in.azSmooth ? this.in.azSmooth.v0 : 200;
+        const elSmooth = this.in.elSmooth ? this.in.elSmooth.v0 : 200;
+
         if (this.azFile !== undefined) {
             assert(this.frames = Sit.frames, "CNodeControllerCustomAzEl: frames not set right");
             this.azArrayRaw = ExpandKeyframes(this.azFile, this.frames, 0, this.azCol);
-            this.azArray = RollingAverage(this.azArrayRaw, 200);
+            this.azArray = RollingAverage(this.azArrayRaw, azSmooth);
         }
 
         if (this.elFile !== undefined) {
             assert(this.frames = Sit.frames, "CNodeControllerCustomAzEl: frames not set right");
             this.elArrayRaw = ExpandKeyframes(this.elFile, this.frames, 0, this.elCol);
-            this.elArray = RollingAverage(this.elArrayRaw, 200);
+            this.elArray = RollingAverage(this.elArrayRaw, elSmooth);
         }
 
     }
@@ -233,6 +238,7 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
 export class CNodeControllerCustomHeading extends CNodeController {
     constructor(v) {
         super(v);
+        this.input("headingSmooth", true);
         this.fallback = NodeMan.get(v.fallback);
         this.frames = Sit.frames;
         this.useSitFrames = true;
@@ -247,12 +253,12 @@ export class CNodeControllerCustomHeading extends CNodeController {
     }
 
     recalculate() {
+        const headingSmooth = this.in.headingSmooth ? this.in.headingSmooth.v0 : 200;
+
         if (this.headingFile !== undefined) {
             assert(this.frames = Sit.frames, "CNodeControllerCustomHeading: frames not set right");
             this.headingArrayRaw = ExpandKeyframes(this.headingFile, this.frames, 0, this.headingCol);
-
-            // TODO: heading smoothing should be configurable, 200 is quite a bit
-            this.headingArray = RollingAverage(this.headingArrayRaw, 200);
+            this.headingArray = RollingAverage(this.headingArrayRaw, headingSmooth);
         }
     }
 

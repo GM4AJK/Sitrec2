@@ -339,9 +339,21 @@ sitch = {
 
     jetHeadingManual: {kind: "GUIValue", value: 0, start: 0, end: 360, step: 0.1, desc: "Jet Heading", gui: "physics"},
 
+    customHeadingSmooth: {
+        kind: "GUIValue",
+        desc: "Heading Smooth",
+        value: 20,
+        start: 0,
+        end: 200,
+        step: 1,
+        tip: "Smooth custom Heading",
+        gui: "physics",
+    },
+
     customHeadingController: {
         kind: "CustomHeading",
-        fallback: "jetHeadingManual"
+        fallback: "jetHeadingManual",
+        headingSmooth: "customHeadingSmooth"
     },
 
     // jetHeading is the START heading, not the per-frame
@@ -514,10 +526,38 @@ sitch = {
     },
 
 
+
+    customAzSmooth: {
+        kind: "GUIValue",
+        desc: "Az Smooth",
+        value: 20,
+        start: 0,
+        end: 200,
+        step: 1,
+        tip: "Smooth custom Az",
+        gui: "physics",
+    },
+
+    customElSmooth: {
+        kind: "GUIValue",
+        desc: "El Smooth",
+        value: 20,
+        start: 0,
+        end: 200,
+        step: 1,
+        tip: "Smooth custom El",
+        gui: "physics",
+    },
+
+
+
     // az and el optionally from a file
     // fallback to the ptz angles controller if we don't have those files
     // (fallback is on a per-element basis, so you can have az from a file, and el from the ptz angles)
-    customAzElController: {kind: "CustomAzEl", fallback: "ptzAngles"},
+    customAzElController: {kind: "CustomAzEl",
+        fallback: "ptzAngles",
+        azSmooth: "customAzSmooth",
+        elSmooth: "customElSmooth",},
 
     // Switch for angles controllers
     angelsSwitch: {
