@@ -1,6 +1,6 @@
-import { par } from "../par";
+import {par} from "../par";
 import {NodeMan, setRenderOne, Sit} from "../Globals";
-import { CNode } from "./CNode";
+import {CNode} from "./CNode";
 import {parseBoolean} from "../utils";
 
 export class CNodeFrameSlider extends CNode {
@@ -23,6 +23,7 @@ export class CNodeFrameSlider extends CNode {
         this.advanceHoldFrames = 0;
         this.backHoldFrames = 0;
         this.holdThreshold = 10; // Number of frames the button needs to be held before starting repeated actions
+        this.fadeOutTimer = null;
 
         this.setupFrameSlider();
     }
@@ -249,13 +250,21 @@ export class CNodeFrameSlider extends CNode {
                 this.sliderFadeOutCounter = undefined; // Reset fade counter on mouse enter
             }
             sliderFade = false;
+            // Clear any existing fade out timer
+            if (this.fadeOutTimer) {
+                clearTimeout(this.fadeOutTimer);
+                this.fadeOutTimer = null;
+            }
         });
 
         sliderContainer.addEventListener('mouseleave', () => {
             if (sliderDragging) {
                 sliderFade = true;
             } else {
-                this.sliderFadeOutCounter = 0; // Start fade counter on mouse leave
+                // Start fade out timer (2 seconds delay, then 0.5 second fade)
+                this.fadeOutTimer = setTimeout(() => {
+                    this.startFadeOut();
+                }, 2000);
             }
         });
     }
@@ -264,8 +273,26 @@ export class CNodeFrameSlider extends CNode {
         super.dispose()
         // safely remove the slider
         this.sliderDiv.remove();
+        // Clear any pending fade out timer
+        if (this.fadeOutTimer) {
+            clearTimeout(this.fadeOutTimer);
+            this.fadeOutTimer = null;
+        }
+    }
 
-
+    startFadeOut() {
+        if (this.pinned) return; // Don't fade out if pinned
+        
+        // Use CSS transition for smooth fade out
+        this.sliderDiv.style.transition = "opacity 0.5s";
+        this.sliderInput.style.transition = "opacity 0.5s";
+        this.controlContainer.style.transition = "opacity 0.5s";
+        
+        this.sliderDiv.style.opacity = "0";
+        this.sliderInput.style.opacity = "0";
+        this.controlContainer.style.opacity = "0";
+        
+        this.fadeOutTimer = null;
     }
 
     createButton(container, row, column, clickHandler, title, mouseDownHandler = null, mouseUpHandler = null) {
@@ -291,25 +318,10 @@ export class CNodeFrameSlider extends CNode {
             this.sliderDiv.style.opacity = "1";
             this.sliderInput.style.opacity = "1";
             this.controlContainer.style.opacity = "1";
-            this.sliderFadeOutCounter = undefined;
-        } else {
-
-            // Called every frame
-            if (this.sliderFadeOutCounter !== undefined && this.sliderFadeOutCounter < 100) {
-                this.sliderFadeOutCounter++;
-                if (this.sliderFadeOutCounter >= 70) {
-                    const fadeProgress = (this.sliderFadeOutCounter - 70) / 30;
-                    this.sliderInput.style.opacity = `${1 - fadeProgress}`;
-                    this.sliderDiv.style.opacity = `${1 - fadeProgress}`;
-                    this.controlContainer.style.opacity = `${1 - fadeProgress}`;
-                }
-            }
-
-            if (this.sliderFadeOutCounter >= 100) {
-                this.sliderDiv.style.opacity = "0";
-                this.sliderInput.style.opacity = "0";
-                this.controlContainer.style.opacity = "0";
-                this.sliderFadeOutCounter = undefined;
+            // Clear any pending fade out timer when pinned
+            if (this.fadeOutTimer) {
+                clearTimeout(this.fadeOutTimer);
+                this.fadeOutTimer = null;
             }
         }
 
