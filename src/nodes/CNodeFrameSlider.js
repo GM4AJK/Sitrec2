@@ -25,6 +25,13 @@ export class CNodeFrameSlider extends CNode {
         this.holdThreshold = 10; // Number of frames the button needs to be held before starting repeated actions
         this.fadeOutTimer = null;
 
+        // Dragging state for A and B limits
+        this.draggingALimit = false;
+        this.draggingBLimit = false;
+        this.hoveringALimit = false;
+        this.hoveringBLimit = false;
+        this.dragThreshold = 10; // Pixels within which we can grab a limit line
+
         this.setupFrameSlider();
     }
 
@@ -209,18 +216,75 @@ export class CNodeFrameSlider extends CNode {
         this.canvas.style.width = '100%';
         this.canvas.style.height = '100%';
         this.canvas.style.zIndex = '1003'; // Ensure it overlays the input
-        this.canvas.style.pointerEvents = 'none'; // Allow mouse events to pass through
+        this.canvas.style.pointerEvents = 'none'; // Initially allow events to pass through
         this.sliderDiv.appendChild(this.canvas);
-        // get the context
-        const ctx = this.canvas.getContext('2d');
-        // red line
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 5;
-        // draw a test line
-        ctx.beginPath();
-        ctx.moveTo(0, 0);
-        ctx.lineTo(this.canvas.width, this.canvas.height);
-        ctx.stroke();
+
+        // Add mouse event handlers for dragging A and B limits
+        this.setupLimitDragging();
+
+        // Add mouse move listener to the slider container to manage pointer events
+        sliderContainer.addEventListener('mousemove', (event) => {
+            if (!this.draggingALimit && !this.draggingBLimit) {
+                const rect = this.canvas.getBoundingClientRect();
+                const mouseX = event.clientX - rect.left;
+                const mouseY = event.clientY - rect.top;
+                
+                // Helper functions (duplicated here for scope)
+                const frameToPixel = (frame) => {
+                    return (frame / Sit.frames) * this.canvas.offsetWidth;
+                };
+                
+                const getNearLimit = (mouseX, mouseY) => {
+                    const aPixel = frameToPixel(Sit.aFrame);
+                    const bPixel = frameToPixel(Sit.bFrame);
+                    const currentFramePixel = frameToPixel(par.frame);
+                    
+                    // Define slider thumb area (prioritize this over A/B limits)
+                    const thumbWidth = 20; // Approximate width of slider thumb
+                    const thumbArea = {
+                        left: currentFramePixel - thumbWidth / 2,
+                        right: currentFramePixel + thumbWidth / 2,
+                        top: 10, // Allow A/B dragging above the slider track
+                        bottom: 40 // Full height of slider container
+                    };
+                    
+                    // If mouse is in the slider thumb area, don't allow A/B limit dragging
+                    if (mouseX >= thumbArea.left && mouseX <= thumbArea.right && 
+                        mouseY >= thumbArea.top && mouseY <= thumbArea.bottom) {
+                        return null;
+                    }
+                    
+                    // Check if near A limit line or handle
+                    if (Math.abs(mouseX - aPixel) <= this.dragThreshold) {
+                        return 'A';
+                    }
+                    // Check if near A handle circle (top of line) - prioritize this area
+                    if (Math.abs(mouseX - aPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+                        return 'A';
+                    }
+                    
+                    // Check if near B limit line or handle
+                    if (Math.abs(mouseX - bPixel) <= this.dragThreshold) {
+                        return 'B';
+                    }
+                    // Check if near B handle circle (top of line) - prioritize this area
+                    if (Math.abs(mouseX - bPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+                        return 'B';
+                    }
+                    
+                    return null;
+                };
+                
+                const nearLimit = getNearLimit(mouseX, mouseY);
+                
+                // Enable pointer events on canvas only when near a limit
+                if (nearLimit) {
+                    this.canvas.style.pointerEvents = 'auto';
+                } else {
+                    this.canvas.style.pointerEvents = 'none';
+                }
+            }
+        });
 
 
         // Event listeners for slider interactions
@@ -265,6 +329,148 @@ export class CNodeFrameSlider extends CNode {
                 this.fadeOutTimer = setTimeout(() => {
                     this.startFadeOut();
                 }, 2000);
+            }
+        });
+    }
+
+    setupLimitDragging() {
+        let isDragging = false;
+        let dragStartX = 0;
+
+        // Helper function to get mouse position relative to canvas
+        const getMousePos = (event) => {
+            const rect = this.canvas.getBoundingClientRect();
+            return {
+                x: event.clientX - rect.left,
+                y: event.clientY - rect.top
+            };
+        };
+
+        // Helper function to convert pixel position to frame number
+        const pixelToFrame = (x) => {
+            return Math.round((x / this.canvas.offsetWidth) * Sit.frames);
+        };
+
+        // Helper function to get pixel position of a frame
+        const frameToPixel = (frame) => {
+            return (frame / Sit.frames) * this.canvas.offsetWidth;
+        };
+
+        // Helper function to check if mouse is near a limit line or handle
+        const getNearLimit = (mouseX, mouseY) => {
+            const aPixel = frameToPixel(Sit.aFrame);
+            const bPixel = frameToPixel(Sit.bFrame);
+            const currentFramePixel = frameToPixel(par.frame);
+            
+            // Define slider thumb area (prioritize this over A/B limits)
+            const thumbWidth = 20; // Approximate width of slider thumb
+            const thumbArea = {
+                left: currentFramePixel - thumbWidth / 2,
+                right: currentFramePixel + thumbWidth / 2,
+                top: 10, // Allow A/B dragging above the slider track
+                bottom: 40 // Full height of slider container
+            };
+            
+            // If mouse is in the slider thumb area, don't allow A/B limit dragging
+            if (mouseX >= thumbArea.left && mouseX <= thumbArea.right && 
+                mouseY >= thumbArea.top && mouseY <= thumbArea.bottom) {
+                return null;
+            }
+            
+            // Check if near A limit line or handle
+            if (Math.abs(mouseX - aPixel) <= this.dragThreshold) {
+                return 'A';
+            }
+            // Check if near A handle circle (top of line) - prioritize this area
+            if (Math.abs(mouseX - aPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+                return 'A';
+            }
+            
+            // Check if near B limit line or handle
+            if (Math.abs(mouseX - bPixel) <= this.dragThreshold) {
+                return 'B';
+            }
+            // Check if near B handle circle (top of line) - prioritize this area
+            if (Math.abs(mouseX - bPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+                return 'B';
+            }
+            
+            return null;
+        };
+
+        // Mouse down event
+        this.canvas.addEventListener('mousedown', (event) => {
+            const mousePos = getMousePos(event);
+            const nearLimit = getNearLimit(mousePos.x, mousePos.y);
+            
+            if (nearLimit === 'A') {
+                this.draggingALimit = true;
+                isDragging = true;
+                dragStartX = mousePos.x;
+                this.canvas.style.cursor = 'ew-resize';
+                event.preventDefault();
+                event.stopPropagation();
+            } else if (nearLimit === 'B') {
+                this.draggingBLimit = true;
+                isDragging = true;
+                dragStartX = mousePos.x;
+                this.canvas.style.cursor = 'ew-resize';
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        });
+
+        // Mouse move event
+        this.canvas.addEventListener('mousemove', (event) => {
+            const mousePos = getMousePos(event);
+            
+            if (isDragging) {
+                const newFrame = Math.max(0, Math.min(Sit.frames, pixelToFrame(mousePos.x)));
+                
+                if (this.draggingALimit) {
+                    Sit.aFrame = newFrame;
+                    setRenderOne(true);
+                } else if (this.draggingBLimit) {
+                    Sit.bFrame = newFrame;
+                    setRenderOne(true);
+                }
+            } else {
+                // Update cursor and hover state based on proximity to limits
+                const nearLimit = getNearLimit(mousePos.x, mousePos.y);
+                this.hoveringALimit = (nearLimit === 'A');
+                this.hoveringBLimit = (nearLimit === 'B');
+                
+                if (nearLimit) {
+                    this.canvas.style.cursor = 'ew-resize';
+                } else {
+                    this.canvas.style.cursor = 'default';
+                }
+            }
+        });
+
+        // Mouse up event
+        this.canvas.addEventListener('mouseup', (event) => {
+            if (isDragging) {
+                this.draggingALimit = false;
+                this.draggingBLimit = false;
+                isDragging = false;
+                this.canvas.style.cursor = 'default';
+                // Reset pointer events to allow normal slider interaction
+                this.canvas.style.pointerEvents = 'none';
+            }
+        });
+
+        // Mouse leave event
+        this.canvas.addEventListener('mouseleave', (event) => {
+            this.hoveringALimit = false;
+            this.hoveringBLimit = false;
+            if (isDragging) {
+                this.draggingALimit = false;
+                this.draggingBLimit = false;
+                isDragging = false;
+                this.canvas.style.cursor = 'default';
+                // Reset pointer events to allow normal slider interaction
+                this.canvas.style.pointerEvents = 'none';
             }
         });
     }
@@ -353,22 +559,63 @@ export class CNodeFrameSlider extends CNode {
         this.canvas.height = this.canvas.offsetHeight;
 
 
-        // draw vertical line at Sit.aFrame,
-        // green, one pixel wide
-        ctx.strokeStyle = 'green';
-        ctx.lineWidth = 1;
+        // Draw A limit line (green)
+        const aPixel = this.canvas.width * Sit.aFrame / Sit.frames;
+        let aColor = '#008000'; // Default green
+        let aLineWidth = 2;
+        let aHandleRadius = 4;
+        
+        if (this.draggingALimit) {
+            aColor = '#00ff00'; // Bright green when dragging
+            aLineWidth = 3;
+            aHandleRadius = 5;
+        } else if (this.hoveringALimit) {
+            aColor = '#00cc00'; // Medium green when hovering
+            aLineWidth = 2.5;
+            aHandleRadius = 4.5;
+        }
+        
+        ctx.strokeStyle = aColor;
+        ctx.lineWidth = aLineWidth;
         ctx.beginPath();
-        ctx.moveTo(this.canvas.width * Sit.aFrame / Sit.frames, 0);
-        ctx.lineTo(this.canvas.width * Sit.aFrame / Sit.frames, this.canvas.height);
+        ctx.moveTo(aPixel, 0);
+        ctx.lineTo(aPixel, this.canvas.height);
         ctx.stroke();
 
-        // and a red one for Sit.bFrame
-        ctx.strokeStyle = 'red';
-        ctx.lineWidth = 1;
+        // Draw A limit handle (small circle at top)
+        ctx.fillStyle = aColor;
         ctx.beginPath();
-        ctx.moveTo(this.canvas.width * Sit.bFrame / Sit.frames, 0);
-        ctx.lineTo(this.canvas.width * Sit.bFrame / Sit.frames, this.canvas.height);
+        ctx.arc(aPixel, 8, aHandleRadius, 0, 2 * Math.PI);
+        ctx.fill();
+
+        // Draw B limit line (red)
+        const bPixel = this.canvas.width * Sit.bFrame / Sit.frames;
+        let bColor = '#800000'; // Default red
+        let bLineWidth = 2;
+        let bHandleRadius = 4;
+        
+        if (this.draggingBLimit) {
+            bColor = '#ff0000'; // Bright red when dragging
+            bLineWidth = 3;
+            bHandleRadius = 5;
+        } else if (this.hoveringBLimit) {
+            bColor = '#cc0000'; // Medium red when hovering
+            bLineWidth = 2.5;
+            bHandleRadius = 4.5;
+        }
+        
+        ctx.strokeStyle = bColor;
+        ctx.lineWidth = bLineWidth;
+        ctx.beginPath();
+        ctx.moveTo(bPixel, 0);
+        ctx.lineTo(bPixel, this.canvas.height);
         ctx.stroke();
+
+        // Draw B limit handle (small circle at top)
+        ctx.fillStyle = bColor;
+        ctx.beginPath();
+        ctx.arc(bPixel, 8, bHandleRadius, 0, 2 * Math.PI);
+        ctx.fill();
 
 
     }
