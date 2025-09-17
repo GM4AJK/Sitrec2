@@ -1,4 +1,4 @@
-import {degrees, metersFromMiles, metersPerSecondFromKnots, radians} from "../utils";
+import {degrees, metersPerSecondFromKnots, radians} from "../utils";
 import {getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {Sit, Units} from "../Globals";
 import {CNode} from "./CNode";
@@ -34,14 +34,17 @@ export class CNodeJetTrack extends CNodeTrack {
     recalculate() {
         this.array = []
 
+
+        const headingNode = this.in.heading.getRoot()
+
         // get the initial heading angle
         // if the heading is a CNodeHeading, then use the getHeading function (legacy)
         // of we can just supply a number or GUIValue
         let jetHeading
         if (this.in.heading.getHeading !== undefined) {
-            jetHeading = this.in.heading.getHeading(0)
+            jetHeading = headingNode.getHeading(0)
         } else {
-            jetHeading = this.in.heading.getValueFrame(0)
+            jetHeading = headingNode.getValueFrame(0)
         }
 
 
@@ -74,7 +77,12 @@ export class CNodeJetTrack extends CNodeTrack {
             jetPos.add(this.in.wind.v(f))
 
             // get the angle we rotate around the up axis this frame
-            const turnRate = this.in.turnRate.getValueFrame(f)
+            let turnRate = this.in.turnRate.getValueFrame(f)
+
+            if (headingNode.forceHeadingPerFrame) {
+                // if we are using a custom heading file, then calculate the angle change
+                turnRate = (headingNode.getValueFrame(f) - jetHeading) * Sit.fps;
+            }
 
             // rotate around local up (opposite of gravity)
             const upAxis = getLocalUpVector(jetPos, radius)
@@ -90,7 +98,17 @@ export class CNodeJetTrack extends CNodeTrack {
             rightAxis.crossVectors(upAxis, jetFwd)  // right is calculated as being at right angles to up and fwd
             jetFwd.crossVectors(rightAxis, upAxis) // then fwd is a right angles to right and up
 
-            jetHeading += turnRate / Sit.fps
+
+            if (headingNode.forceHeadingPerFrame) {
+                // if we are using a custom heading file, then force the heading to match that value
+                jetHeading = headingNode.getValueFrame(f)
+            } else {
+                // otherwise adjust the heading based on the turn rate
+                jetHeading += turnRate / Sit.fps
+            }
+
+
+            console.log(`jetHeading ${jetHeading}, turnRate ${turnRate}, jetSpeed ${jetSpeed}, jetPos ${jetPos}`)
 
         }
         assert(this.frames == this.array.length, "frames length mismatch");

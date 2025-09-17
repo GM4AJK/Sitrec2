@@ -396,14 +396,15 @@ class CDragDropHandler {
         if (fileExt === "csv") {
 
             // bit of patch, if the type has not been set
-            // check if it contains az, el, zoom columns
-            if ( fileManagerEntry.dataType === "AZIMUTH" || fileManagerEntry.dataType === "ELEVATION" || fileManagerEntry.dataType === "Unknown" || fileManagerEntry.dataType === undefined) {
+            // check if it contains az, el, zoom, heading columns
+            if ( fileManagerEntry.dataType === "AZIMUTH" || fileManagerEntry.dataType === "ELEVATION" || fileManagerEntry.dataType === "HEADING" || fileManagerEntry.dataType === "Unknown" || fileManagerEntry.dataType === undefined) {
                 const azCol = findColumn(parsedFile, "Az", true);
                 const elCol = findColumn(parsedFile, "El", true);
                 const zoomCol = findColumn(parsedFile, "Zoom", true);
+                const headingCol = findColumn(parsedFile, "Heading", true);
 
 
-                if (azCol !== -1 || elCol !== -1 || zoomCol !== -1) {
+                if (azCol !== -1 || elCol !== -1 || zoomCol !== -1 || headingCol !== -1) {
 
                     // get the firs col header before we slice them off
                     const firstColumnHeader = parsedFile[0][0].toLowerCase();
@@ -438,7 +439,17 @@ class CDragDropHandler {
                         }
                         azElController.recalculate();
                     }
-                    // handled the AZ and EL CSV file, so
+
+                    // handle heading column if present
+                    if (headingCol !== -1) {
+                        const headingController = NodeMan.get("customHeadingController", false)
+                        if (headingController) {
+                            headingController.setHeadingFile(parsedFile, headingCol);
+                            headingController.recalculate();
+                        }
+                    }
+
+                    // handled the AZ, EL, and/or HEADING CSV file, so
                     return;
                 }
                 // if we get here, then we don't have az and el columns

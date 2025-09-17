@@ -361,6 +361,12 @@ class CNodeSwitch extends CNode {
         }
     }
 
+    // returns a pointer to the chosen input
+    // if that's a switch (other other composite object) then recursively return the root of that object
+    getRoot() {
+        return this.inputs[this.choice].getRoot()
+    }
+
     // apply is used for controllers (like CNodeController)
     // we want to have a selection of camera controllers
     // so we need to pass though the apply() call to the selected one

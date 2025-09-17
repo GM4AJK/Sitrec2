@@ -134,7 +134,7 @@ sitch = {
                 }
             },
             Greyscale: {id: "Custom_GreyScale", enabled: false},
-            FLIRShader: { id: "Custom_FLIRShader", enabled: false},
+            FLIRShader: {id: "Custom_FLIRShader", enabled: false},
             Invert: {id: "Custom_Invert", enabled: false},
 
             Custom_Levels: {
@@ -314,13 +314,21 @@ sitch = {
         quietLink: "totalTurn", linkMath: "$turnRate * $frames / $fps"
     },
 
-
     totalTurn: {
         kind: "GUIValue", value: 0, start: -360, end: 360, step: 0.1,
         desc: "Total Turn", gui: "physics", tooltip: "amount of turn over the entire sitch",
         link: "turnRate", linkMath: "$totalTurn / ($frames / $fps)",
         inheritVisibility: "turnRate"
     },
+
+
+
+
+
+
+
+
+
 
     // we want a clean way of linking two GUI values A and B
     // A is the primary value, which affects other nodes
@@ -329,7 +337,26 @@ sitch = {
     // When B changes, A is updated, and the propagation (from A)
 
 
-    jetHeading: {kind: "GUIValue", value: 0, start: 0, end: 360, step: 0.1, desc: "Jet Heading", gui: "physics"},
+    jetHeadingManual: {kind: "GUIValue", value: 0, start: 0, end: 360, step: 0.1, desc: "Jet Heading", gui: "physics"},
+
+    customHeadingController: {
+        kind: "CustomHeading",
+        fallback: "jetHeadingManual"
+    },
+
+    // jetHeading is the START heading, not the per-frame
+    jetHeading: {
+        kind: "Switch",
+        inputs: {
+            manual: "jetHeadingManual",
+            custom: "customHeadingController",
+        },
+        desc: "Turn Rate Control",
+        gui: "physics",
+        tooltip: "Control how the turn rate is determined\nManual means you control the turn rate directly\nAutomatic means the turn rate is automatically calculated based on the TAS and wind"
+    },
+
+
 
     // Track of a jet with some simple physics
     flightSimCameraPosition: {

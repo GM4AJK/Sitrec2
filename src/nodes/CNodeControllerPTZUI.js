@@ -1,4 +1,4 @@
-import {degrees, ExpandKeyframes, radians, RollingAverage} from "../utils";
+import {ExpandKeyframes, radians, RollingAverage} from "../utils";
 import {getLocalUpVector} from "../SphericalMath";
 import {ECEF2EUS, wgs84} from "../LLA-ECEF-ENU";
 import {NodeMan, Sit} from "../Globals";
@@ -7,7 +7,6 @@ import {CNodeController} from "./CNodeController";
 import {V3} from "../threeUtils";
 import {assert} from "../assert";
 import {Vector3} from "three";
-import {DebugArrow} from "../threeExt";
 
 const pszUIColor = "#C0C0FF";
 
@@ -204,6 +203,8 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
 
     }
 
+
+
     apply(f, objectNode ) {
         // default to the fallback at first, in case we don't have a file for az/el/zoom
         if (this.fallback) {
@@ -227,5 +228,57 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
 
 
 
+}
+
+export class CNodeControllerCustomHeading extends CNodeController {
+    constructor(v) {
+        super(v);
+        this.fallback = NodeMan.get(v.fallback);
+        this.frames = Sit.frames;
+        this.useSitFrames = true;
+        this.heading = 0; // default heading
+        this.forceHeadingPerFrame = true;
+    }
+
+    setHeadingFile(headingFile, headingCol) {
+        this.headingFile = headingFile;
+        this.headingCol = headingCol;
+        this.recalculate();
+    }
+
+    recalculate() {
+        if (this.headingFile !== undefined) {
+            assert(this.frames = Sit.frames, "CNodeControllerCustomHeading: frames not set right");
+            this.headingArrayRaw = ExpandKeyframes(this.headingFile, this.frames, 0, this.headingCol);
+
+            // TODO: heading smoothing should be configurable, 200 is quite a bit
+            this.headingArray = RollingAverage(this.headingArrayRaw, 200);
+        }
+    }
+
+
+    getValueFrame(f) {
+        return this.headingArray[f]
+    }
+
+    apply(f, objectNode) {
+        // // default to the fallback heading if available
+        // if (this.fallback && this.fallback.heading !== undefined) {
+        //     this.heading = this.fallback.heading;
+        // }
+        //
+        // // override with file data if available
+        // if (this.headingArray) {
+        //     this.heading = this.headingArray[f];
+        // }
+        //
+        // // apply heading rotation to the object node
+        // if (objectNode) {
+        //     // DON'T rotate around the Y axis (up direction) for heading
+        //     // need to set the heading on on the objectNode to the current cser
+        //
+        //
+        // }
+    }
 }
 
