@@ -202,6 +202,7 @@ export class CNodeFrameSlider extends CNode {
         this.sliderDiv.style.zIndex = '1002';
         this.sliderDiv.style.opacity = "0"; // Initially hidden
         this.sliderDiv.style.transition = "opacity 0.2s";
+        this.sliderDiv.style.marginRight = '10px'; // Match the spacing between buttons and slider
 
 
         this.sliderDiv.appendChild(this.sliderInput);
@@ -408,6 +409,11 @@ export class CNodeFrameSlider extends CNode {
                 isDragging = true;
                 dragStartX = mousePos.x;
                 this.canvas.style.cursor = 'ew-resize';
+                
+                // Add global event listeners for dragging
+                document.addEventListener('mousemove', globalMouseMove);
+                document.addEventListener('mouseup', globalMouseUp);
+                
                 event.preventDefault();
                 event.stopPropagation();
             } else if (nearLimit === 'B') {
@@ -415,26 +421,20 @@ export class CNodeFrameSlider extends CNode {
                 isDragging = true;
                 dragStartX = mousePos.x;
                 this.canvas.style.cursor = 'ew-resize';
+                
+                // Add global event listeners for dragging
+                document.addEventListener('mousemove', globalMouseMove);
+                document.addEventListener('mouseup', globalMouseUp);
+                
                 event.preventDefault();
                 event.stopPropagation();
             }
         });
 
-        // Mouse move event
+        // Mouse move event on canvas (for hover detection when not dragging)
         this.canvas.addEventListener('mousemove', (event) => {
-            const mousePos = getMousePos(event);
-            
-            if (isDragging) {
-                const newFrame = Math.max(0, Math.min(Sit.frames, pixelToFrame(mousePos.x)));
-                
-                if (this.draggingALimit) {
-                    Sit.aFrame = newFrame;
-                    setRenderOne(true);
-                } else if (this.draggingBLimit) {
-                    Sit.bFrame = newFrame;
-                    setRenderOne(true);
-                }
-            } else {
+            if (!isDragging) {
+                const mousePos = getMousePos(event);
                 // Update cursor and hover state based on proximity to limits
                 const nearLimit = getNearLimit(mousePos.x, mousePos.y);
                 this.hoveringALimit = (nearLimit === 'A');
@@ -448,8 +448,24 @@ export class CNodeFrameSlider extends CNode {
             }
         });
 
-        // Mouse up event
-        this.canvas.addEventListener('mouseup', (event) => {
+        // Global mouse move event for dragging (allows vertical movement outside canvas)
+        const globalMouseMove = (event) => {
+            if (isDragging) {
+                const mousePos = getMousePos(event);
+                const newFrame = Math.max(0, Math.min(Sit.frames, pixelToFrame(mousePos.x)));
+                
+                if (this.draggingALimit) {
+                    Sit.aFrame = newFrame;
+                    setRenderOne(true);
+                } else if (this.draggingBLimit) {
+                    Sit.bFrame = newFrame;
+                    setRenderOne(true);
+                }
+            }
+        };
+
+        // Global mouse up event for dragging
+        const globalMouseUp = (event) => {
             if (isDragging) {
                 this.draggingALimit = false;
                 this.draggingBLimit = false;
@@ -457,21 +473,18 @@ export class CNodeFrameSlider extends CNode {
                 this.canvas.style.cursor = 'default';
                 // Reset pointer events to allow normal slider interaction
                 this.canvas.style.pointerEvents = 'none';
+                
+                // Remove global event listeners
+                document.removeEventListener('mousemove', globalMouseMove);
+                document.removeEventListener('mouseup', globalMouseUp);
             }
-        });
+        };
 
-        // Mouse leave event
+        // Mouse leave event (only reset hover states, don't stop dragging)
         this.canvas.addEventListener('mouseleave', (event) => {
             this.hoveringALimit = false;
             this.hoveringBLimit = false;
-            if (isDragging) {
-                this.draggingALimit = false;
-                this.draggingBLimit = false;
-                isDragging = false;
-                this.canvas.style.cursor = 'default';
-                // Reset pointer events to allow normal slider interaction
-                this.canvas.style.pointerEvents = 'none';
-            }
+            // Don't stop dragging on mouse leave - let global mouse up handle it
         });
     }
 
