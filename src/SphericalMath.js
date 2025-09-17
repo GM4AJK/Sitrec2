@@ -307,7 +307,7 @@ export function getAzElFromPositionAndForward(position, forward) {
 
     // calculate the elevation as the angle between the forward vector and the global up vector
     const elevation = forward.angleTo(up);
-    const elevationDeg = elevation * 180 / Math.PI - 90;
+    const elevationDeg = 90 - (elevation * 180 / Math.PI) ;
     return [headingPos, elevationDeg];
 }
 
