@@ -50,21 +50,22 @@ export class CNodeTerrainUI extends CNode {
                 mapURL: (z, x, y) => {
                     return null;
                 },
-                maxZoom: 14,
+                maxZoom: 15,
             },
             FlatShading: {
                 name: "Flat Shading",
                 mapURL: (z, x, y) => {
                     return SITREC_APP + "data/images/grey-256x256.png?v=1";
                 },
-                maxZoom: 14,
+                maxZoom: 15,
             },
             OceanSurface: {
                 name: "Ocean Surface",
                 mapURL: (z, x, y) => {
                     return SITREC_APP + "data/images/28_sea water texture-seamless.jpg?v=3";
                 },
-                maxZoom: 14,
+                //staticURL: SITREC_APP + "data/images/28_sea water texture-seamless.jpg?v=3"
+                maxZoom: 18,
             }
         }
 
@@ -77,14 +78,14 @@ export class CNodeTerrainUI extends CNode {
                     mapURL: (z, x, y) => {
                         return SITREC_APP + "data/images/colour_bars_srgb-255-128-64.png?v=1";
                     },
-                    maxZoom: 14,
+                    maxZoom: 15,
                 },
                 GridTest: {
                     name: "Grid Test",
                     mapURL: (z, x, y) => {
                         return SITREC_APP + "data/images/grid.png?v=1";
                     },
-                    maxZoom: 14,
+                    maxZoom: 15,
                 },
                 ElevationBitmap: {
                     name: "Elevation Bitmap",

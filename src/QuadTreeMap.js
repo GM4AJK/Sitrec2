@@ -112,6 +112,11 @@ export class QuadTreeMap {
     subdivideTiles(views, subdivideSize  = 2000) {
 
 
+        // If the elevation source is "Flat", then we don't need to subdivide
+        if (this.constructor.name === 'QuadTreeMapElevation' && this.options.elevationType === "Flat") {
+            return;
+        }
+
         // debug counting and output to debugLog
         if (isLocal) {
             let totalTileCount = Object.keys(this.tileCache).length; // count of tiles in the cache

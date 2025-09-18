@@ -17,6 +17,9 @@ import {NearestFilter} from "three/src/constants";
 
 const tileMaterial = new MeshBasicMaterial({wireframe: true, color: "#408020"})
 
+// Static cache for materials to avoid loading the same texture multiple times
+const materialCache = new Map();
+
 export class QuadTreeTile {
     constructor(map, z, x, y, size) {
         // check values are within range
@@ -386,6 +389,10 @@ export class QuadTreeTile {
 
         this.highestAltitude = 0;
 
+         if (this.map.options.elevationMap.options.elevationType === "Flat") {
+             return this.recalculateCurveFlat(radius)
+         }
+
         var geometry = this.geometry;
         if (this.mesh !== undefined) {
             geometry = this.mesh.geometry;
@@ -545,6 +552,70 @@ export class QuadTreeTile {
 
     }
 
+    // Flat version of recalculateCurve that assumes elevation is always 0
+    // This skips all elevation tile lookups and interpolation for better performance
+    // when using flat terrain
+    recalculateCurveFlat(radius) {
+        this.highestAltitude = 0;
+
+        var geometry = this.geometry;
+        if (this.mesh !== undefined) {
+            geometry = this.mesh.geometry;
+        }
+
+        assert(geometry !== undefined, 'Geometry not defined in QuadTreeTile.js')
+
+        // Get the tile center for relative positioning
+        const tileCenter = this.mesh.position;
+
+        // Get dimensions
+        const nPosition = Math.sqrt(geometry.attributes.position.count); // size of side of mesh in points
+
+        // Apply flat elevation (0) to all vertices
+        for (let i = 0; i < geometry.attributes.position.count; i++) {
+            const xIndex = i % nPosition;
+            const yIndex = Math.floor(i / nPosition);
+
+            // Calculate the fraction of the tile that the vertex is in
+            let yTileFraction = yIndex / (nPosition - 1);
+            let xTileFraction = xIndex / (nPosition - 1);
+
+            // Clamp fractions to tile bounds
+            if (xTileFraction >= 1) xTileFraction = 1 - 1e-6;
+            if (yTileFraction >= 1) yTileFraction = 1 - 1e-6;
+
+            // Get world tile coordinates
+            const xWorld = this.x + xTileFraction;
+            const yWorld = this.y + yTileFraction;
+
+            // Convert to lat/lon
+            const lat = this.map.options.mapProjection.getNorthLatitude(yWorld, this.z);
+            const lon = this.map.options.mapProjection.getLeftLongitude(xWorld, this.z);
+
+            // Use flat elevation (0)
+            const elevation = 0;
+
+            // Convert to EUS coordinates
+            const vertexESU = LLAToEUS(lat, lon, elevation);
+
+            // Subtract the center of the tile for relative positioning
+            const vertex = vertexESU.sub(tileCenter);
+
+            assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
+            assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeTile.js');
+            assert(!isNaN(vertex.z), 'vertex.z is NaN in QuadTreeTile.js');
+
+            // Set the vertex position in tile space
+            geometry.attributes.position.setXYZ(i, vertex.x, vertex.y, vertex.z);
+        }
+
+        // Update geometry
+        geometry.computeVertexNormals();
+        geometry.computeBoundingBox();
+        geometry.computeBoundingSphere();
+        geometry.attributes.position.needsUpdate = true;
+    }
+
 
     // returns the four children tiles of this tile
     // this is used to build the QuadTextureMaterial
@@ -564,38 +635,20 @@ export class QuadTreeTile {
     // there's a custom shader to combine them together
     //
     buildMaterial() {
-
         const url = this.textureUrl();
+        
+        // Check if we already have a cached material for this URL
+        if (materialCache.has(url)) {
+            return Promise.resolve(materialCache.get(url));
+        }
+        
+        // If not cached, load the texture and create the material
         return loadTextureWithRetries(url).then((texture) => {
-            return new MeshStandardMaterial({map: texture, color: "#ffffff"});
-        })
-
-
-        // const url = this.mapUrl();
-        // // If url is a texture or a promise that resolves to a texture, handle accordingly
-        // if (url) {
-        //   // If url is already a texture, use it directly
-        //   if (url.isTexture) {
-        //     return Promise.resolve(new MeshStandardMaterial({ map: url, color: "#ffffff" }));
-        //   }
-        //   // If url is a string (URL), load the texture asynchronously
-        //   if (typeof url === "string") {
-        //     return new Promise((resolve, reject) => {
-        //       const loader = new TextureLoader();
-        //       loader.load(
-        //           url,
-        //           texture => resolve(new MeshStandardMaterial({ map: texture, color: "#ffffff" })),
-        //           undefined,
-        //           err => reject(err)
-        //       );
-        //     });
-        //   }
-        // }
-
-
-        // If no url, use the QuadTextureMaterial which returns a Promise resolving to a material
-        //  const urls = this.children().map(tile => tile.mapUrl());
-        //  return QuadTextureMaterial(urls);
+            const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+            // Cache the material for future use
+            materialCache.set(url, material);
+            return material;
+        });
     }
 
 
