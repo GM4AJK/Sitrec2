@@ -16,6 +16,7 @@ export class CNodeFrameSlider extends CNode {
         this.fastForwardButton = null;
         this.fastRewindButton = null;
         this.pinButton = null;
+        this.frameDisplayBox = null;
 
         this.pinned = false;
         this.advanceHeld = false;
@@ -182,6 +183,7 @@ export class CNodeFrameSlider extends CNode {
 
         let sliderDragging = false;
         let sliderFade = false;
+        let lastMouseX = 0;
 
         const newFrame = (frame) => {
             par.frame = frame;
@@ -221,6 +223,22 @@ export class CNodeFrameSlider extends CNode {
         this.canvas.style.zIndex = '1003'; // Ensure it overlays the input
         this.canvas.style.pointerEvents = 'none'; // Initially allow events to pass through
         this.sliderDiv.appendChild(this.canvas);
+
+        // Create frame display box
+        this.frameDisplayBox = document.createElement('div');
+        this.frameDisplayBox.style.position = 'absolute';
+        this.frameDisplayBox.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
+        this.frameDisplayBox.style.color = 'white';
+        this.frameDisplayBox.style.padding = '4px 8px';
+        this.frameDisplayBox.style.borderRadius = '4px';
+        this.frameDisplayBox.style.fontSize = '12px';
+        this.frameDisplayBox.style.fontFamily = 'monospace';
+        this.frameDisplayBox.style.zIndex = '1004';
+        this.frameDisplayBox.style.pointerEvents = 'none';
+        this.frameDisplayBox.style.display = 'none'; // Initially hidden
+        this.frameDisplayBox.style.transform = 'translateX(-50%)'; // Center horizontally
+        this.frameDisplayBox.style.bottom = '45px'; // Position above the slider
+        document.body.appendChild(this.frameDisplayBox);
 
         // Add mouse event handlers for dragging A and B limits
         this.setupLimitDragging();
@@ -291,10 +309,18 @@ export class CNodeFrameSlider extends CNode {
 
 
         // Event listeners for slider interactions
+        this.sliderInput.addEventListener('mousedown', (event) => {
+            const frame = parseInt(this.sliderInput.value, 10);
+            lastMouseX = event.clientX;
+            this.showFrameDisplay(frame, event.clientX);
+        });
+
         this.sliderInput.addEventListener('input', () => {
-            newFrame(parseInt(this.sliderInput.value, 10));
+            const frame = parseInt(this.sliderInput.value, 10);
+            newFrame(frame);
             sliderDragging = true;
             par.paused = true;
+            this.updateFrameDisplay(frame, lastMouseX);
         });
 
         this.sliderInput.addEventListener('change', () => {
@@ -304,6 +330,45 @@ export class CNodeFrameSlider extends CNode {
                 sliderFade = false;
             }
             sliderDragging = false;
+            this.hideFrameDisplay();
+        });
+
+        this.sliderInput.addEventListener('mouseup', () => {
+            this.hideFrameDisplay();
+        });
+
+        this.sliderInput.addEventListener('mouseleave', () => {
+            this.hideFrameDisplay();
+        });
+
+        // Touch event support for mobile devices
+        this.sliderInput.addEventListener('touchstart', (event) => {
+            const frame = parseInt(this.sliderInput.value, 10);
+            const touch = event.touches[0];
+            lastMouseX = touch.clientX;
+            this.showFrameDisplay(frame, touch.clientX);
+        });
+
+        this.sliderInput.addEventListener('touchmove', (event) => {
+            const touch = event.touches[0];
+            lastMouseX = touch.clientX;
+            if (sliderDragging) {
+                const frame = parseInt(this.sliderInput.value, 10);
+                this.updateFrameDisplay(frame, touch.clientX);
+            }
+        });
+
+        this.sliderInput.addEventListener('touchend', () => {
+            this.hideFrameDisplay();
+        });
+
+        // Track mouse movement for frame display positioning
+        this.sliderInput.addEventListener('mousemove', (event) => {
+            lastMouseX = event.clientX;
+            if (sliderDragging) {
+                const frame = parseInt(this.sliderInput.value, 10);
+                this.updateFrameDisplay(frame, event.clientX);
+            }
         });
 
         this.sliderInput.style.opacity = "0"; // Initially hidden
@@ -412,6 +477,9 @@ export class CNodeFrameSlider extends CNode {
                 dragStartX = mousePos.x;
                 this.canvas.style.cursor = 'ew-resize';
                 
+                // Show frame display for A limit
+                this.showFrameDisplay(Sit.aFrame, event.clientX);
+                
                 // Add global event listeners for dragging
                 document.addEventListener('mousemove', globalMouseMove);
                 document.addEventListener('mouseup', globalMouseUp);
@@ -423,6 +491,9 @@ export class CNodeFrameSlider extends CNode {
                 isDragging = true;
                 dragStartX = mousePos.x;
                 this.canvas.style.cursor = 'ew-resize';
+                
+                // Show frame display for B limit
+                this.showFrameDisplay(Sit.bFrame, event.clientX);
                 
                 // Add global event listeners for dragging
                 document.addEventListener('mousemove', globalMouseMove);
@@ -459,9 +530,13 @@ export class CNodeFrameSlider extends CNode {
                 if (this.draggingALimit) {
                     Sit.aFrame = newFrame;
                     setRenderOne(true);
+                    // Update frame display for A limit
+                    this.updateFrameDisplay(newFrame, event.clientX);
                 } else if (this.draggingBLimit) {
                     Sit.bFrame = newFrame;
                     setRenderOne(true);
+                    // Update frame display for B limit
+                    this.updateFrameDisplay(newFrame, event.clientX);
                 }
             }
         };
@@ -475,6 +550,9 @@ export class CNodeFrameSlider extends CNode {
                 this.canvas.style.cursor = 'default';
                 // Reset pointer events to allow normal slider interaction
                 this.canvas.style.pointerEvents = 'none';
+                
+                // Hide frame display when dragging ends
+                this.hideFrameDisplay();
                 
                 // Remove global event listeners
                 document.removeEventListener('mousemove', globalMouseMove);
@@ -719,6 +797,60 @@ export class CNodeFrameSlider extends CNode {
     setFrame(frame) {
         this.sliderInput.value = frame;
         par.frame = frame;
+    }
+
+    // Show frame display box
+    showFrameDisplay(frame, mouseX) {
+        if (this.frameDisplayBox) {
+            this.frameDisplayBox.textContent = `${frame}`;
+            this.frameDisplayBox.style.display = 'block';
+            
+            // Calculate position based on frame position on slider, not mouse position
+            const sliderRect = this.sliderDiv.getBoundingClientRect();
+            const framePosition = this.getFramePixelPosition(frame);
+            this.frameDisplayBox.style.left = (sliderRect.left + framePosition) + 'px';
+        }
+    }
+
+    // Hide frame display box
+    hideFrameDisplay() {
+        if (this.frameDisplayBox) {
+            this.frameDisplayBox.style.display = 'none';
+        }
+    }
+
+    // Update frame display position and content
+    updateFrameDisplay(frame, mouseX) {
+        if (this.frameDisplayBox && this.frameDisplayBox.style.display === 'block') {
+            this.frameDisplayBox.textContent = `${frame}`;
+            
+            // Calculate position based on frame position on slider, not mouse position
+            const sliderRect = this.sliderDiv.getBoundingClientRect();
+            const framePosition = this.getFramePixelPosition(frame);
+            this.frameDisplayBox.style.left = (sliderRect.left + framePosition) + 'px';
+        }
+    }
+
+    // Helper method to get pixel position of a frame on the slider
+    getFramePixelPosition(frame) {
+        if (!this.sliderInput || !Sit.frames) return 0;
+        
+        // Calculate the percentage position of the frame
+        const percentage = frame / Sit.frames;
+        
+        // For HTML range inputs, the thumb position is calculated as:
+        // position = (value - min) / (max - min) * (width - thumbWidth) + thumbWidth/2
+        const sliderRect = this.sliderInput.getBoundingClientRect();
+        const min = parseFloat(this.sliderInput.min);
+        const max = parseFloat(this.sliderInput.max);
+        const thumbWidth = 20; // Standard thumb width for range inputs
+        
+        // Calculate the actual thumb center position
+        const range = max - min;
+        const valuePosition = (frame - min) / range;
+        const trackWidth = sliderRect.width - thumbWidth;
+        
+        return valuePosition * trackWidth + (thumbWidth / 2);
     }
 }
 
