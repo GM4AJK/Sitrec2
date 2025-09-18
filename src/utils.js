@@ -435,7 +435,7 @@ export function ExpandKeyframes(input, outLen, indexCol = 0, dataCol = 1, steppe
         const lastFrame = aFrame
         for (var i = lastFrame; i < outLen; i++) {
             if (stepped)
-                out.push(lastValue);
+                out.push(aValue); // note, stepped means don't interpolate, so we repeat the last value
             else
                 out.push(lastValue + (i - lastFrame) * (lastValue - secondLastValue) / (lastFrame - (lastFrame - 1)))
         }
