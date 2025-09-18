@@ -1104,7 +1104,7 @@ export class CFileManager extends CManager {
                     // most of them will resolve to a MISB type array
                     // so strip duplicate times from those
                     // skipping the ones that are not time based
-                    if (dataType !== "AZIMUTH" && dataType !== "ELEVATION" && dataType !== "HEADING") {
+                    if (dataType !== "AZIMUTH" && dataType !== "ELEVATION" && dataType !== "HEADING" && dataType !== "FOV") {
                         // if it's a custom file, then strip out any duplicate times
                         // we are being a bit more robust here, as some legacy files have duplicate times
                         // For example Aguadilla. That's probably an issue only with "Unknown" files
@@ -1337,6 +1337,11 @@ export function detectCSVType(csv) {
     if ((csv[0][0].toLowerCase() === "frame" || csv[0][0].toLowerCase() === "time")
         && csv[0][1].toLowerCase() === "heading") {
         return "HEADING"
+    }
+
+    if ((csv[0][0].toLowerCase() === "frame" || csv[0][0].toLowerCase() === "time")
+        && (csv[0][1].toLowerCase() === "fov" || csv[0][1].toLowerCase() === "zoom")) {
+        return "FOV"
     }
 
     // only give an error warning for custom, as some sitches have custom code to use

@@ -161,6 +161,7 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
         super(v);
         this.input("azSmooth",true);
         this.input("elSmooth", true);
+        // FOV changes are instant (step-wise), no smoothing needed
         this.fallback = NodeMan.get(v.fallback);
         this.frames = Sit.frames;
         this.useSitFrames = true;
@@ -189,6 +190,16 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
         this.elCol = elCol;
     }
 
+    setZoomFile(zoomFile, zoomCol) {
+        this.zoomFile = zoomFile;
+        this.zoomCol = zoomCol;
+    }
+
+    setFovFile(fovFile, fovCol) {
+        this.fovFile = fovFile;
+        this.fovCol = fovCol;
+    }
+
     recalculate() {
 
         const azSmooth = this.in.azSmooth ? this.in.azSmooth.v0 : 200;
@@ -206,12 +217,26 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
             this.elArray = RollingAverage(this.elArrayRaw, elSmooth);
         }
 
+        if (this.zoomFile !== undefined) {
+            assert(this.frames = Sit.frames, "CNodeControllerCustomAzEl: frames not set right");
+            this.zoomArrayRaw = ExpandKeyframes(this.zoomFile, this.frames, 0, this.zoomCol, true);
+            // FOV/Zoom changes should be instant (step-wise), not smoothed
+            this.zoomArray = this.zoomArrayRaw;
+        }
+
+        if (this.fovFile !== undefined) {
+            assert(this.frames = Sit.frames, "CNodeControllerCustomAzEl: frames not set right");
+            this.fovArrayRaw = ExpandKeyframes(this.fovFile, this.frames, 0, this.fovCol, true);
+            // FOV/Zoom changes should be instant (step-wise), not smoothed
+            this.fovArray = this.fovArrayRaw;
+        }
+
     }
 
 
 
     apply(f, objectNode ) {
-        // default to the fallback at first, in case we don't have a file for az/el/zoom
+        // default to the fallback at first, in case we don't have a file for az/el/zoom/fov
         if (this.fallback) {
             this.az = this.fallback.az;
             this.el = this.fallback.el;
@@ -224,6 +249,14 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
 
         if (this.elArray) {
             this.el = this.elArray[f];
+        }
+
+        if (this.zoomArray) {
+            this.fov = this.zoomArray[f];
+        }
+
+        if (this.fovArray) {
+            this.fov = this.fovArray[f];
         }
 
         super.apply(f, objectNode);
