@@ -140,9 +140,25 @@ export class CNodeControllerPTZUI extends CNodeControllerAzElZoom {
         this.relative = v.relative ?? false;
     }
 
+    update(f) {
+
+
+        // check if the switch node fovSwitch is present
+        // and if set to somthing other than userFOV
+        // if so, we use that
+
+        const fovSwitch = NodeMan.get("fovSwitch",false)
+        if (fovSwitch) {
+            this.fov = fovSwitch.getValue(f);
+        }
+
+        super.update(f);
+    }
+
     refresh(v) {
         // legacy check
         assert(v === undefined, "CNodeControllerPTZUI: refresh called with v, should be undefined");
+
 
         // the FOV UI node is also updated, It's a hidden UI element that remains for backwards compatibility.
         const fovUINode = NodeMan.get("fovUI", false)
@@ -161,7 +177,6 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
         super(v);
         this.input("azSmooth",true);
         this.input("elSmooth", true);
-        // FOV changes are instant (step-wise), no smoothing needed
         this.fallback = NodeMan.get(v.fallback);
         this.frames = Sit.frames;
         this.useSitFrames = true;
@@ -190,15 +205,7 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
         this.elCol = elCol;
     }
 
-    setZoomFile(zoomFile, zoomCol) {
-        this.zoomFile = zoomFile;
-        this.zoomCol = zoomCol;
-    }
 
-    setFovFile(fovFile, fovCol) {
-        this.fovFile = fovFile;
-        this.fovCol = fovCol;
-    }
 
     recalculate() {
 
@@ -217,19 +224,7 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
             this.elArray = RollingAverage(this.elArrayRaw, elSmooth);
         }
 
-        if (this.zoomFile !== undefined) {
-            assert(this.frames = Sit.frames, "CNodeControllerCustomAzEl: frames not set right");
-            this.zoomArrayRaw = ExpandKeyframes(this.zoomFile, this.frames, 0, this.zoomCol, true);
-            // FOV/Zoom changes should be instant (step-wise), not smoothed
-            this.zoomArray = this.zoomArrayRaw;
-        }
 
-        if (this.fovFile !== undefined) {
-            assert(this.frames = Sit.frames, "CNodeControllerCustomAzEl: frames not set right");
-            this.fovArrayRaw = ExpandKeyframes(this.fovFile, this.frames, 0, this.fovCol, true);
-            // FOV/Zoom changes should be instant (step-wise), not smoothed
-            this.fovArray = this.fovArrayRaw;
-        }
 
     }
 
@@ -251,13 +246,7 @@ export class CNodeControllerCustomAzEl extends CNodeControllerAzElZoom {
             this.el = this.elArray[f];
         }
 
-        if (this.zoomArray) {
-            this.fov = this.zoomArray[f];
-        }
 
-        if (this.fovArray) {
-            this.fov = this.fovArray[f];
-        }
 
         super.apply(f, objectNode);
 

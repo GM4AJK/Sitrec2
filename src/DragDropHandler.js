@@ -2,7 +2,7 @@
 ///  DRAG AND DROP FILES?
 import {TrackManager} from "./TrackManager";
 import {FileManager, Globals, NodeMan, setNewSitchObject, setRenderOne, Sit} from "./Globals";
-import {cos, getFileExtension, isSubdomain, radians} from "./utils";
+import {cos, ExpandKeyframes, getFileExtension, isSubdomain, radians} from "./utils";
 import {textSitchToObject} from "./RegisterSitches";
 import {ModelFiles} from "./nodes/CNode3DObject";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
@@ -11,6 +11,7 @@ import {SITREC_DEV_DOMAIN, SITREC_DOMAIN} from "./configUtils";
 import {doesKMLContainTrack, extractKMLObjects} from "./KMLUtils";
 import {findColumn} from "./ParseUtils";
 import {EventManager} from "./CEventManager";
+import {CNodeArray} from "./nodes/CNodeArray";
 
 // The DragDropHandler is more like the local client file handler, with rehosting, and parsing
 class CDragDropHandler {
@@ -439,14 +440,40 @@ class CDragDropHandler {
                             azElController.setElFile(parsedFile, elCol);
                         }
 
-                        if (zoomCol !== -1) {
-                            azElController.setZoomFile(parsedFile, zoomCol);
-                        }
 
-                        if (fovCol !== -1) {
-                            azElController.setFovFile(parsedFile, fovCol);
+                    }
+
+                    // handle FOV/Zoom columns if present - create CNodeArray and add to fovSwitch
+                    if (fovCol !== -1 || zoomCol !== -1) {
+                        const fovSwitch = NodeMan.get("fovSwitch", false);
+                        if (fovSwitch) {
+                            // Use FOV column if present, otherwise use Zoom column
+                            const dataCol = fovCol !== -1 ? fovCol : zoomCol;
+                            const columnName = fovCol !== -1 ? "FOV" : "Zoom";
+                            
+                            // Create expanded keyframes array (step-wise, not smoothed)
+                            const fovArray = ExpandKeyframes(parsedFile, Sit.frames, 0, dataCol, true);
+
+
+                            // TODO: modify filemanager to get original filenames from static links
+                            // like https://sitrec.s3.us-west-2.amazonaws.com/99999999/fov-727f880234d0cc8281a09e75c2b3f5aa.csv
+
+
+                            // Create CNodeArray with filename as ID
+                            const fovNodeId = fileManagerEntry.filename.replace(/\.[^/.]+$/, "") + "_" + columnName;
+
+                            // this will leave the old ref in fovSwitch
+                            // but we will immediately replace it with the new one (same id)
+                            NodeMan.unlinkDisposeRemove(fovNodeId);
+
+                            const fovNode = new CNodeArray({id: fovNodeId, array: fovArray});
+                            
+                            // Add or replace the option in the fovSwitch
+                            fovSwitch.replaceOption(fovNodeId, fovNode);
+                            
+                            // Select this new FOV source
+                            fovSwitch.selectOption(fovNodeId);
                         }
-                        azElController.recalculate();
                     }
 
                     // handle heading column if present
