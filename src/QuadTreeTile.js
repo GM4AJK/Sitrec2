@@ -616,24 +616,6 @@ export class QuadTreeTile {
         geometry.attributes.position.needsUpdate = true;
     }
 
-
-    // returns the four children tiles of this tile
-    // this is used to build the QuadTextureMaterial
-    // and all we do is get the four URLs of the children's textures
-    // and then combine them in
-    // children() {
-    //     return [
-    //         new QuadTreeTile(this.map, this.z + 1, this.x * 2, this.y * 2),
-    //         new QuadTreeTile(this.map, this.z + 1, this.x * 2, this.y * 2 + 1),
-    //         new QuadTreeTile(this.map, this.z + 1, this.x * 2 + 1, this.y * 2),
-    //         new QuadTreeTile(this.map, this.z + 1, this.x * 2 + 1, this.y * 2 + 1),
-    //     ]
-    // }
-
-    // QuadTextureMaterial uses four textures from the children tiles
-    // (which are not actually loaded, but we have the URLs)
-    // there's a custom shader to combine them together
-    //
     buildMaterial() {
         const url = this.textureUrl();
         
