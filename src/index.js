@@ -86,6 +86,7 @@ import {checkLocal} from "./configUtils";
 import {CNodeView3D} from "./nodes/CNodeView3D";
 import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {QuadTreeTile} from "./QuadTreeTile";
 
 
 console.log ("SITREC START - index.js after imports")
@@ -1473,8 +1474,12 @@ function disposeEverything() {
     // add the local frame back to the global scene
     GlobalScene.add(LocalFrame)
 
-    // unload all assets - which we might not want to do if jsut restarting
+    // unload all assets - which we might not want to do if just restarting
     FileManager.disposeAll()
+
+
+    // clear the material cache
+    QuadTreeTile.clearMaterialCache();
 
     // what about the terrain? that should be removed by the terrain node....
 

@@ -158,6 +158,37 @@ export class QuadTreeTile {
         }
     }
 
+    // Dispose of this tile's resources (but keep materials in cache for reuse)
+    dispose() {
+        // Remove debug geometry first
+        this.removeDebugGeometry();
+        
+        // Remove mesh from scene if it exists
+        if (this.mesh) {
+            if (this.mesh.parent) {
+                this.mesh.parent.remove(this.mesh);
+            }
+            
+            // Dispose geometry (but not material since it's cached)
+            if (this.mesh.geometry) {
+                this.mesh.geometry.dispose();
+            }
+            
+            // Note: We don't dispose the material here since it's cached
+            // and may be used by other tiles. Use static methods to manage cache.
+            
+            this.mesh = undefined;
+        }
+        
+        // Clear other references
+        this.geometry = undefined;
+        this.elevation = undefined;
+        this.worldSphere = undefined;
+        this.loaded = false;
+        this.isLoading = false;
+        this.isLoadingElevation = false;
+    }
+
     // Update debug geometry when loading state changes
     updateDebugGeometry() {
         if (this.map && this.map.terrainNode && this.map.terrainNode.UI && this.map.terrainNode.UI.debugElevationGrid) {
@@ -631,6 +662,40 @@ export class QuadTreeTile {
             materialCache.set(url, material);
             return material;
         });
+    }
+
+    // Static method to clear the entire material cache
+    static clearMaterialCache() {
+        // Dispose of all cached materials and their textures
+        materialCache.forEach((material, url) => {
+            if (material.map) {
+                material.map.dispose();
+            }
+            material.dispose();
+        });
+        materialCache.clear();
+        console.log('Material cache cleared');
+    }
+
+    // Static method to remove a specific material from cache
+    static removeMaterialFromCache(url) {
+        if (materialCache.has(url)) {
+            const material = materialCache.get(url);
+            if (material.map) {
+                material.map.dispose();
+            }
+            material.dispose();
+            materialCache.delete(url);
+            console.log(`Material removed from cache: ${url}`);
+        }
+    }
+
+    // Static method to get cache statistics
+    static getMaterialCacheStats() {
+        return {
+            size: materialCache.size,
+            urls: Array.from(materialCache.keys())
+        };
     }
 
 
