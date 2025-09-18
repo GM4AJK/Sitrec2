@@ -227,6 +227,13 @@ class CNodeSwitch extends CNode {
             // if the choice is already set to this option, do nothing
             return;
         }
+
+        // if the choice is invalid, warn and return without changing the choice
+        if (this.inputs[option] === undefined) {
+            console.error("CNodeSwitch:selectOption: option "+option+" not found in inputs, ignoring");
+            return;
+        }
+
         this.choice = option
         if (!quiet) {
             this.controller.setValue(option)
