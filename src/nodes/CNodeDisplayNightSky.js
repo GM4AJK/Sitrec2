@@ -546,9 +546,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     // Update all celestial arrows to use a new start object
     updateCelestialArrowsTo(startObject) {
-        const celestialObjects = ["Venus", "Mars", "Jupiter", "Saturn", "Sun", "Moon"];
-        
-        celestialObjects.forEach(name => {
+
+        this.planets.forEach(name => {
             const obName = name + "ArrowOb";
             if (this[obName]) {
                 // Remove the old input connection and add the new one
