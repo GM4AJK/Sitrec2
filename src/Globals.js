@@ -80,8 +80,10 @@ export function setupGUIjetTweaks(_jetTweaks) {
     guiJetTweaks = _jetTweaks
 }
 
-export function setRenderOne(value) {
-    par.renderOne = value;
+export function setRenderOne(value=true) {
+    if (!par.renderOne) {
+        par.renderOne = value;
+    }
 }
 
 

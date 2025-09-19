@@ -70,7 +70,7 @@ export class CNodeTerrainUI extends CNode {
         }
 
         // local debugging, add a color test map
-        if (isLocal) {
+        //if (isLocal) {
             this.mapSources = {
                 ...this.mapSources,
                 RGBTest: {
@@ -80,13 +80,13 @@ export class CNodeTerrainUI extends CNode {
                     },
                     maxZoom: 15,
                 },
-                GridTest: {
-                    name: "Grid Test",
-                    mapURL: (z, x, y) => {
-                        return SITREC_APP + "data/images/grid.png?v=1";
-                    },
-                    maxZoom: 15,
-                },
+                // GridTest: {
+                //     name: "Grid Test",
+                //     mapURL: (z, x, y) => {
+                //         return SITREC_APP + "data/images/grid.png?v=1";
+                //     },
+                //     maxZoom: 15,
+                // },
                 ElevationBitmap: {
                     name: "Elevation Bitmap",
                     mapURL: (z, x, y) => {
@@ -102,7 +102,7 @@ export class CNodeTerrainUI extends CNode {
 
 
             }
-        }
+        //}
 
 
         // extract a K/V pair from the mapSources

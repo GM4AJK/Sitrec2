@@ -556,6 +556,9 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 this[obName].addInput("start", startObject);
             }
         });
+
+        // it takes two frames for this to have an effect
+        setRenderOne(2);
     }
 
 
