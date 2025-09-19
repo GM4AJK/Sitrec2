@@ -1037,7 +1037,7 @@ class CTrackManager extends CManager {
         if (ext === "json") {
             const geo = new CGeoJSON();
             geo.json = FileManager.get(trackFileName);
-            shortName = geo.trackID(trackIndex);
+            shortName = geo.shortTrackIDForIndex(trackIndex);
             found = true; // flag that we found a short name
 
             // check if there are more tracks (telling us to loop again)

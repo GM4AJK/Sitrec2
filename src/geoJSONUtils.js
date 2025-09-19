@@ -64,10 +64,39 @@ export class CGeoJSON {
     }
 
     // get the trackID of the indexed track
-    trackID(trackIndex = 0) {
+    // this is used by findShortName in the TrackManager
+    shortTrackIDForIndex(trackIndex = 0) {
         const tracks = this.countTracks();
         console.assert(tracks > trackIndex, "Not enough tracks to get track " + trackIndex + " of " + tracks);
-        return Array.from(this.thresherIds)[trackIndex];
+
+        const thresherID = Array.from(this.thresherIds)[trackIndex];
+
+        // find the first feature with that thresherID
+        // then from the properties, return the first available of:
+        //   1. tailNumber (if not empty when stripped of whitespace)
+        //   2. aircraftType (if not empty when stripped of whitespace)
+        //   3. thresherId
+        for (let i = 0; i < this.json.totalFeatures; i++) {
+            if (this.json.features[i].properties.thresherId === thresherID) {
+                if ("tailNumber" in this.json.features[i].properties && 
+                    this.json.features[i].properties.tailNumber.trim() !== "") {
+                    return this.json.features[i].properties.tailNumber;
+                } else if ("aircraftType" in this.json.features[i].properties && 
+                          this.json.features[i].properties.aircraftType.trim() !== "") {
+                    return this.json.features[i].properties.aircraftType;
+                } else {
+                    // use thresherId as a last resort
+                    // but crop it down to 16 characters
+                    return thresherID.substring(0, 16);
+
+
+                }
+            }
+        }
+
+
+
+
     }
 
 
