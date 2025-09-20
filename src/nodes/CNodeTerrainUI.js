@@ -66,6 +66,11 @@ export class CNodeTerrainUI extends CNode {
                 },
                 //staticURL: SITREC_APP + "data/images/28_sea water texture-seamless.jpg?v=3"
                 maxZoom: 18,
+            },
+            ElevationColor: {
+                name: "Elevation Pseudo-Color",
+                isElevationColor: true,
+                maxZoom: 20,
             }
         }
 
@@ -100,11 +105,7 @@ export class CNodeTerrainUI extends CNode {
                     maxZoom: 20,
                 },
 
-                ElevationColor: {
-                    name: "Elevation Color",
-                    isElevationColor: true,
-                    maxZoom: 20,
-                }
+
 
 
             }
