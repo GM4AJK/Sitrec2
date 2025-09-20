@@ -405,7 +405,9 @@ export class QuadTreeTile {
         }
 
         // Generate elevation color texture if needed (using interpolated elevation data)
-        this.generateElevationColorTextureInterpolated();
+        this.generateElevationColorTextureInterpolated().catch(error => {
+            console.warn(`Failed to generate interpolated elevation color texture for tile ${this.key()}:`, error);
+        });
         
         // Also check if we can now use actual elevation tile data instead of interpolated
         this.checkAndApplyElevationColorTexture();
@@ -583,7 +585,9 @@ export class QuadTreeTile {
         }
 
         // Generate elevation color texture if needed
-        this.generateElevationColorTexture(geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom);
+        this.generateElevationColorTexture(geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom).catch(error => {
+            console.warn(`Failed to generate elevation color texture for tile ${this.key()}:`, error);
+        });
 
         // Update geometry
         geometry.computeVertexNormals();
@@ -651,7 +655,9 @@ export class QuadTreeTile {
         }
 
         // Generate elevation color texture if needed (all blue since elevation is 0)
-        this.generateElevationColorTextureFlat();
+        this.generateElevationColorTextureFlat().catch(error => {
+            console.warn(`Failed to generate flat elevation color texture for tile ${this.key()}:`, error);
+        });
 
         // Update geometry
         geometry.computeVertexNormals();
@@ -916,7 +922,7 @@ export class QuadTreeTile {
     }
 
     // Helper function to convert heightmap to color texture
-    heightmapToColorTexture(heightmapData, textureSize = 256, testPatternColors = null) {
+    async heightmapToColorTexture(heightmapData, textureSize = 256, testPatternColors = null) {
         const { heightmap, minElevation, maxElevation } = heightmapData;
         
         // Create a canvas for the elevation color texture
@@ -928,6 +934,26 @@ export class QuadTreeTile {
         // Create image data for pixel manipulation
         const imageData = ctx.createImageData(canvas.width, canvas.height);
         const data = imageData.data;
+        
+        // Get OceanSurface texture for blue pixels (water areas)
+        let oceanTexture = null;
+        let oceanImageData = null;
+        try {
+            oceanTexture = await this.getOceanSurfaceTexture();
+            if (oceanTexture && oceanTexture.image) {
+                // Create a temporary canvas to get pixel data from ocean texture
+                const oceanCanvas = document.createElement('canvas');
+                oceanCanvas.width = textureSize;
+                oceanCanvas.height = textureSize;
+                const oceanCtx = oceanCanvas.getContext('2d');
+                
+                // Draw the ocean texture scaled to our texture size
+                oceanCtx.drawImage(oceanTexture.image, 0, 0, textureSize, textureSize);
+                oceanImageData = oceanCtx.getImageData(0, 0, textureSize, textureSize);
+            }
+        } catch (error) {
+            console.warn('Failed to load OceanSurface texture for ElevationColor, using solid blue:', error);
+        }
 
         let bluePixels = 0;
         let greenPixels = 0;
@@ -991,10 +1017,18 @@ export class QuadTreeTile {
                     let red, green, blue;
 
                     if (elevation <= waterLevel) {
-                        // Blue for water/low elevation
-                        red = waterColor.red;
-                        green = waterColor.green;
-                        blue = waterColor.blue;
+                        // Use OceanSurface texture for water/low elevation if available
+                        if (oceanImageData) {
+                            const oceanPixelIndex = pixelIndex;
+                            red = oceanImageData.data[oceanPixelIndex];
+                            green = oceanImageData.data[oceanPixelIndex + 1];
+                            blue = oceanImageData.data[oceanPixelIndex + 2];
+                        } else {
+                            // Fallback to solid blue for water/low elevation
+                            red = waterColor.red;
+                            green = waterColor.green;
+                            blue = waterColor.blue;
+                        }
                         bluePixels++;
                     } else if (elevation <= greenToBlackEnd) {
                         // Green to black gradient from 1m to 6000 feet
@@ -1148,7 +1182,7 @@ export class QuadTreeTile {
 //        console.log(logMessage);
     }
 
-    generateElevationColorTexture(geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom) {
+    async generateElevationColorTexture(geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom) {
         // Only generate elevation color texture if the current map source is elevation color
         const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (!sourceDef.isElevationColor) {
@@ -1173,8 +1207,8 @@ export class QuadTreeTile {
             return;
         }
 
-        // Convert heightmap to color texture
-        const textureData = this.heightmapToColorTexture(heightmapData);
+        // Convert heightmap to color texture (now async to load OceanSurface texture)
+        const textureData = await this.heightmapToColorTexture(heightmapData);
         
 //        console.log(`Elevation range: ${heightmapData.minElevation.toFixed(2)}m to ${heightmapData.maxElevation.toFixed(2)}m, Blue: ${textureData.bluePixels}, Green: ${textureData.greenPixels}, Grey: ${textureData.greyPixels}, White: ${textureData.whitePixels}`);
 
@@ -1186,7 +1220,7 @@ export class QuadTreeTile {
     }
 
     // Generate elevation color texture for flat terrain (all blue since elevation is 0)
-    generateElevationColorTextureFlat() {
+    async generateElevationColorTextureFlat() {
         // Only generate elevation color texture if the current map source is elevation color
         const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (!sourceDef.isElevationColor) {
@@ -1203,7 +1237,7 @@ export class QuadTreeTile {
         if (this.elevation) {
 //            console.log(`Generating elevation color texture for tile ${this.key()} using direct elevation data`);
             const elevationSize = Math.sqrt(this.elevation.length);
-            this.generateElevationColorTexture(
+            await this.generateElevationColorTexture(
                 this.mesh.geometry,
                 this, // Use this tile as the elevation source
                 elevationSize,
@@ -1218,8 +1252,8 @@ export class QuadTreeTile {
         // Generate flat heightmap (all zeros)
         const heightmapData = this.generateHeightmapFlat();
         
-        // Convert heightmap to color texture
-        const textureData = this.heightmapToColorTexture(heightmapData);
+        // Convert heightmap to color texture (now async to load OceanSurface texture)
+        const textureData = await this.heightmapToColorTexture(heightmapData);
         
         // Apply the texture to the mesh
         this.applyElevationTexture(
@@ -1229,7 +1263,7 @@ export class QuadTreeTile {
     }
 
     // Generate elevation color texture using interpolated elevation data (fallback method)
-    generateElevationColorTextureInterpolated() {
+    async generateElevationColorTextureInterpolated() {
         // Only generate elevation color texture if the current map source is elevation color
         const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (!sourceDef.isElevationColor) {
@@ -1258,7 +1292,7 @@ export class QuadTreeTile {
             color1: [128, 0, 128], // Purple squares (different from the main method)
             color2: [255, 165, 0]  // Orange squares
         };
-        const textureData = this.heightmapToColorTexture(heightmapData, 256, testPatternColors);
+        const textureData = await this.heightmapToColorTexture(heightmapData, 256, testPatternColors);
         
         console.log(`Interpolated elevation range: ${heightmapData.minElevation.toFixed(2)}m to ${heightmapData.maxElevation.toFixed(2)}m, Blue: ${textureData.bluePixels}, Green: ${textureData.greenPixels}, Grey: ${textureData.greyPixels}, White: ${textureData.whitePixels}`);
 
@@ -1538,10 +1572,57 @@ export class QuadTreeTile {
         if (elevationTile && elevationTile.elevation) {
 //            console.log(`Applying elevation color texture immediately for tile ${this.key()} using elevation zoom ${elevationZoom}`);
             const elevationSize = Math.sqrt(elevationTile.elevation.length);
-            this.generateElevationColorTexture(this.mesh.geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom);
+            this.generateElevationColorTexture(this.mesh.geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom).catch(error => {
+                console.warn(`Failed to generate elevation color texture for tile ${this.key()}:`, error);
+            });
         } else {
             console.log(`No elevation data available yet for tile ${this.key()}, will wait for elevation tile to load`);
         }
+    }
+
+    /**
+     * Get OceanSurface texture with appropriate mipmap level for this tile's zoom
+     * OceanSurface uses a single texture file with mipmaps generated once and cached globally
+     */
+    async getOceanSurfaceTexture() {
+        // Get the OceanSurface map source definition
+        const oceanSourceDef = this.map.terrainNode.UI.mapSources.OceanSurface;
+        if (!oceanSourceDef) {
+            throw new Error('OceanSurface map source not found');
+        }
+
+        // Get the base URL for OceanSurface texture (same for all coordinates)
+        const oceanUrl = oceanSourceDef.mapURL(0, 0, 0); // Coordinates don't matter for OceanSurface
+        if (!oceanUrl) {
+            throw new Error('OceanSurface URL not available');
+        }
+
+        // Create cache key for the base texture (without zoom, since it's the same texture)
+        const baseCacheKey = `${oceanUrl}_base`;
+        
+        // First, ensure we have the base texture loaded and cached
+        let baseTexture;
+        if (materialCache.has(baseCacheKey)) {
+            baseTexture = materialCache.get(baseCacheKey).map;
+        } else {
+            console.log(`QuadTreeTile: Loading OceanSurface base texture (one-time operation)`);
+            baseTexture = await loadTextureWithRetries(oceanUrl);
+            // Cache the base texture
+            const baseMaterial = new MeshStandardMaterial({map: baseTexture, color: "#ffffff"});
+            materialCache.set(baseCacheKey, baseMaterial);
+        }
+        
+        // Now get the appropriate mipmap level for this zoom
+        if (oceanSourceDef.generateMipmaps && oceanSourceDef.maxZoom) {
+            // Use the existing generateTiledMipmap which handles caching internally
+            return globalMipmapGenerator.generateTiledMipmap(
+                baseTexture, 
+                this.z, 
+                oceanSourceDef.maxZoom
+            );
+        }
+        
+        return baseTexture;
     }
 
 

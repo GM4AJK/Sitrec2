@@ -422,7 +422,12 @@ export class CNodeTerrain extends CNode {
         const terrainTile = terrainMap.tileCache[key];
         this.applyElevationToTile(terrainTile, terrainMap)
         if (this.UI.dynamic) {
-            this.applyElevationToParents(terrainTile, terrainMap);
+
+            // apply elevation to parents might be needed if the tile coordiante systems don't overlap
+            // but really parent tiles should NOT used higher resolution elevations
+            // So I removed this.
+
+   //        this.applyElevationToParents(terrainTile, terrainMap);
         }
 
     }
