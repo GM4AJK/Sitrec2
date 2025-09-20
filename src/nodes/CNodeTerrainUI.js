@@ -98,6 +98,12 @@ export class CNodeTerrainUI extends CNode {
                     name: "Debug Info",
                     isDebug: true,
                     maxZoom: 20,
+                },
+
+                ElevationColor: {
+                    name: "Elevation Color",
+                    isElevationColor: true,
+                    maxZoom: 20,
                 }
 
 
@@ -176,9 +182,7 @@ export class CNodeTerrainUI extends CNode {
 
             // do this async, as we might need to wait for the capabilities to be loaded
             this.setMapType(v).then(() => {
-                ;
                 this.terrainNode.loadMapTexture(v)
-
             })
         })
 
