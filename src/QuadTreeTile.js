@@ -403,6 +403,12 @@ export class QuadTreeTile {
             geometry.attributes.position.setXYZ(i, vertex.x, vertex.y, vertex.z);
         }
 
+        // Generate elevation color texture if needed (using interpolated elevation data)
+        this.generateElevationColorTextureInterpolated();
+        
+        // Also check if we can now use actual elevation tile data instead of interpolated
+        this.checkAndApplyElevationColorTexture();
+
         // Removed this as it's expensive. And seems not needed for just curve flattenog.
         // might be an ideal candidate for multi-threading
         geometry.computeVertexNormals()
@@ -575,6 +581,9 @@ export class QuadTreeTile {
             geometry.attributes.position.setXYZ(i, vertex.x, vertex.y, vertex.z);
         }
 
+        // Generate elevation color texture if needed
+        this.generateElevationColorTexture(geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom);
+
         // Update geometry
         geometry.computeVertexNormals();
         geometry.computeBoundingBox();
@@ -639,6 +648,9 @@ export class QuadTreeTile {
             // Set the vertex position in tile space
             geometry.attributes.position.setXYZ(i, vertex.x, vertex.y, vertex.z);
         }
+
+        // Generate elevation color texture if needed (all blue since elevation is 0)
+        this.generateElevationColorTextureFlat();
 
         // Update geometry
         geometry.computeVertexNormals();
@@ -768,6 +780,421 @@ export class QuadTreeTile {
         });
     }
 
+    generateElevationColorTexture(geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom) {
+
+        // Only generate elevation color texture if the current map source is elevation color
+        const sourceDef = this.map.terrainNode.UI.getSourceDef();
+        if (!sourceDef.isElevationColor) {
+            return;
+        }
+
+        // Ensure mesh exists before trying to apply texture
+        if (!this.mesh) {
+            console.warn(`Cannot generate elevation color texture for tile ${this.key()}: mesh not initialized`);
+            return;
+        }
+
+        console.log(`Generating elevation color texture for tile ${this.key()}, elevationSize: ${elevationSize}, elevationZoom: ${elevationZoom}, tileZoom: ${this.z}`);
+        console.log(`Mesh exists: ${!!this.mesh}, Mesh material: ${this.mesh ? this.mesh.material.constructor.name : 'N/A'}`);
+
+        // Create a canvas for the elevation color texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+
+        // Create image data for pixel manipulation
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        const data = imageData.data;
+
+        let minElevation = Infinity;
+        let maxElevation = -Infinity;
+        let bluePixels = 0;
+        let greenPixels = 0;
+
+        // Process each pixel in the canvas
+        for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+                const pixelIndex = (y * canvas.width + x) * 4;
+
+                // Calculate the fraction of the tile that this pixel represents
+                const xTileFraction = x / (canvas.width - 1);
+                const yTileFraction = y / (canvas.height - 1);
+
+                // Get elevation data coordinates, accounting for tile fraction and offset
+                let elevationLocalX, elevationLocalY;
+                
+                if (elevationZoom === this.z) {
+                    // Same zoom level - direct mapping
+                    elevationLocalX = xTileFraction * (elevationSize - 1);
+                    elevationLocalY = yTileFraction * (elevationSize - 1);
+                } else {
+                    // Lower zoom level (parent tile) - map to the specific portion of the parent
+                    const parentOffsetX = (tileOffsetX + xTileFraction) * tileFractionX;
+                    const parentOffsetY = (tileOffsetY + yTileFraction) * tileFractionY;
+                    elevationLocalX = parentOffsetX * (elevationSize - 1);
+                    elevationLocalY = parentOffsetY * (elevationSize - 1);
+                }
+                
+                // Get the four surrounding elevation data points for interpolation
+                const x0 = Math.floor(elevationLocalX);
+                const x1 = Math.min(elevationSize - 1, x0 + 1);
+                const y0 = Math.floor(elevationLocalY);
+                const y1 = Math.min(elevationSize - 1, y0 + 1);
+                
+                // Get the fractional parts for interpolation
+                const fx = elevationLocalX - x0;
+                const fy = elevationLocalY - y0;
+                
+                // Sample the four corner elevation values
+                const e00 = elevationTile.elevation[y0 * elevationSize + x0];
+                const e01 = elevationTile.elevation[y0 * elevationSize + x1];
+                const e10 = elevationTile.elevation[y1 * elevationSize + x0];
+                const e11 = elevationTile.elevation[y1 * elevationSize + x1];
+                
+                // Bilinear interpolation
+                const e0 = e00 + (e01 - e00) * fx;
+                const e1 = e10 + (e11 - e10) * fx;
+                let elevation = e0 + (e1 - e0) * fy;
+                
+                // Apply z-scale if available
+                if (this.map.elevationMap.options.zScale) {
+                    elevation *= this.map.elevationMap.options.zScale;
+                }
+
+                // Track elevation range for debugging
+                minElevation = Math.min(minElevation, elevation);
+                maxElevation = Math.max(maxElevation, elevation);
+
+                // Color based on elevation: <=1m is blue, >1m is green
+                if (elevation <= 1) {
+                    // Blue for water/low elevation
+                    data[pixelIndex] = 0;     // Red
+                    data[pixelIndex + 1] = 0; // Green
+                    data[pixelIndex + 2] = 255; // Blue
+                    bluePixels++;
+                } else {
+                    // Green for land/higher elevation
+                    data[pixelIndex] = 0;     // Red
+                    data[pixelIndex + 1] = 255; // Green
+                    data[pixelIndex + 2] = 0;   // Blue
+                    greenPixels++;
+                }
+                data[pixelIndex + 3] = 255; // Alpha (fully opaque)
+            }
+        }
+
+        console.log(`Elevation range: ${minElevation.toFixed(2)}m to ${maxElevation.toFixed(2)}m, Blue pixels: ${bluePixels}, Green pixels: ${greenPixels}`);
+
+        // If all elevations are 0, it means elevation data is invalid - skip texture generation
+        if (minElevation === 0 && maxElevation === 0) {
+            console.log(`Invalid elevation data (all zeros) for tile ${this.key()}, skipping texture generation`);
+            return;
+        }
+
+        // If all elevations are the same (but not zero), create a test pattern
+        if (minElevation === maxElevation) {
+            console.log(`All elevations are the same (${minElevation}), creating test pattern`);
+            // Create a checkerboard pattern for testing
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const pixelIndex = (y * canvas.width + x) * 4;
+                    const isEven = ((Math.floor(x / 32) + Math.floor(y / 32)) % 2) === 0;
+                    if (isEven) {
+                        // Red squares
+                        data[pixelIndex] = 255;     // Red
+                        data[pixelIndex + 1] = 0;   // Green
+                        data[pixelIndex + 2] = 0;   // Blue
+                    } else {
+                        // Yellow squares
+                        data[pixelIndex] = 255;     // Red
+                        data[pixelIndex + 1] = 255; // Green
+                        data[pixelIndex + 2] = 0;   // Blue
+                    }
+                    data[pixelIndex + 3] = 255; // Alpha
+                }
+            }
+        }
+
+        // Put the image data onto the canvas
+        ctx.putImageData(imageData, 0, 0);
+
+        // Dispose of old material if it exists
+        if (this.mesh.material && this.mesh.material.map) {
+            this.mesh.material.map.dispose();
+        }
+        if (this.mesh.material && this.mesh.material !== tileMaterial) {
+            this.mesh.material.dispose();
+        }
+
+        // Create a texture from the canvas and apply it to the mesh
+        const texture = new CanvasTexture(canvas);
+        texture.minFilter = NearestFilter;
+        texture.magFilter = NearestFilter;
+        texture.needsUpdate = true;
+        const material = new MeshBasicMaterial({map: texture});
+
+        // Dispose of the old material properly
+        const oldMaterial = this.mesh.material;
+        if (oldMaterial && oldMaterial !== tileMaterial) {
+            if (oldMaterial.map) {
+                oldMaterial.map.dispose();
+            }
+            oldMaterial.dispose();
+        }
+        
+        // Apply the new material
+        this.mesh.material = material;
+        this.mesh.material.needsUpdate = true;
+        
+        // Force a complete refresh by temporarily removing and re-adding to scene
+        if (this.mesh.parent && this.added) {
+            const parent = this.mesh.parent;
+            parent.remove(this.mesh);
+            parent.add(this.mesh);
+        }
+        
+        console.log(`Applied elevation color texture to tile ${this.key()}, material type: ${material.constructor.name}, has texture: ${!!material.map}`);
+    }
+
+    // Generate elevation color texture for flat terrain (all blue since elevation is 0)
+    generateElevationColorTextureFlat() {
+        // Only generate elevation color texture if the current map source is elevation color
+        const sourceDef = this.map.terrainNode.UI.getSourceDef();
+        if (!sourceDef.isElevationColor) {
+            return;
+        }
+
+        // Ensure mesh exists before trying to apply texture
+        if (!this.mesh) {
+            console.warn(`Cannot generate flat elevation color texture for tile ${this.key()}: mesh not initialized`);
+            return;
+        }
+
+        // If we have elevation data, use the full generateElevationColorTexture method
+        if (this.elevation) {
+            console.log(`Generating elevation color texture for tile ${this.key()} using direct elevation data`);
+            const elevationSize = Math.sqrt(this.elevation.length);
+            this.generateElevationColorTexture(
+                this.mesh.geometry,
+                this, // Use this tile as the elevation source
+                elevationSize,
+                0, 0, 1, 1, // No offset or fraction needed for direct data
+                this.z
+            );
+            return;
+        }
+
+        console.log(`Generating flat elevation color texture for tile ${this.key()} (no elevation data)`);
+
+        // Create a canvas for the elevation color texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+
+        // Create image data for pixel manipulation
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        const data = imageData.data;
+
+        // Fill entire canvas with blue (elevation = 0, which is ≤1m)
+        for (let i = 0; i < data.length; i += 4) {
+            data[i] = 0;     // Red
+            data[i + 1] = 0; // Green
+            data[i + 2] = 255; // Blue
+            data[i + 3] = 255; // Alpha
+        }
+
+        // Put the image data onto the canvas
+        ctx.putImageData(imageData, 0, 0);
+
+        // Dispose of old material if it exists
+        if (this.mesh.material && this.mesh.material.map) {
+            this.mesh.material.map.dispose();
+        }
+        if (this.mesh.material && this.mesh.material !== tileMaterial) {
+            this.mesh.material.dispose();
+        }
+
+        // Create a texture from the canvas and apply it to the mesh
+        const texture = new CanvasTexture(canvas);
+        texture.minFilter = NearestFilter;
+        texture.magFilter = NearestFilter;
+        texture.needsUpdate = true;
+        const material = new MeshBasicMaterial({map: texture});
+
+        // Dispose of the old material properly
+        const oldMaterial = this.mesh.material;
+        if (oldMaterial && oldMaterial !== tileMaterial) {
+            if (oldMaterial.map) {
+                oldMaterial.map.dispose();
+            }
+            oldMaterial.dispose();
+        }
+        
+        // Apply the new material
+        this.mesh.material = material;
+        this.mesh.material.needsUpdate = true;
+        
+        // Force a complete refresh by temporarily removing and re-adding to scene
+        if (this.mesh.parent && this.added) {
+            const parent = this.mesh.parent;
+            parent.remove(this.mesh);
+            parent.add(this.mesh);
+        }
+        
+        console.log(`Applied flat elevation color texture (all blue) to tile ${this.key()}`);
+    }
+
+    // Generate elevation color texture using interpolated elevation data (fallback method)
+    generateElevationColorTextureInterpolated() {
+        // Only generate elevation color texture if the current map source is elevation color
+        const sourceDef = this.map.terrainNode.UI.getSourceDef();
+        if (!sourceDef.isElevationColor) {
+            return;
+        }
+
+        // Ensure mesh exists before trying to apply texture
+        if (!this.mesh) {
+            console.warn(`Cannot generate interpolated elevation color texture for tile ${this.key()}: mesh not initialized`);
+            return;
+        }
+
+        console.log(`Generating interpolated elevation color texture for tile ${this.key()}`);
+
+        // Create a canvas for the elevation color texture
+        const canvas = document.createElement('canvas');
+        canvas.width = 256;
+        canvas.height = 256;
+        const ctx = canvas.getContext('2d');
+
+        // Create image data for pixel manipulation
+        const imageData = ctx.createImageData(canvas.width, canvas.height);
+        const data = imageData.data;
+
+        let minElevation = Infinity;
+        let maxElevation = -Infinity;
+        let bluePixels = 0;
+        let greenPixels = 0;
+
+        // Process each pixel in the canvas
+        for (let y = 0; y < canvas.height; y++) {
+            for (let x = 0; x < canvas.width; x++) {
+                const pixelIndex = (y * canvas.width + x) * 4;
+
+                // Calculate the fraction of the tile that this pixel represents
+                const xTileFraction = x / (canvas.width - 1);
+                const yTileFraction = y / (canvas.height - 1);
+
+                // Get world tile coordinates
+                const xWorld = this.x + xTileFraction;
+                const yWorld = this.y + yTileFraction;
+
+                // Convert to lat/lon
+                const lat = this.map.options.mapProjection.getNorthLatitude(yWorld, this.z);
+                const lon = this.map.options.mapProjection.getLeftLongitude(xWorld, this.z);
+
+                // Get elevation using the interpolated method (same as recalculateCurveOld)
+                let elevation = this.map.getElevationInterpolated(lat, lon, this.z);
+
+                // Clamp to sea level
+                if (elevation < 0) elevation = 0;
+
+                // Track elevation range for debugging
+                minElevation = Math.min(minElevation, elevation);
+                maxElevation = Math.max(maxElevation, elevation);
+
+                // Color based on elevation: ≤1m is blue, >1m is green
+                if (elevation <= 1) {
+                    // Blue for water/low elevation
+                    data[pixelIndex] = 0;     // Red
+                    data[pixelIndex + 1] = 0; // Green
+                    data[pixelIndex + 2] = 255; // Blue
+                    bluePixels++;
+                } else {
+                    // Green for land/higher elevation
+                    data[pixelIndex] = 0;     // Red
+                    data[pixelIndex + 1] = 255; // Green
+                    data[pixelIndex + 2] = 0;   // Blue
+                    greenPixels++;
+                }
+                data[pixelIndex + 3] = 255; // Alpha (fully opaque)
+            }
+        }
+
+        console.log(`Interpolated elevation range: ${minElevation.toFixed(2)}m to ${maxElevation.toFixed(2)}m, Blue pixels: ${bluePixels}, Green pixels: ${greenPixels}`);
+
+        // If all elevations are 0, it means no elevation data is loaded yet - skip texture generation
+        if (minElevation === 0 && maxElevation === 0) {
+            console.log(`No elevation data loaded yet for tile ${this.key()}, skipping texture generation`);
+            return;
+        }
+
+        // If all elevations are the same (but not zero), create a test pattern
+        if (minElevation === maxElevation) {
+            console.log(`All interpolated elevations are the same (${minElevation}), creating test pattern`);
+            // Create a checkerboard pattern for testing
+            for (let y = 0; y < canvas.height; y++) {
+                for (let x = 0; x < canvas.width; x++) {
+                    const pixelIndex = (y * canvas.width + x) * 4;
+                    const isEven = ((Math.floor(x / 32) + Math.floor(y / 32)) % 2) === 0;
+                    if (isEven) {
+                        // Purple squares (different from the main method)
+                        data[pixelIndex] = 128;     // Red
+                        data[pixelIndex + 1] = 0;   // Green
+                        data[pixelIndex + 2] = 128; // Blue
+                    } else {
+                        // Orange squares
+                        data[pixelIndex] = 255;     // Red
+                        data[pixelIndex + 1] = 165; // Green
+                        data[pixelIndex + 2] = 0;   // Blue
+                    }
+                    data[pixelIndex + 3] = 255; // Alpha
+                }
+            }
+        }
+
+        // Put the image data onto the canvas
+        ctx.putImageData(imageData, 0, 0);
+
+        // Dispose of old material if it exists
+        if (this.mesh.material && this.mesh.material.map) {
+            this.mesh.material.map.dispose();
+        }
+        if (this.mesh.material && this.mesh.material !== tileMaterial) {
+            this.mesh.material.dispose();
+        }
+
+        // Create a texture from the canvas and apply it to the mesh
+        const texture = new CanvasTexture(canvas);
+        texture.minFilter = NearestFilter;
+        texture.magFilter = NearestFilter;
+        texture.needsUpdate = true;
+        const material = new MeshBasicMaterial({map: texture});
+
+        // Dispose of the old material properly
+        const oldMaterial = this.mesh.material;
+        if (oldMaterial && oldMaterial !== tileMaterial) {
+            if (oldMaterial.map) {
+                oldMaterial.map.dispose();
+            }
+            oldMaterial.dispose();
+        }
+        
+        // Apply the new material
+        this.mesh.material = material;
+        this.mesh.material.needsUpdate = true;
+        
+        // Force a complete refresh by temporarily removing and re-adding to scene
+        if (this.mesh.parent && this.added) {
+            const parent = this.mesh.parent;
+            parent.remove(this.mesh);
+            parent.add(this.mesh);
+        }
+        
+        console.log(`Applied interpolated elevation color texture to tile ${this.key()}`);
+    }
+
     applyMaterial() {
         const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (sourceDef.isDebug) {
@@ -792,6 +1219,24 @@ export class QuadTreeTile {
             this.added = true; // mark the tile as added to the scene
             
             // Return early for wireframe materials
+            return Promise.resolve(this.mesh.material);
+        }
+
+        // Handle elevation color material
+        if (sourceDef.isElevationColor) {
+            // For elevation color, we need to wait for elevation data and then generate the texture
+            // For now, use the debug info texture showing tile coordinates
+            this.updateDebugMaterial().then((material) => {
+                this.loaded = true;
+                this.map.scene.add(this.mesh);
+                this.added = true;
+                
+                // Check if elevation data is already available and apply elevation color texture
+                this.checkAndApplyElevationColorTexture();
+            });
+            
+            // The actual elevation color texture will be applied when recalculateCurve() is called
+            // or when elevation data becomes available
             return Promise.resolve(this.mesh.material);
         }
 
@@ -965,6 +1410,66 @@ export class QuadTreeTile {
         });
     }
 
+    // Check if elevation data is available and apply elevation color texture if needed
+    checkAndApplyElevationColorTexture() {
+        // Only proceed if we're in elevation color mode
+        const sourceDef = this.map.terrainNode.UI.getSourceDef();
+        if (!sourceDef.isElevationColor) {
+            return;
+        }
+
+        // Only proceed if mesh exists
+        if (!this.mesh) {
+            return;
+        }
+
+        // Check if elevation data is available for this tile or parent tiles
+        let elevationTile = null;
+        let elevationZoom = this.z;
+        let tileOffsetX = 0;
+        let tileOffsetY = 0;
+        let tileFractionX = 1.0;
+        let tileFractionY = 1.0;
+        
+        // First try exact match
+        elevationTile = this.map.elevationMap?.tileCache?.[this.key()];
+        
+        if (!elevationTile || !elevationTile.elevation) {
+            // Try lower zoom levels (parent tiles with less detailed but available elevation data)
+            for (let searchZoom = this.z - 1; searchZoom >= 0; searchZoom--) {
+                // Calculate which parent tile covers this tile
+                const zoomDiff = this.z - searchZoom;
+                const tilesPerParent = Math.pow(2, zoomDiff);
+                
+                // Find the parent tile coordinates
+                const elevationX = Math.floor(this.x / tilesPerParent);
+                const elevationY = Math.floor(this.y / tilesPerParent);
+                const elevationKey = `${searchZoom}/${elevationX}/${elevationY}`;
+                const candidateTile = this.map.elevationMap?.tileCache?.[elevationKey];
+                
+                if (candidateTile && candidateTile.elevation) {
+                    elevationTile = candidateTile;
+                    elevationZoom = searchZoom;
+                    // Calculate which portion of the parent tile this texture tile represents
+                    tileOffsetX = this.x % tilesPerParent;
+                    tileOffsetY = this.y % tilesPerParent;
+                    tileFractionX = 1.0 / tilesPerParent;
+                    tileFractionY = 1.0 / tilesPerParent;
+                    break;
+                }
+            }
+        }
+        
+        // If elevation data is available, generate the elevation color texture
+        if (elevationTile && elevationTile.elevation) {
+            console.log(`Applying elevation color texture immediately for tile ${this.key()} using elevation zoom ${elevationZoom}`);
+            const elevationSize = Math.sqrt(elevationTile.elevation.length);
+            this.generateElevationColorTexture(this.mesh.geometry, elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom);
+        } else {
+            console.log(`No elevation data available yet for tile ${this.key()}, will wait for elevation tile to load`);
+        }
+    }
+
 
 //////////////////////////////////////////////////////////////////////////////////
 
@@ -1068,4 +1573,6 @@ export class QuadTreeTile {
     //             this.mesh.geometry.computeVertexNormals()
     //     }
     // }
+
+
 }
