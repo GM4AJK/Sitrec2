@@ -14,6 +14,7 @@ import {MeshStandardMaterial} from "three/src/materials/MeshStandardMaterial";
 import {Sphere} from "three/src/math/Sphere";
 import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
+import {globalMipmapGenerator} from "./MipmapGenerator";
 
 const tileMaterial = new MeshBasicMaterial({wireframe: true, color: "#408020"})
 
@@ -661,17 +662,33 @@ export class QuadTreeTile {
 
     buildMaterial() {
         const url = this.textureUrl();
+        const sourceDef = this.map.terrainNode.getMapSourceDef();
         
-        // Check if we already have a cached material for this URL
-        if (materialCache.has(url)) {
-            return Promise.resolve(materialCache.get(url));
+        // Create a cache key that includes zoom level for mipmap-enabled sources
+        const cacheKey = sourceDef.generateMipmaps ? `${url}_z${this.z}` : url;
+        
+        // Check if we already have a cached material for this cache key
+        if (materialCache.has(cacheKey)) {
+            return Promise.resolve(materialCache.get(cacheKey));
         }
         
         // If not cached, load the texture and create the material
         return loadTextureWithRetries(url).then((texture) => {
-            const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+            let finalTexture = texture;
+            
+            // Generate mipmap if enabled for this source
+            if (sourceDef.generateMipmaps && sourceDef.maxZoom) {
+                console.log(`QuadTreeTile: Generating mipmap for tile ${this.z}/${this.x}/${this.y}`);
+                finalTexture = globalMipmapGenerator.generateTiledMipmap(
+                    texture, 
+                    this.z, 
+                    sourceDef.maxZoom
+                );
+            }
+            
+            const material = new MeshStandardMaterial({map: finalTexture, color: "#ffffff"});
             // Cache the material for future use
-            materialCache.set(url, material);
+            materialCache.set(cacheKey, material);
             return material;
         });
     }
@@ -679,26 +696,36 @@ export class QuadTreeTile {
     // Static method to clear the entire material cache
     static clearMaterialCache() {
         // Dispose of all cached materials and their textures
-        materialCache.forEach((material, url) => {
+        materialCache.forEach((material, cacheKey) => {
             if (material.map) {
                 material.map.dispose();
             }
             material.dispose();
         });
         materialCache.clear();
+        // Also clear the mipmap generator cache
+        globalMipmapGenerator.clearCache();
         console.log('Material cache cleared');
     }
 
     // Static method to remove a specific material from cache
     static removeMaterialFromCache(url) {
-        if (materialCache.has(url)) {
-            const material = materialCache.get(url);
-            if (material.map) {
-                material.map.dispose();
+        // Remove both regular and mipmap cache entries for this URL
+        const keysToDelete = [];
+        materialCache.forEach((material, cacheKey) => {
+            if (cacheKey === url || cacheKey.startsWith(`${url}_z`)) {
+                if (material.map) {
+                    material.map.dispose();
+                }
+                material.dispose();
+                keysToDelete.push(cacheKey);
             }
-            material.dispose();
-            materialCache.delete(url);
-            console.log(`Material removed from cache: ${url}`);
+        });
+        
+        keysToDelete.forEach(key => materialCache.delete(key));
+        
+        if (keysToDelete.length > 0) {
+            console.log(`Materials removed from cache for URL: ${url} (${keysToDelete.length} entries)`);
         }
     }
 

@@ -164,6 +164,11 @@ export class CNodeTerrain extends CNode {
         return sourceDef.mapURL.bind(this)(z, x, y, layerName, layerDef.type)
     }
 
+    // Get the current map source definition
+    getMapSourceDef() {
+        return this.UI.mapSources[this.UI.mapType];
+    }
+
 
     elevationURLDirect(z, x, y) {
         // get the elevation source for the current type

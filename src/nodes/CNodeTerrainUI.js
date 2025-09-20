@@ -62,10 +62,10 @@ export class CNodeTerrainUI extends CNode {
             OceanSurface: {
                 name: "Ocean Surface",
                 mapURL: (z, x, y) => {
-                    return SITREC_APP + "data/images/28_sea water texture-seamless.jpg?v=3";
+                    return SITREC_APP + "data/images/28_sea water texture-seamless.jpg";
                 },
-                //staticURL: SITREC_APP + "data/images/28_sea water texture-seamless.jpg?v=3"
                 maxZoom: 18,
+                generateMipmaps: true,
             },
             ElevationColor: {
                 name: "Elevation Pseudo-Color",
