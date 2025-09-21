@@ -1,4 +1,4 @@
-import {MetaBezierCurveEditor, MetaBezierCurve} from "../MetaCurveEdit";
+import {MetaBezierCurve, MetaBezierCurveEditor} from "../MetaCurveEdit";
 import {Sit} from "../Globals";
 import {CNode} from "./CNode";
 import {CNodeViewCanvas2D} from "./CNodeViewCanvas";
@@ -33,7 +33,7 @@ export class CNodeCurveEditorView extends CNodeViewCanvas2D {
     }
 
     modDeserialize(v) {
-        console.log("CNodeCurveEditorView.modDeserialize", v)
+//        console.log("CNodeCurveEditorView.modDeserialize", v)
         super.modDeserialize(v);
 
         // legacy views, we have to force it visible

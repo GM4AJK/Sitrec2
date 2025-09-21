@@ -95,7 +95,7 @@ export function findColumn(csv, text, exactMatch = false) {
     // Throw an error if no column starts with the given text
    //  throw new Error("No column found starting with " + searchText);
 
-    console.warn("No column found " + (exactMatch ? "matching ":"starting with ") + text);
+//    console.warn("No column found " + (exactMatch ? "matching ":"starting with ") + text);
     return -1;
 
 }
