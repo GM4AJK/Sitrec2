@@ -200,6 +200,9 @@ export class QuadTreeMap {
                 if (child1 && child2 && child3 && child4 &&
                     child1.loaded && child2.loaded && child3.loaded && child4.loaded) {
                     this.scene.remove(tile.mesh); // remove the tile mesh from the scene
+                    if (tile.skirtMesh) {
+                        this.scene.remove(tile.skirtMesh); // remove the skirt mesh from the scene
+                    }
                     tile.added = false; // mark the tile as not added
                     this.refreshDebugGeometry(tile);
                 }

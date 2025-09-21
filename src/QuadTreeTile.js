@@ -2,12 +2,14 @@ import {assert} from "./assert";
 import {boxMark, DebugArrowAB, removeDebugArrow} from "./threeExt";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {GlobalScene} from "./LocalFrame";
-import {getLocalNorthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
+import {getLocalDownVector, getLocalNorthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
 import {loadTextureWithRetries} from "./js/map33/material/QuadTextureMaterial";
 import {convertTIFFToElevationArray} from "./TIFFUtils";
 import {fromArrayBuffer} from 'geotiff';
 import {getPixels} from "./js/get-pixels-mick";
 import {PlaneGeometry} from "three/src/geometries/PlaneGeometry";
+import {BufferGeometry} from "three/src/core/BufferGeometry";
+import {Float32BufferAttribute} from "three/src/core/BufferAttribute";
 import {Mesh} from "three/src/objects/Mesh";
 import {MeshStandardMaterial} from "three/src/materials/MeshStandardMaterial";
 import {Sphere} from "three/src/math/Sphere";
@@ -133,6 +135,230 @@ export class QuadTreeTile {
         this.geometry = geometry
     }
 
+    // Create skirt geometry that extends downward around the tile edges
+    buildSkirtGeometry() {
+        const segments = this.map.options.tileSegments;
+        const halfSize = this.size / 2;
+        const skirtDepth = this.size * 0.1; // 1/10 the width of the tile
+        
+        // Calculate the center position of the tile in world coordinates
+        const lat1 = this.map.options.mapProjection.getNorthLatitude(this.y, this.z);
+        const lon1 = this.map.options.mapProjection.getLeftLongitude(this.x, this.z);
+        const lat2 = this.map.options.mapProjection.getNorthLatitude(this.y + 1, this.z);
+        const lon2 = this.map.options.mapProjection.getLeftLongitude(this.x + 1, this.z);
+        const centerLat = (lat1 + lat2) / 2;
+        const centerLon = (lon1 + lon2) / 2;
+        const centerPosition = LLAToEUS(centerLat, centerLon, 0);
+        
+        // Get the local down vector for this tile's center position
+        const downVector = getLocalDownVector(centerPosition);
+        
+        const vertices = [];
+        const indices = [];
+        const uvs = [];
+        const normals = [];
+        
+        // Get the edge vertices from the main tile geometry
+        const mainPositions = this.geometry.attributes.position.array;
+        const mainUvs = this.geometry.attributes.uv.array;
+        
+        // Ensure main geometry has normals computed
+        if (!this.geometry.attributes.normal) {
+            this.geometry.computeVertexNormals();
+        }
+        const mainNormals = this.geometry.attributes.normal.array;
+        
+        // Helper function to get vertex index in the main geometry
+        const getVertexIndex = (x, y) => (y * (segments + 1) + x);
+        
+        // Helper function to add a vertex to our skirt arrays
+        const addVertex = (x, y, z, u, v, nx, ny, nz) => {
+            vertices.push(x, y, z);
+            uvs.push(u, v);
+            normals.push(nx, ny, nz);
+            return (vertices.length / 3) - 1;
+        };
+        
+        let vertexIndex = 0;
+        
+        // Create skirt for each edge
+        const edges = [
+            // Bottom edge (y = 0)
+            { start: [0, 0], end: [segments, 0], direction: [1, 0] },
+            // Right edge (x = segments)
+            { start: [segments, 0], end: [segments, segments], direction: [0, 1] },
+            // Top edge (y = segments)
+            { start: [segments, segments], end: [0, segments], direction: [-1, 0] },
+            // Left edge (x = 0)
+            { start: [0, segments], end: [0, 0], direction: [0, -1] }
+        ];
+        
+        // Create vertices and triangles for each edge
+        for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+            const edge = edges[edgeIndex];
+            const [startX, startY] = edge.start;
+            const [endX, endY] = edge.end;
+            const [dirX, dirY] = edge.direction;
+            
+            const edgeLength = Math.abs(endX - startX) + Math.abs(endY - startY);
+            
+            // Create vertices for this edge
+            for (let i = 0; i <= edgeLength; i++) {
+                const x = startX + dirX * i;
+                const y = startY + dirY * i;
+                
+                const mainVertexIndex = getVertexIndex(x, y);
+                const mainX = mainPositions[mainVertexIndex * 3];
+                const mainY = mainPositions[mainVertexIndex * 3 + 1];
+                const mainZ = mainPositions[mainVertexIndex * 3 + 2];
+                const mainU = mainUvs[mainVertexIndex * 2];
+                const mainV = mainUvs[mainVertexIndex * 2 + 1];
+                
+                // Get the normal from the main tile surface for fake lighting
+                const mainNx = mainNormals[mainVertexIndex * 3];
+                const mainNy = mainNormals[mainVertexIndex * 3 + 1];
+                const mainNz = mainNormals[mainVertexIndex * 3 + 2];
+                
+                // Add top vertex (at tile edge level) with main tile normal
+                addVertex(mainX, mainY, mainZ, mainU, mainV, mainNx, mainNy, mainNz);
+                
+                // Add bottom vertex (extended downward) with same normal for consistent lighting
+                const bottomX = mainX + downVector.x * skirtDepth;
+                const bottomY = mainY + downVector.y * skirtDepth;
+                const bottomZ = mainZ + downVector.z * skirtDepth;
+                addVertex(bottomX, bottomY, bottomZ, mainU, mainV, mainNx, mainNy, mainNz);
+            }
+            
+            // Create triangles for this edge
+            const edgeStartVertexIndex = vertexIndex;
+            for (let i = 0; i < edgeLength; i++) {
+                const currentVertexIndex = edgeStartVertexIndex + i * 2;
+                const nextVertexIndex = currentVertexIndex + 2;
+                
+                // Two triangles per segment (clockwise winding for outward-facing normals)
+                // Triangle 1: current top, next top, current bottom
+                indices.push(currentVertexIndex, nextVertexIndex, currentVertexIndex + 1);
+                // Triangle 2: current bottom, next top, next bottom
+                indices.push(currentVertexIndex + 1, nextVertexIndex, nextVertexIndex + 1);
+            }
+            
+            vertexIndex += (edgeLength + 1) * 2;
+        }
+        
+        // Create the skirt geometry
+        const skirtGeometry = new BufferGeometry();
+        skirtGeometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
+        skirtGeometry.setAttribute('uv', new Float32BufferAttribute(uvs, 2));
+        skirtGeometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
+        skirtGeometry.setIndex(indices);
+        // Don't compute vertex normals - use our fake normals for consistent lighting
+        
+        this.skirtGeometry = skirtGeometry;
+    }
+
+    // Update skirt geometry to match the current main tile geometry after elevation changes
+    updateSkirtGeometry() {
+        if (!this.geometry || !this.skirtGeometry) return;
+        
+        const segments = this.map.options.tileSegments;
+        const skirtDepth = this.size * 0.1; // 1/10 the width of the tile
+        
+        // Calculate the center position of the tile in world coordinates
+        const lat1 = this.map.options.mapProjection.getNorthLatitude(this.y, this.z);
+        const lon1 = this.map.options.mapProjection.getLeftLongitude(this.x, this.z);
+        const lat2 = this.map.options.mapProjection.getNorthLatitude(this.y + 1, this.z);
+        const lon2 = this.map.options.mapProjection.getLeftLongitude(this.x + 1, this.z);
+        const centerLat = (lat1 + lat2) / 2;
+        const centerLon = (lon1 + lon2) / 2;
+        const centerPosition = LLAToEUS(centerLat, centerLon, 0);
+        
+        // Get the local down vector for this tile's center position
+        const downVector = getLocalDownVector(centerPosition);
+        
+        // Get the updated edge vertices from the main tile geometry
+        const mainPositions = this.geometry.attributes.position.array;
+        const skirtPositions = this.skirtGeometry.attributes.position.array;
+        
+        // Ensure main geometry has normals computed
+        if (!this.geometry.attributes.normal) {
+            this.geometry.computeVertexNormals();
+        }
+        const mainNormals = this.geometry.attributes.normal.array;
+        const skirtNormals = this.skirtGeometry.attributes.normal.array;
+        
+        // Helper function to get vertex index in the main geometry
+        const getVertexIndex = (x, y) => (y * (segments + 1) + x);
+        
+        let skirtVertexIndex = 0;
+        
+        // Update skirt vertices for each edge
+        const edges = [
+            // Bottom edge (y = 0)
+            { start: [0, 0], end: [segments, 0], direction: [1, 0] },
+            // Right edge (x = segments)
+            { start: [segments, 0], end: [segments, segments], direction: [0, 1] },
+            // Top edge (y = segments)
+            { start: [segments, segments], end: [0, segments], direction: [-1, 0] },
+            // Left edge (x = 0)
+            { start: [0, segments], end: [0, 0], direction: [0, -1] }
+        ];
+        
+        // Update vertices for each edge (matching the creation logic)
+        for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+            const edge = edges[edgeIndex];
+            const [startX, startY] = edge.start;
+            const [endX, endY] = edge.end;
+            const [dirX, dirY] = edge.direction;
+            
+            const edgeLength = Math.abs(endX - startX) + Math.abs(endY - startY);
+            
+            // Update vertices for this edge
+            for (let i = 0; i <= edgeLength; i++) {
+                const x = startX + dirX * i;
+                const y = startY + dirY * i;
+                
+                const mainVertexIndex = getVertexIndex(x, y);
+                const mainX = mainPositions[mainVertexIndex * 3];
+                const mainY = mainPositions[mainVertexIndex * 3 + 1];
+                const mainZ = mainPositions[mainVertexIndex * 3 + 2];
+                
+                // Get the normal from the main tile surface for fake lighting
+                const mainNx = mainNormals[mainVertexIndex * 3];
+                const mainNy = mainNormals[mainVertexIndex * 3 + 1];
+                const mainNz = mainNormals[mainVertexIndex * 3 + 2];
+                
+                // Update top vertex (at tile edge level)
+                skirtPositions[skirtVertexIndex * 3] = mainX;
+                skirtPositions[skirtVertexIndex * 3 + 1] = mainY;
+                skirtPositions[skirtVertexIndex * 3 + 2] = mainZ;
+                
+                // Update top vertex normal (fake normal from main tile)
+                skirtNormals[skirtVertexIndex * 3] = mainNx;
+                skirtNormals[skirtVertexIndex * 3 + 1] = mainNy;
+                skirtNormals[skirtVertexIndex * 3 + 2] = mainNz;
+                
+                // Update bottom vertex (extended downward using local down vector)
+                skirtPositions[(skirtVertexIndex + 1) * 3] = mainX + downVector.x * skirtDepth;
+                skirtPositions[(skirtVertexIndex + 1) * 3 + 1] = mainY + downVector.y * skirtDepth;
+                skirtPositions[(skirtVertexIndex + 1) * 3 + 2] = mainZ + downVector.z * skirtDepth;
+                
+                // Update bottom vertex normal (same fake normal for consistent lighting)
+                skirtNormals[(skirtVertexIndex + 1) * 3] = mainNx;
+                skirtNormals[(skirtVertexIndex + 1) * 3 + 1] = mainNy;
+                skirtNormals[(skirtVertexIndex + 1) * 3 + 2] = mainNz;
+                
+                skirtVertexIndex += 2;
+            }
+        }
+        
+        // Mark the attributes as needing update
+        this.skirtGeometry.attributes.position.needsUpdate = true;
+        this.skirtGeometry.attributes.normal.needsUpdate = true;
+        // Don't compute vertex normals - use our fake normals for consistent lighting
+        this.skirtGeometry.computeBoundingBox();
+        this.skirtGeometry.computeBoundingSphere();
+    }
+
 
     removeDebugGeometry() {
         if (this.debugArrows !== undefined) {
@@ -180,8 +406,28 @@ export class QuadTreeTile {
             this.mesh = undefined;
         }
         
+        // Remove skirt mesh from scene if it exists
+        if (this.skirtMesh) {
+            if (this.skirtMesh.parent) {
+                this.skirtMesh.parent.remove(this.skirtMesh);
+            }
+            
+            // Dispose skirt geometry
+            if (this.skirtMesh.geometry) {
+                this.skirtMesh.geometry.dispose();
+            }
+            
+            // Dispose skirt material if it's a cloned material (not the shared tileMaterial)
+            if (this.skirtMesh.material && this.skirtMesh.material !== tileMaterial) {
+                this.skirtMesh.material.dispose();
+            }
+            
+            this.skirtMesh = undefined;
+        }
+        
         // Clear other references
         this.geometry = undefined;
+        this.skirtGeometry = undefined;
         this.elevation = undefined;
         this.worldSphere = undefined;
         this.loaded = false;
@@ -419,6 +665,11 @@ export class QuadTreeTile {
         geometry.computeBoundingSphere()
 
         geometry.attributes.position.needsUpdate = true;
+        
+        // Update skirt geometry to match the new main tile geometry
+        if (this.skirtMesh && this.skirtGeometry) {
+            this.updateSkirtGeometry();
+        }
     }
 
     // NEW OPTIMIZED VERSION - works with elevation tiles at same or lower zoom levels
@@ -593,6 +844,11 @@ export class QuadTreeTile {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
+        
+        // Update skirt geometry to match the new main tile geometry
+        if (this.skirtMesh && this.skirtGeometry) {
+            this.updateSkirtGeometry();
+        }
 
     }
 
@@ -663,6 +919,11 @@ export class QuadTreeTile {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
+        
+        // Update skirt geometry to match the new main tile geometry
+        if (this.skirtMesh && this.skirtGeometry) {
+            this.updateSkirtGeometry();
+        }
     }
 
     buildMaterial() {
@@ -789,6 +1050,7 @@ export class QuadTreeTile {
 
         this.mesh.material = material;
         this.mesh.material.needsUpdate = true; // ensure the material is updated
+        this.updateSkirtMaterial(); // Update skirt to use the same material
 
         // return the material wrapped in a Promise
         return new Promise((resolve) => {
@@ -805,6 +1067,7 @@ export class QuadTreeTile {
 
         this.mesh.material = material;
         this.mesh.material.needsUpdate = true; // ensure the material is updated
+        this.updateSkirtMaterial(); // Update skirt to use the same material
 
         // return the material wrapped in a Promise
         return new Promise((resolve) => {
@@ -1204,12 +1467,19 @@ export class QuadTreeTile {
         // Apply the new material
         this.mesh.material = material;
         this.mesh.material.needsUpdate = true;
+        this.updateSkirtMaterial(); // Update skirt to use the same material
         
         // Force a complete refresh by temporarily removing and re-adding to scene
         if (this.mesh.parent && this.added) {
             const parent = this.mesh.parent;
             parent.remove(this.mesh);
             parent.add(this.mesh);
+            
+            // Also refresh the skirt mesh if it exists
+            if (this.skirtMesh && this.skirtMesh.parent) {
+                parent.remove(this.skirtMesh);
+                parent.add(this.skirtMesh);
+            }
         }
         
 //        console.log(logMessage);
@@ -1354,6 +1624,9 @@ export class QuadTreeTile {
             this.loaded = true; // mark the tile as loaded
 
             this.map.scene.add(this.mesh); // add the mesh to the scene
+            if (this.skirtMesh) {
+                this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
+            }
             this.added = true; // mark the tile as added to the scene
             
             // Return early for debug materials
@@ -1366,6 +1639,9 @@ export class QuadTreeTile {
             this.loaded = true; // mark the tile as loaded
 
             this.map.scene.add(this.mesh); // add the mesh to the scene
+            if (this.skirtMesh) {
+                this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
+            }
             this.added = true; // mark the tile as added to the scene
             
             // Return early for wireframe materials
@@ -1379,6 +1655,9 @@ export class QuadTreeTile {
             this.updateDebugMaterial().then((material) => {
                 this.loaded = true;
                 this.map.scene.add(this.mesh);
+                if (this.skirtMesh) {
+                    this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
+                }
                 this.added = true;
                 
                 // Check if elevation data is already available and apply elevation color texture
@@ -1398,6 +1677,7 @@ export class QuadTreeTile {
             if (this.textureUrl() != null) {
                 this.buildMaterial().then((material) => {
                     this.mesh.material = material
+                    this.updateSkirtMaterial(); // Update skirt to use the same material
                     if (! this.map.scene) {
                         console.warn("QuadTreeTile.applyMaterial: map.scene is not defined, not adding mesh to scene (changed levels?)")
                         this.loaded = true; // Mark as loaded even if scene is not available
@@ -1406,6 +1686,9 @@ export class QuadTreeTile {
                         return resolve(material);
                     }
                     this.map.scene.add(this.mesh); // add the mesh to the scene
+                    if (this.skirtMesh) {
+                        this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
+                    }
                     this.added = true; // mark the tile as added to the scene
                     this.loaded = true;
                     this.isLoading = false; // Clear loading state
@@ -1430,6 +1713,31 @@ export class QuadTreeTile {
 
     buildMesh() {
         this.mesh = new Mesh(this.geometry, tileMaterial)
+        
+        // Build and create skirt mesh
+        this.buildSkirtGeometry();
+        // Create skirt mesh with the same material as the main tile initially
+        this.skirtMesh = new Mesh(this.skirtGeometry, tileMaterial);
+    }
+
+    // Update skirt material to match the main tile material
+    updateSkirtMaterial() {
+        if (this.skirtMesh && this.mesh) {
+            // Clone the main tile material for the skirt to avoid sharing issues
+            const mainMaterial = this.mesh.material;
+            if (mainMaterial) {
+                // Create a new material with the same properties
+                const skirtMaterial = mainMaterial.clone();
+                
+                // Dispose of old skirt material if it exists and is not the shared tileMaterial
+                if (this.skirtMesh.material && this.skirtMesh.material !== tileMaterial) {
+                    this.skirtMesh.material.dispose();
+                }
+                
+                this.skirtMesh.material = skirtMaterial;
+                this.skirtMesh.material.needsUpdate = true;
+            }
+        }
     }
 
 
@@ -1684,6 +1992,13 @@ export class QuadTreeTile {
         const p = LLAToEUS(lat, lon, 0);
 
         this.mesh.position.copy(p)
+        
+        // Position the skirt mesh at the same location
+        if (this.skirtMesh) {
+            this.skirtMesh.position.copy(p);
+            this.skirtMesh.updateMatrix();
+            this.skirtMesh.updateMatrixWorld();
+        }
 
         // we need to update the matrices, otherwise collision will not work until rendered
         // which can lead to odd asynchronous bugs where the last tiles loaded

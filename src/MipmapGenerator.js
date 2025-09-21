@@ -75,7 +75,7 @@ export class MipmapGenerator {
 
         const cacheKey = `tiled_${baseTexture.uuid}_${currentZoom}_${maxZoom}`;
         if (this.mipmapCache.has(cacheKey)) {
-            console.log(`MipmapGenerator: Using cached mipmap for zoom ${currentZoom}`);
+//            console.log(`MipmapGenerator: Using cached mipmap for zoom ${currentZoom}`);
             return this.mipmapCache.get(cacheKey);
         }
 

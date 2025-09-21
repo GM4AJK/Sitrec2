@@ -104,6 +104,13 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
                 tile.mesh.material.dispose()
             }
+            
+            // Clean up skirt mesh
+            if (tile.skirtMesh !== undefined) {
+                this.scene.remove(tile.skirtMesh);
+                tile.skirtMesh.geometry.dispose();
+                // Note: skirtMaterial is shared, so we don't dispose it here
+            }
         })
         this.tileCache = {}
         this.pendingTileLoads.clear(); // Clear pending loads when cleaning up
@@ -137,7 +144,9 @@ class QuadTreeMapTexture extends QuadTreeMap {
             if (instant) {
                 // remove the tile immediately
                 this.scene.remove(tile.mesh);
-
+                if (tile.skirtMesh) {
+                    this.scene.remove(tile.skirtMesh);
+                }
             }
 
 
@@ -160,6 +169,9 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
             // console.log("Activating tile", key, "already exists in cache");
             this.scene.add(tile.mesh); // add the mesh to the scene
+            if (tile.skirtMesh) {
+                this.scene.add(tile.skirtMesh); // add the skirt mesh to the scene
+            }
             tile.added = true; // mark the tile as added to the scene
             this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
             setRenderOne(true);
