@@ -33,6 +33,7 @@ import {TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
+import {CNodeBackgroundFlowIndicator} from "./nodes/CNodeBackgroundFlowIndicator";
 
 
 export class CCustomManager {
@@ -324,6 +325,12 @@ export class CCustomManager {
                 debugView.debug("This is a debug message.");
             }
         }, 1000);
+
+
+        const backgroundFlowIndicator = new CNodeBackgroundFlowIndicator({
+            id: "backgroundFlow",
+        })
+
     }
 
 
