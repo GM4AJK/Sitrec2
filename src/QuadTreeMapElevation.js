@@ -42,11 +42,6 @@ export class QuadTreeMapElevation extends QuadTreeMap {
     }
 
 
-    // IDEA: the interpolated elevaation calculation via LAT/LON is not very efficient
-    // we should be able to calculate the elevation directly from the tile coordinates
-    // Maybe the mesh should be built with the elevation data step size????
-
-
     activateTile(x,y,z) {
 
 

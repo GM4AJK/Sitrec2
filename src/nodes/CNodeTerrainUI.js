@@ -64,13 +64,13 @@ export class CNodeTerrainUI extends CNode {
                 mapURL: (z, x, y) => {
                     return SITREC_APP + "data/images/28_sea water texture-seamless.jpg";
                 },
-                maxZoom: 18,
+                maxZoom: 18, // this is the level at which the ocean tile is ideally physically real sized
                 generateMipmaps: true,
             },
             ElevationColor: {
                 name: "Elevation Pseudo-Color",
                 isElevationColor: true,
-                maxZoom: 20,
+                maxZoom: 18,   // for ocean tiles to work, this should be the same as for Ocean Surface
                 colorBands: [
                     { altitude: 1,      color: { red: 0, green: 0, blue: 255 } }, // Blue for water/low elevation
                     { altitude: 1,      color: { red: 140, green: 176, blue: 130 } }, // Green start
@@ -154,7 +154,7 @@ export class CNodeTerrainUI extends CNode {
             Flat: {
                 name: "Flat",
                 url: "",
-                maxZoom: 14,
+                maxZoom: 20,
                 minZoom: 0,
                 tileSize: 256,
                 attribution: "",

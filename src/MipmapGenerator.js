@@ -68,8 +68,8 @@ export class MipmapGenerator {
      * @returns {CanvasTexture} The appropriate mipmap for this zoom level
      */
     generateTiledMipmap(baseTexture, currentZoom, maxZoom) {
-        if (currentZoom >= maxZoom) {
-            console.log(`MipmapGenerator: Using original texture for zoom ${currentZoom} (>= maxZoom ${maxZoom})`);
+        if (currentZoom > maxZoom) {
+            console.log(`MipmapGenerator: Using original texture for zoom ${currentZoom} (> maxZoom ${maxZoom})`);
             return baseTexture;
         }
 

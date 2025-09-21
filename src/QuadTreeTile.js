@@ -1503,12 +1503,14 @@ export class QuadTreeTile {
 
         // Generate heightmap from tile data
         const heightmapData = this.generateHeightmapFromTileData(elevationTile, elevationSize, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY, elevationZoom);
-        
-        // If all elevations are 0, it means elevation data is invalid - skip texture generation
-        if (heightmapData.minElevation === 0 && heightmapData.maxElevation === 0) {
-            console.log(`Invalid elevation data (all zeros) for tile ${this.key()}, skipping texture generation`);
-            return;
-        }
+
+
+        // all zero data is quite possible for ocean surface
+        // // If all elevations are 0, it means elevation data is invalid - skip texture generation
+        // if (heightmapData.minElevation === 0 && heightmapData.maxElevation === 0) {
+        //     console.log(`Invalid elevation data (all zeros) for tile ${this.key()}, skipping texture generation`);
+        //     return;
+        // }
 
         // Get color bands from the source definition
         const colorBands = sourceDef.colorBands || null;
@@ -1873,6 +1875,11 @@ export class QuadTreeTile {
         // Only proceed if we're in elevation color mode
         const sourceDef = this.map.terrainNode.UI.getSourceDef();
         if (!sourceDef.isElevationColor) {
+            return;
+        }
+
+        // if flat, then return, as the intial geometry is flat
+        if (this.map.elevationMap?.options.elevationType == "Flat") {
             return;
         }
 
