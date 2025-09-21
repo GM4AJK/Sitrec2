@@ -944,7 +944,7 @@ export class QuadTreeTile {
             
             // Generate mipmap if enabled for this source
             if (sourceDef.generateMipmaps && sourceDef.maxZoom) {
-                console.log(`QuadTreeTile: Generating mipmap for tile ${this.z}/${this.x}/${this.y}`);
+//                console.log(`QuadTreeTile: Generating mipmap for tile ${this.z}/${this.x}/${this.y}`);
                 finalTexture = globalMipmapGenerator.generateTiledMipmap(
                     texture, 
                     this.z, 

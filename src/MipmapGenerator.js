@@ -79,7 +79,7 @@ export class MipmapGenerator {
             return this.mipmapCache.get(cacheKey);
         }
 
-        console.log(`MipmapGenerator: Generating mipmap for zoom ${currentZoom} from maxZoom ${maxZoom}`);
+//        console.log(`MipmapGenerator: Generating mipmap for zoom ${currentZoom} from maxZoom ${maxZoom}`);
         
         // Generate the mipmap chain from maxZoom down to currentZoom
         let currentTexture = baseTexture;
@@ -111,7 +111,7 @@ export class MipmapGenerator {
     generateNextMipmapLevel(sourceTexture, baseUuid, targetZoom, maxZoom) {
         const cacheKey = `tiled_${baseUuid}_${targetZoom}_${maxZoom}`;
         
-        console.log(`MipmapGenerator: Generating mipmap level ${targetZoom} (2x2 downsample)`);
+//        console.log(`MipmapGenerator: Generating mipmap level ${targetZoom} (2x2 downsample)`);
         
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
