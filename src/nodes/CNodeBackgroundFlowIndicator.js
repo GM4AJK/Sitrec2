@@ -8,6 +8,7 @@ import {Vector3} from "three/src/math/Vector3";
 import * as LAYER from "../LayerMasks";
 import {GlobalScene} from "../LocalFrame";
 import {Raycaster} from "three/src/core/Raycaster";
+import {assert} from "../assert";
 
 export class CNodeBackgroundFlowIndicator extends CNode {
     constructor(v) {
@@ -19,13 +20,12 @@ export class CNodeBackgroundFlowIndicator extends CNode {
         this.input("length");  // length of arrow
         this.input("color");   // color of arrow
         this.arrowName = "backgroundFlow"
-        this.visible = false;
 
         guiShowHide.add(this, 'visible').onChange( (v) => {
             if (v) {
                 this.update(0);
             } else {
-                removeDebugArrow(this.arrowName)
+                this.remove();
             }
         })
             .name("Background Flow Indicator")
@@ -49,6 +49,9 @@ export class CNodeBackgroundFlowIndicator extends CNode {
 
         const losA = cameraLOS.getValue(f).heading;
         const losB = cameraLOS.getValue(f + 1).heading;
+
+        assert(losA && losB, "No LOS values found");
+        assert(typeof losA.clone === "function","Invalid LOS value")
 
         const rayA = new Raycaster(cameraPos, losA)
         const rayB = new Raycaster(cameraPos, losB)
@@ -74,12 +77,20 @@ export class CNodeBackgroundFlowIndicator extends CNode {
 
         const AtoB = new Vector3().subVectors(pointB, pointA);
 
-
+//WHY not two?????????????
+   //     DebugArrowAB(this.arrowName+"20", pointA, pointA.clone().add(AtoB.multiplyScalar(20)), "#505050", true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
         DebugArrowAB(this.arrowName, pointA, pointA.clone().add(AtoB.multiplyScalar(1)), this.in.color.v0, true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
     }
 
-    dispose() {
+
+    remove() {
         removeDebugArrow(this.arrowName)
+        removeDebugArrow(this.arrowName+"20")
+
+    }
+
+    dispose() {
+        this.remove();
         super.dispose();
     }
 

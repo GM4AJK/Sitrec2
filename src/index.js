@@ -32,7 +32,7 @@ import {
     Sit,
     SitchMan,
 } from "./Globals";
-import {checkForModding, disableScroll, f2m, parseBoolean, stripComments} from './utils.js'
+import {disableScroll, f2m, parseBoolean, stripComments, updateNewCustomFields} from './utils.js'
 import {CSituation} from "./CSituation";
 import {par, resetPar} from "./par";
 
@@ -190,21 +190,12 @@ if (customSitch !== null) {
     // fetch it, and then use that as the sitch
     await fetch(customSitch, {mode: 'cors'}).then(response => response.text()).then(data => {
         console.log("Custom sitch = " + customSitch)
-//        console.log("Result = "+data)
-
 
         let sitchObject = textSitchToObject(data);
 
-        // do we need this if it's in CustomSupport's deserialize function?
-        sitchObject = checkForModding(sitchObject);
-
         if (sitchObject.isCustom) {
-            // // Temporary patch for custom sitches new parameters
-            // sitchObject.speedGraphForTarget.dynamicY = true;
-            // sitchObject.altitudeGraphForTarget.dynamicY = true;
-
+            sitchObject = updateNewCustomFields(sitchObject);
         }
-
 
         setSit(new CSituation(sitchObject))
 

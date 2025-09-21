@@ -950,6 +950,52 @@ function preventDefaultHandler(e) {
 
 
 // If there is an entry "modding" then that is the name of another sitch
+export function updateNewCustomFields(sitchObject) {
+    if (sitchObject.name === "custom") {
+        const customObj = SitchMan.findFirstData(s => {
+            return s.data.name === "custom";
+        })
+        // iterate over all the k/v in the custom object
+        // if they have value.kind === "GUIValue", and merge into the sitchObject
+        for (const [key, value] of Object.entries(customObj)) {
+            if (value.kind === "GUIValue") {
+                // if the key doesn't exist in the sitchObject, then add it
+                // this would be if there's new values in the UI
+                if (sitchObject[key] === undefined) {
+                    sitchObject[key] = {...value};
+                } else {
+                    // it exists, so we take everything except the value
+                    const oldValue = sitchObject[key].value;
+                    // clone the object
+                    sitchObject[key] = {...sitchObject[key], ...value}
+                    // and restore the value
+                    sitchObject[key].value = oldValue;
+                }
+            }
+
+            // "forced" node defs are only added if they don't already exist
+            if (value.force) {
+                if (sitchObject[key] === undefined) {
+                    sitchObject[key] = {...value};
+                } else {
+                    // if the DO exist, we overwrite the whole thing
+                    // EXCEPT for any "visible" property
+                    // this allows us to update the node def without losing visibility settings
+                    // it should only be used where the setting of the node
+                    // are stored in other nodes.
+                    const oldVisible = sitchObject[key].visible;
+                    sitchObject[key] = {...sitchObject[key], ...value}
+                    if (oldVisible !== undefined) {
+                        sitchObject[key].visible = oldVisible;
+                    }
+                }
+            }
+
+        }
+    }
+    return sitchObject;
+}
+
 // So we need to load that sitch, and apply the mods
 export function checkForModding(sitchObject) {
     if (sitchObject.modding) {
@@ -970,27 +1016,6 @@ export function checkForModding(sitchObject) {
 
     }
 
-    if (sitchObject.name === "custom") {
-        const customObj = SitchMan.findFirstData(s => {return s.data.name === "custom";})
-        // iterate over all the k/v in the custom object
-        // if they have value.kind === "GUIValue", and merge into the sitchObject
-        for (const [key, value] of Object.entries(customObj)) {
-            if (value.kind === "GUIValue") {
-                // if the key doesn't exist in the sitchObject, then add it
-                // this would be if there's new values in the UI
-                if (sitchObject[key] === undefined) {
-                    sitchObject[key] = {...value};
-                } else {
-                    // it exists, so we take everything except the value
-                    const oldValue = sitchObject[key].value;
-                    // clone the object
-                    sitchObject[key] = {...sitchObject[key], ...value}
-                    // and restore the value
-                    sitchObject[key].value = oldValue;
-                }
-            }
-        }
-    }
 
     return sitchObject;
 }

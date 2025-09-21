@@ -619,12 +619,17 @@ class CNode {
                         value.position = value1.position.clone().sub(value0.position).multiplyScalar(frameFloat - frameInt).add(value0.position)
 
                         if (value0.heading !== undefined) {
-                            // if the value has a heading, then interpolate that too
-                            // this is used for tracks that have a heading
-                            value.heading = value0.heading + (value1.heading - value0.heading) * (frameFloat - frameInt);
-                            if (value.heading < -Math.PI) value.heading += 2 * Math.PI;
-                            if (value.heading > Math.PI) value.heading -= 2 * Math.PI;                        }
-
+//                            assert(typeof value0.heading === "number", "Interpolating non-number heading in " + this.id + " frame " + frameFloat);
+                            if (typeof value0.heading !== "number") {
+                                console.warn("Interpolating non-number heading in " + this.id + " frame " + frameFloat);
+                            } else {
+                                // if the value has a NUMERIC heading, then interpolate that too
+                                // this is used for tracks that have a heading
+                                value.heading = value0.heading + (value1.heading - value0.heading) * (frameFloat - frameInt);
+                                if (value.heading < -Math.PI) value.heading += 2 * Math.PI;
+                                if (value.heading > Math.PI) value.heading -= 2 * Math.PI;
+                            }
+                        }
                     }
                 }
             }

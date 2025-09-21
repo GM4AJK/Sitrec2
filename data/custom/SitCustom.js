@@ -898,5 +898,7 @@ sitch = {
     debugView: {kind: "ViewDebug", left: 0.05, top: 0.10, width: 0.50, height: 0.80, background:"#000000",
         draggable: true, resizable: true, freeAspect: true, visible:false},
 
+    backgroundFlow: {kind: "BackgroundFlowIndicator", visible:true, color:"#FFFFFF", force:true},
+
 
 }

@@ -23,7 +23,7 @@ import {assert} from "./assert.js";
 import {getShortURL} from "./urlUtils";
 import {CNode3DObject} from "./nodes/CNode3DObject";
 import {UpdateHUD} from "./JetStuff";
-import {checkForModding, degrees} from "./utils";
+import {degrees} from "./utils";
 import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
 import {SITREC_APP} from "./configUtils";
@@ -33,7 +33,6 @@ import {TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
-import {CNodeBackgroundFlowIndicator} from "./nodes/CNodeBackgroundFlowIndicator";
 
 
 export class CCustomManager {
@@ -325,11 +324,6 @@ export class CCustomManager {
                 debugView.debug("This is a debug message.");
             }
         }, 1000);
-
-
-        const backgroundFlowIndicator = new CNodeBackgroundFlowIndicator({
-            id: "backgroundFlow",
-        })
 
     }
 
@@ -882,11 +876,6 @@ export class CCustomManager {
     // i.e. load the files, and then apply the mods
     deserialize(sitchData) {
         console.log("Deserializing text-base sitch")
-
-        // check for modding, meaning that we just have the name of an existing sitch
-        // and some mods to apply to it
-        // if so, then load the sitch and append the mods, etc
-        sitchData = checkForModding(sitchData)
 
         Globals.exportTagNumber = sitchData.exportTagNumber ?? 0;
 
