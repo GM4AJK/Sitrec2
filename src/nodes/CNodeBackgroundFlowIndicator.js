@@ -43,18 +43,24 @@ export class CNodeBackgroundFlowIndicator extends CNode {
 
         const camera = NodeMan.get("lookCamera", false);
         if (!camera) return;
-        const cameraPos = camera.camera.position.clone();
+        //const cameraPos = camera.camera.position.clone();
 
         // get camera vectors at f and f+1
 
-        const losA = cameraLOS.getValue(f).heading;
-        const losB = cameraLOS.getValue(f + 1).heading;
+        const losTrackA = cameraLOS.getValue(f);
+        const losTrackB = cameraLOS.getValue(f + 1);
+
+        const losA = losTrackA.heading;
+        const losB = losTrackB.heading;
 
         assert(losA && losB, "No LOS values found");
         assert(typeof losA.clone === "function","Invalid LOS value")
 
-        const rayA = new Raycaster(cameraPos, losA)
-        const rayB = new Raycaster(cameraPos, losB)
+        const cameraPosA = losTrackA.position;
+        const cameraPosB = losTrackB.position;
+
+        const rayA = new Raycaster(cameraPosA, losA)
+        const rayB = new Raycaster(cameraPosB, losB)
 
         const terrainNode = NodeMan.get("TerrainModel", false);
 
@@ -68,18 +74,29 @@ export class CNodeBackgroundFlowIndicator extends CNode {
         if (obA && obB) {
             pointA = obA.point;
             pointB = obB.point;
+
+            // the actual points on the surface plane
+           // DebugSphere("FlowA", pointA, 0.5, "#80FF00", GlobalScene, LAYER.MASK_LOOKRENDER)  // green A
+           // DebugSphere("FlowB"+f, pointB, 0.5, "#FF8000", GlobalScene, LAYER.MASK_LOOKRENDER)  // blue B
+
+
+            // move them 1% closer to cameraPos
+            // which will ensure they are not underground/underwater
+            pointA.lerp(cameraPosA, 0.01);
+            pointB.lerp(cameraPosB, 0.01);
+
         } else {
             // fallback to two points 10km away from the camera in the LOS directions
-            pointA = cameraPos.clone().add(losA.clone().multiplyScalar(10000))
-            pointB = cameraPos.clone().add(losB.clone().multiplyScalar(10000))
+            pointA = cameraPosA.clone().add(losA.clone().multiplyScalar(10000))
+            pointB = cameraPosB.clone().add(losB.clone().multiplyScalar(10000))
         }
 
 
         const AtoB = new Vector3().subVectors(pointB, pointA);
 
-//WHY not two?????????????
-   //     DebugArrowAB(this.arrowName+"20", pointA, pointA.clone().add(AtoB.multiplyScalar(20)), "#505050", true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
-        DebugArrowAB(this.arrowName, pointA, pointA.clone().add(AtoB.multiplyScalar(1)), this.in.color.v0, true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
+
+        DebugArrowAB(this.arrowName+"20", pointA, pointA.clone().add(AtoB.clone().multiplyScalar(20)), "#a0a0a0",       true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
+        DebugArrowAB(this.arrowName,      pointA, pointA.clone().add(AtoB.clone().multiplyScalar(1)), this.in.color.v0, true, GlobalScene, 20, LAYER.MASK_LOOKRENDER);
     }
 
 
