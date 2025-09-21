@@ -71,6 +71,17 @@ export class CNodeTerrainUI extends CNode {
                 name: "Elevation Pseudo-Color",
                 isElevationColor: true,
                 maxZoom: 20,
+                colorBands: [
+                    { altitude: 1,      color: { red: 0, green: 0, blue: 255 } }, // Blue for water/low elevation
+                    { altitude: 1,      color: { red: 140, green: 176, blue: 130 } }, // Green start
+                   // { altitude: 1206*3, color: { red: 140, green: 176, blue: 130 } },
+                    { altitude: 1901*3, color: { red: 214, green: 231, blue: 212 } },
+                    { altitude: 2182*3, color: { red: 240, green: 241, blue: 181 } },
+                    { altitude: 2464*3, color: { red: 251, green: 222, blue: 154} },
+                    { altitude: 2808*3, color: { red: 217, green: 181, blue: 105 } },
+                    { altitude: 3053*3, color: { red: 209, green: 209, blue: 209 } },
+                    { altitude: 3312*3, color: { red: 255, green: 255, blue: 2555 } },
+                ]
             }
         }
 
@@ -481,7 +492,10 @@ export class CNodeTerrainUI extends CNode {
             // subdivide the elevation first so elevation requests will come before texutres
             // this makes it more likely that the elevation will be ready when the texture is ready to make a tile.
             if (this.terrainNode.elevationMap !== undefined) {
-                this.terrainNode.elevationMap.subdivideTiles(views, 4000);
+
+                // not sure about this. elevation is used at a lower resolution than the textures
+                // as the tiles are 100x100
+                this.terrainNode.elevationMap.subdivideTiles(views, 2000*1.414);
             }
 
             if (this.terrainNode.maps[this.mapType].map !== undefined) {

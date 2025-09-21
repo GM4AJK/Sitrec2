@@ -7,7 +7,6 @@ import {loadTextureWithRetries} from "./js/map33/material/QuadTextureMaterial";
 import {convertTIFFToElevationArray} from "./TIFFUtils";
 import {fromArrayBuffer} from 'geotiff';
 import {getPixels} from "./js/get-pixels-mick";
-import {MeshBasicMaterial} from "three/src/materials/MeshBasicMaterial";
 import {PlaneGeometry} from "three/src/geometries/PlaneGeometry";
 import {Mesh} from "three/src/objects/Mesh";
 import {MeshStandardMaterial} from "three/src/materials/MeshStandardMaterial";
@@ -16,7 +15,7 @@ import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 
-const tileMaterial = new MeshBasicMaterial({wireframe: true, color: "#408020"})
+const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020"})
 
 // Static cache for materials to avoid loading the same texture multiple times
 const materialCache = new Map();
@@ -784,7 +783,7 @@ export class QuadTreeTile {
         const texture = new CanvasTexture(canvas);
         texture.minFilter = NearestFilter;
         texture.magFilter = NearestFilter;
-        const material = new MeshBasicMaterial({map: texture});
+        const material = new MeshStandardMaterial({map: texture});
 
 
 
@@ -799,7 +798,7 @@ export class QuadTreeTile {
 
     updateWireframeMaterial() {
         // Create a wireframe material
-        const material = new MeshBasicMaterial({
+        const material = new MeshStandardMaterial({
             color: "#ffffff",
             wireframe: true
         });
@@ -922,9 +921,10 @@ export class QuadTreeTile {
     }
 
     // Helper function to convert heightmap to color texture
-    async heightmapToColorTexture(heightmapData, textureSize = 256, testPatternColors = null) {
+    async heightmapToColorTexture(heightmapData, textureSize = 256, testPatternColors = null, colorBands = null) {
         const { heightmap, minElevation, maxElevation } = heightmapData;
-        
+
+        const elevationScale = this.map.terrainNode.UI.elevationScale
         // Create a canvas for the elevation color texture
         const canvas = document.createElement('canvas');
         canvas.width = textureSize;
@@ -963,19 +963,65 @@ export class QuadTreeTile {
         // Check if we need to create a test pattern
         const needsTestPattern = minElevation === maxElevation && minElevation !== 0;
 
-        // Elevation thresholds in meters (converted from feet)
-        const waterLevel = 1; // 1 meter
-        const greenToBlackStart = 1; // Start of green to black gradient
-        const greenToBlackEnd = 6000 * 0.3048; // 6000 feet in meters
-        const greyToWhiteStart = greenToBlackEnd; // Start of grey to white gradient
-        const greyToWhiteEnd = 10000 * 0.3048; // 10000 feet in meters
+        // Default color bands if none provided (maintains backward compatibility)
+        const defaultColorBands = [
+            {altitude: 1, color: {red: 0, green: 0, blue: 255}}, // Blue for water/low elevation
+            {altitude: 1, color: {red: 0, green: 255, blue: 0}}, // Green start
+            {altitude: 6000, color: {red: 30, green: 30, blue: 30}}, // Black at 6000 feet
+            {altitude: 6000, color: {red: 128, green: 128, blue: 128}}, // Grey start
+            {altitude: 10000, color: {red: 255, green: 255, blue: 255}} // White at 10000 feet
+        ];
 
-        // Color definitions for elevation mapping
-        const waterColor = { red: 0, green: 0, blue: 255 }; // Blue for water/low elevation
-        const greenColor = { red: 0, green: 255, blue: 0 }; // Full green at start of gradient
-        const blackColor = { red: 30, green: 30, blue: 30 }; // Black at end of green gradient
-        const greyStartColor = { red: 128, green: 128, blue: 128 }; // Dark grey starting point
-        const whiteColor = { red: 255, green: 255, blue: 255 }; // Pure white for high elevations
+
+        // Use provided color bands or default ones
+        const bands = colorBands || defaultColorBands;
+        
+        // Convert altitude from feet to meters and sort by altitude
+        const sortedBands = bands.map(band => ({
+            altitude: band.altitude * 0.3048, // Convert feet to meters
+            color: band.color
+        })).sort((a, b) => a.altitude - b.altitude);
+
+        // Helper function to interpolate between two colors
+        const interpolateColor = (color1, color2, t) => {
+            return {
+                red: Math.round(color1.red + (color2.red - color1.red) * t),
+                green: Math.round(color1.green + (color2.green - color1.green) * t),
+                blue: Math.round(color1.blue + (color2.blue - color1.blue) * t)
+            };
+        };
+
+        // Helper function to get color for a given elevation
+        const getColorForElevation = (elevation) => {
+
+            // scale back to original
+            elevation /= elevationScale;
+
+            // Handle special case for water level (use ocean texture if available)
+            if (elevation <= 1 && oceanImageData) {
+                return 'ocean'; // Special marker for ocean texture
+            }
+
+            // Find the appropriate color band
+            for (let i = 0; i < sortedBands.length - 1; i++) {
+                const currentBand = sortedBands[i];
+                const nextBand = sortedBands[i + 1];
+                
+                if (elevation >= currentBand.altitude && elevation <= nextBand.altitude) {
+                    // Interpolate between current and next band
+                    const t = (elevation - currentBand.altitude) / (nextBand.altitude - currentBand.altitude);
+                    return interpolateColor(currentBand.color, nextBand.color, t);
+                }
+            }
+            
+            // If elevation is below the first band, use the first color
+            if (elevation < sortedBands[0].altitude) {
+                return sortedBands[0].color;
+            }
+            
+            // If elevation is above the last band, use the last color
+            return sortedBands[sortedBands.length - 1].color;
+        };
 
         // Surface normal modification parameters
         const normalModificationPercent = 20; // ±20% brightness adjustment
@@ -1016,45 +1062,32 @@ export class QuadTreeTile {
                 } else {
                     let red, green, blue;
 
-                    if (elevation <= waterLevel) {
-                        // Use OceanSurface texture for water/low elevation if available
-                        if (oceanImageData) {
-                            const oceanPixelIndex = pixelIndex;
-                            red = oceanImageData.data[oceanPixelIndex];
-                            green = oceanImageData.data[oceanPixelIndex + 1];
-                            blue = oceanImageData.data[oceanPixelIndex + 2];
-                        } else {
-                            // Fallback to solid blue for water/low elevation
-                            red = waterColor.red;
-                            green = waterColor.green;
-                            blue = waterColor.blue;
-                        }
+                    // Get color for this elevation using the new dynamic system
+                    const elevationColor = getColorForElevation(elevation);
+                    
+                    if (elevationColor === 'ocean') {
+                        // Use OceanSurface texture for water/low elevation
+                        const oceanPixelIndex = pixelIndex;
+                        red = oceanImageData.data[oceanPixelIndex];
+                        green = oceanImageData.data[oceanPixelIndex + 1];
+                        blue = oceanImageData.data[oceanPixelIndex + 2];
                         bluePixels++;
-                    } else if (elevation <= greenToBlackEnd) {
-                        // Green to black gradient from 1m to 6000 feet
-                        const t = (elevation - greenToBlackStart) / (greenToBlackEnd - greenToBlackStart);
-                        const intensity = Math.max(0, 1 - t); // 1 at start, 0 at end
-                        red = Math.round(greenColor.red + (blackColor.red - greenColor.red) * (1 - intensity));
-                        green = Math.round(greenColor.green + (blackColor.green - greenColor.green) * (1 - intensity));
-                        blue = Math.round(greenColor.blue + (blackColor.blue - greenColor.blue) * (1 - intensity));
-                        greenPixels++;
-                    } else if (elevation <= greyToWhiteEnd) {
-                        // Grey to white gradient from 6000 feet to 10000 feet
-                        const t = (elevation - greyToWhiteStart) / (greyToWhiteEnd - greyToWhiteStart);
-                        red = Math.round(greyStartColor.red + (whiteColor.red - greyStartColor.red) * t);
-                        green = Math.round(greyStartColor.green + (whiteColor.green - greyStartColor.green) * t);
-                        blue = Math.round(greyStartColor.blue + (whiteColor.blue - greyStartColor.blue) * t);
-                        if (t < 0.5) {
-                            greyPixels++;
-                        } else {
-                            whitePixels++;
-                        }
                     } else {
-                        // Pure white for elevations above 10000 feet
-                        red = whiteColor.red;
-                        green = whiteColor.green;
-                        blue = whiteColor.blue;
-                        whitePixels++;
+                        // Use the interpolated color from the color bands
+                        red = elevationColor.red;
+                        green = elevationColor.green;
+                        blue = elevationColor.blue;
+                        
+                        // Update pixel counters based on dominant color (for backward compatibility)
+                        if (red < 100 && green < 100 && blue > 150) {
+                            bluePixels++;
+                        } else if (green > red && green > blue) {
+                            greenPixels++;
+                        } else if (red > 200 && green > 200 && blue > 200) {
+                            whitePixels++;
+                        } else {
+                            greyPixels++;
+                        }
                     }
 
                     // Calculate surface normal and apply tilt-based color modification
@@ -1157,7 +1190,7 @@ export class QuadTreeTile {
         }
 
         // Create new material
-        const material = new MeshBasicMaterial({map: texture});
+        const material = new MeshStandardMaterial({map: texture});
 
         // Dispose of the old material properly
         const oldMaterial = this.mesh.material;
@@ -1207,8 +1240,11 @@ export class QuadTreeTile {
             return;
         }
 
+        // Get color bands from the source definition
+        const colorBands = sourceDef.colorBands || null;
+        
         // Convert heightmap to color texture (now async to load OceanSurface texture)
-        const textureData = await this.heightmapToColorTexture(heightmapData);
+        const textureData = await this.heightmapToColorTexture(heightmapData, 256, null, colorBands);
         
 //        console.log(`Elevation range: ${heightmapData.minElevation.toFixed(2)}m to ${heightmapData.maxElevation.toFixed(2)}m, Blue: ${textureData.bluePixels}, Green: ${textureData.greenPixels}, Grey: ${textureData.greyPixels}, White: ${textureData.whitePixels}`);
 
@@ -1252,8 +1288,11 @@ export class QuadTreeTile {
         // Generate flat heightmap (all zeros)
         const heightmapData = this.generateHeightmapFlat();
         
+        // Get color bands from the source definition
+        const colorBands = sourceDef.colorBands || null;
+        
         // Convert heightmap to color texture (now async to load OceanSurface texture)
-        const textureData = await this.heightmapToColorTexture(heightmapData);
+        const textureData = await this.heightmapToColorTexture(heightmapData, 256, null, colorBands);
         
         // Apply the texture to the mesh
         this.applyElevationTexture(
@@ -1287,12 +1326,15 @@ export class QuadTreeTile {
             return;
         }
 
+        // Get color bands from the source definition
+        const colorBands = sourceDef.colorBands || null;
+        
         // Convert heightmap to color texture with custom test pattern colors for interpolated method
         const testPatternColors = {
             color1: [128, 0, 128], // Purple squares (different from the main method)
             color2: [255, 165, 0]  // Orange squares
         };
-        const textureData = await this.heightmapToColorTexture(heightmapData, 256, testPatternColors);
+        const textureData = await this.heightmapToColorTexture(heightmapData, 256, testPatternColors, colorBands);
         
         console.log(`Interpolated elevation range: ${heightmapData.minElevation.toFixed(2)}m to ${heightmapData.maxElevation.toFixed(2)}m, Blue: ${textureData.bluePixels}, Green: ${textureData.greenPixels}, Grey: ${textureData.greyPixels}, White: ${textureData.whitePixels}`);
 
