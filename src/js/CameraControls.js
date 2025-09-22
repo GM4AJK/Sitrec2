@@ -328,6 +328,7 @@ class CameraMapControls {
 		if (isKeyHeld('p') && isLocal) {
 			const cursorPos = this.view.cursorSprite.position.clone();
 
+			// Green sphere is the cursor position, which comes from a mouse ray intersection with the terrain
 			DebugSphere("Mouse"+event.clientX*1000+event.clientY, cursorPos, 5, 0x00FF00)
 
 			// check intersection with the terrain
@@ -336,7 +337,7 @@ class CameraMapControls {
 
 
 			if (groundPoint !== null) {
-
+				// Red sphere is simply 5 meters above the cursorpos
 				DebugSphere("Mouse2"+event.clientX*1000+event.clientY, groundPoint, 5, 0xFF0000)
 
 			// sample get the elevation at that point
@@ -345,6 +346,9 @@ class CameraMapControls {
 				const terrainNode = NodeMan.get("TerrainModel", false);
 				if (terrainNode !== undefined) {
 					const eus = terrainNode.getPointBelow(cursorPos)
+					// Blue sphere is the collision with the terrainmodel
+					// allowing you so see differences between the model mesh (blue)
+					// and the elevation map (red)
 					DebugSphere("Mouse3"+event.clientX*1000+event.clientY, eus, 5, 0x0000FF)
 				}
 			}
