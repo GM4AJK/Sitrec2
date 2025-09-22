@@ -1,4 +1,4 @@
-import {MetaBezierCurve, MetaBezierCurveEditor} from "../MetaCurveEdit";
+import {MetaBezierCurveEditor} from "../MetaCurveEdit";
 import {Sit} from "../Globals";
 import {CNode} from "./CNode";
 import {CNodeViewCanvas2D} from "./CNodeViewCanvas";
@@ -118,10 +118,13 @@ export class CNodeCurveEditor extends CNode {
 
         // bit of a patch here, FLIR1, etc use graphs  set to the number of frames in the sitch
         // but that means we can't textualize it, so just pass a string and check here
-        if (v.editorConfig.maxX === "Sit.frames")
+        if (v.editorConfig.maxX === "Sit.frames") {
+            this.useSitFrames = true;
             v.editorConfig.maxX = Sit.frames;
 
-        if(!isConsole) {
+        }
+
+        // if(!isConsole) {
             this.editorView = new CNodeCurveEditorView(v)
             this.editor = this.editorView.editor
             this.editor.onChange = x => this.recalculateCascade();
@@ -136,10 +139,44 @@ export class CNodeCurveEditor extends CNode {
                 })
             }
             this.curve = this.editor.curve
-        } else {
-            this.curve = new MetaBezierCurve(v.editorConfig)
-            this.curve.recalculate()
-            this.curve.update()
+        // } else {
+        //     this.curve = new MetaBezierCurve(v.editorConfig)
+        //     this.curve.recalculate()
+        //     this.curve.update()
+        // }
+
+        this.editor.recalculate();
+      //  this.adjustLastPoint();
+
+    }
+
+    update(f) {
+        super.update(f);
+        if (this.useSitFrames) {
+            if (Sit.frames !== this.editor.max.x) {
+                this.editor.max.x = Sit.frames;
+
+
+                this.editor.update();
+            }
+            this.adjustLastPoint();
+
+        }
+
+
+
+    }
+
+    adjustLastPoint() {
+        const points = this.editor.curve.ps;
+        const len = points.length
+        const lastPoint = points[len - 2]
+        if ( lastPoint.x !== Sit.frames) {
+            const lastControlPoint = points[len - 1]
+            // diff between last point and last control point for x
+            const lastXDiff = lastControlPoint.x - lastPoint.x;
+            lastPoint.x = Sit.frames;
+            lastControlPoint.x = lastPoint.x + lastXDiff
         }
     }
 

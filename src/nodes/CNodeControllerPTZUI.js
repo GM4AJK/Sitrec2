@@ -1,5 +1,5 @@
 import {ExpandKeyframes, radians, RollingAverage} from "../utils";
-import {getLocalUpVector} from "../SphericalMath";
+import {getLocalDownVector, getLocalUpVector} from "../SphericalMath";
 import {ECEF2EUS, wgs84} from "../LLA-ECEF-ENU";
 import {NodeMan, Sit} from "../Globals";
 
@@ -307,6 +307,39 @@ export class CNodeControllerCustomHeading extends CNodeController {
         //
         //
         // }
+    }
+}
+
+
+// simlar, but move an object based on the inputs vertical speed feet per second
+export class CNodeControllerVerticalSpeed extends CNodeController {
+    constructor(v) {
+        super(v);
+        this.input("verticalSpeed", true);
+        this.speed = 0;
+        this.frames = Sit.frames;
+        this.useSitFrames = true;
+    }
+
+    apply(f, objectNode) {
+        if (!objectNode) {
+            return;
+        }
+        const ob = objectNode._object;
+        const feetPerSecond = this.in.verticalSpeed.v(f);
+        if (feetPerSecond !== undefined) {
+            const metersPerSecond = feetPerSecond * 0.3048;
+            const distance = metersPerSecond / Sit.fps;
+
+
+            const down = getLocalDownVector(ob.position)
+            ob.position.add(down.multiplyScalar(distance))
+
+            console.log(`moving ${distance}m`)
+
+        }
+
+
     }
 }
 

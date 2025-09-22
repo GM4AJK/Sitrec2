@@ -901,4 +901,34 @@ sitch = {
     backgroundFlow: {kind: "BackgroundFlowIndicator", visible:true, color:"#FFFFFF", force:true},
 
 
+
+//     verticalSpeedEditor: {
+//         kind: "CurveEditor",
+// //        left:0, top:0.5, width:-1,height:0.5,
+//         left: 0.0, top: 0.4, width: -1, height: 0.5,
+//         draggable: true, resizable: true, shiftDrag: true, freeAspect: true,
+//         editorConfig: {
+//             minX: 0, maxX: "Sit.frames", minY: -1000, maxY: 1000,
+//             xLabel: "Frame", xStep: 1, yLabel: "Target Fall Speed", yStep: 0.02,
+// //            points: [0, -0.155, 181.334, -0.132, 433.866, -0.091, 354.555, -0.102, 718.438, -0.055, 632.133, -0.069, 1030, -0.013, 897.667, -0.023],
+//             points: [0, 0, 100,0, 500, 0, 450,0 ],
+//         },
+//         frames: "Sit.frames",
+//         visible: true,
+//         force: true,
+//     },
+//
+//
+//     verticalSpeedController: {
+//         kind: "VerticalSpeed",
+//         verticalSpeed: "verticalSpeedEditor",
+// //        object: "fixedTargetPosition",
+//         object: "lookCamera",
+//         visible: true,
+//         force: true,
+//     },
+
+
+
+
 }
