@@ -76,11 +76,8 @@ export class MipmapGenerator {
 
         const cacheKey = `tiled_${baseTexture.uuid}_${currentZoom}_${maxZoom}${isSeamless ? '_seamless' : ''}`;
         if (this.mipmapCache.has(cacheKey)) {
-//            console.log(`MipmapGenerator: Using cached mipmap for zoom ${currentZoom}`);
             return this.mipmapCache.get(cacheKey);
         }
-
-//        console.log(`MipmapGenerator: Generating mipmap for zoom ${currentZoom} from maxZoom ${maxZoom}`);
         
         // For seamless textures, we can use a memory-efficient version of the tiling approach
         if (isSeamless) {

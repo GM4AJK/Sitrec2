@@ -935,14 +935,20 @@ export class QuadTreeTile {
         
         // For static textures (same URL for all tiles), use a simplified cache key
         // This prevents creating separate materials for each tile of the same static texture
-        const isStaticTexture = url && !url.includes(this.x) && !url.includes(this.y) && !url.includes(this.z);
-        const cacheKey = isStaticTexture ? 
-            (sourceDef.generateMipmaps ? `static_${url}_z${this.z}` : `static_${url}`) :
-            (sourceDef.generateMipmaps ? `${url}_z${this.z}` : url);
+        // Check if URL contains tile coordinates as path parameters (more precise than simple string includes)
+        const hasXParam = url && (url.includes(`/${this.x}/`) || url.includes(`x=${this.x}`) || url.includes(`&x=${this.x}`));
+        const hasYParam = url && (url.includes(`/${this.y}/`) || url.includes(`y=${this.y}`) || url.includes(`&y=${this.y}`));
+        const hasZParam = url && (url.includes(`/${this.z}/`) || url.includes(`z=${this.z}`) || url.includes(`&z=${this.z}`));
+        const isStaticTexture = url && !hasXParam && !hasYParam && !hasZParam;
         
+        // For static textures with mipmaps, we need to separate base texture loading from mipmap generation
         if (isStaticTexture && sourceDef.generateMipmaps) {
- //           console.log(`QuadTreeTile: Using static texture caching for zoom ${this.z}: ${cacheKey}`);
+            return this.buildStaticMipmapMaterial(url, sourceDef);
         }
+        
+        // For non-static textures or static textures without mipmaps, use the original approach
+        const cacheKey = isStaticTexture ? `static_${url}` : 
+            (sourceDef.generateMipmaps ? `${url}_z${this.z}` : url);
         
         // Check if we already have a cached material for this cache key
         if (materialCache.has(cacheKey)) {
@@ -959,16 +965,15 @@ export class QuadTreeTile {
         const loadPromise = loadTextureWithRetries(url).then((texture) => {
             let finalTexture = texture;
 
-            console.log(`New texture loaded for key '${cacheKey}'`)
-            
-            // Generate mipmap if enabled for this source
-            if (sourceDef.generateMipmaps && sourceDef.maxZoom) {
+
+            // Generate mipmap if enabled for this source (only for non-static textures here)
+            if (sourceDef.generateMipmaps && sourceDef.maxZoom && !isStaticTexture) {
 //                console.log(`QuadTreeTile: Generating mipmap for tile ${this.z}/${this.x}/${this.y}`);
                 finalTexture = globalMipmapGenerator.generateTiledMipmap(
                     texture, 
                     this.z, 
                     sourceDef.maxZoom,
-                    isStaticTexture  // Use efficient downsampling for static textures
+                    false  // Non-static textures
                 );
             }
             
@@ -982,6 +987,78 @@ export class QuadTreeTile {
         
         textureLoadPromises.set(cacheKey, loadPromise);
         return loadPromise;
+    }
+
+    /**
+     * Build material for static textures with mipmaps
+     * Loads the base texture once and generates different mipmap levels from it
+     */
+    async buildStaticMipmapMaterial(url, sourceDef) {
+        // Create cache key for the final material (includes zoom level)
+        const materialCacheKey = `static_${url}_z${this.z}`;
+        
+        // Check if we already have the final material cached
+        if (materialCache.has(materialCacheKey)) {
+            return materialCache.get(materialCacheKey);
+        }
+        
+        // Check if we're already building this specific material
+        if (textureLoadPromises.has(materialCacheKey)) {
+//            console.log(`QuadTreeTile: Waiting for concurrent static mipmap material build: z${this.z}`);
+            return textureLoadPromises.get(materialCacheKey);
+        }
+        
+        // Create cache key for the base texture (without zoom level)
+        const baseCacheKey = `static_${url}_base`;
+        
+        // Create the material building promise
+        const buildPromise = (async () => {
+            // First, ensure we have the base texture loaded and cached
+            let baseTexture;
+            if (materialCache.has(baseCacheKey)) {
+                baseTexture = materialCache.get(baseCacheKey).map;
+            } else {
+                // Check if we're already loading the base texture
+                if (textureLoadPromises.has(baseCacheKey)) {
+                    const cachedMaterial = await textureLoadPromises.get(baseCacheKey);
+                    baseTexture = cachedMaterial.map;
+                } else {
+                    
+                    // Create and cache the base texture loading promise
+                    const baseLoadPromise = loadTextureWithRetries(url).then((texture) => {
+                        const baseMaterial = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+                        materialCache.set(baseCacheKey, baseMaterial);
+                        // Clean up the promise cache once loading is complete
+                        textureLoadPromises.delete(baseCacheKey);
+                        return baseMaterial;
+                    });
+                    
+                    textureLoadPromises.set(baseCacheKey, baseLoadPromise);
+                    const cachedMaterial = await baseLoadPromise;
+                    baseTexture = cachedMaterial.map;
+                }
+            }
+            
+            // Generate the appropriate mipmap level for this zoom
+            const mipmapTexture = globalMipmapGenerator.generateTiledMipmap(
+                baseTexture, 
+                this.z, 
+                sourceDef.maxZoom,
+                true  // isSeamless = true for static textures
+            );
+            
+            const material = new MeshStandardMaterial({map: mipmapTexture, color: "#ffffff"});
+            
+            // Cache the final material
+            materialCache.set(materialCacheKey, material);
+            // Clean up the promise cache once building is complete
+            textureLoadPromises.delete(materialCacheKey);
+            
+            return material;
+        })();
+        
+        textureLoadPromises.set(materialCacheKey, buildPromise);
+        return buildPromise;
     }
 
     // Static method to clear the entire material cache
@@ -1009,7 +1086,8 @@ export class QuadTreeTile {
             if (cacheKey === url || 
                 cacheKey.startsWith(`${url}_z`) || 
                 cacheKey === `static_${url}` || 
-                cacheKey.startsWith(`static_${url}_z`)) {
+                cacheKey.startsWith(`static_${url}_z`) ||
+                cacheKey === `static_${url}_base`) {
                 if (material.map) {
                     material.map.dispose();
                 }
@@ -1026,7 +1104,8 @@ export class QuadTreeTile {
             if (cacheKey === url || 
                 cacheKey.startsWith(`${url}_z`) || 
                 cacheKey === `static_${url}` || 
-                cacheKey.startsWith(`static_${url}_z`)) {
+                cacheKey.startsWith(`static_${url}_z`) ||
+                cacheKey === `static_${url}_base`) {
                 promiseKeysToDelete.push(cacheKey);
             }
         });
@@ -1043,15 +1122,18 @@ export class QuadTreeTile {
             size: materialCache.size,
             urls: Array.from(materialCache.keys()),
             staticTextures: 0,
+            staticBaseTextures: 0,
             zoomSpecificTextures: 0,
             mipmapGeneratorCacheSize: globalMipmapGenerator.mipmapCache.size,
             pendingLoads: textureLoadPromises.size,
             pendingLoadKeys: Array.from(textureLoadPromises.keys())
         };
         
-        // Count static vs zoom-specific textures
+        // Count different types of cached textures
         stats.urls.forEach(url => {
-            if (url.startsWith('static_')) {
+            if (url.includes('_base')) {
+                stats.staticBaseTextures++;
+            } else if (url.startsWith('static_')) {
                 stats.staticTextures++;
             } else if (url.includes('_z')) {
                 stats.zoomSpecificTextures++;
@@ -1066,8 +1148,9 @@ export class QuadTreeTile {
         const stats = QuadTreeTile.getMaterialCacheStats();
         console.log("=== Material Cache Statistics ===");
         console.log(`Total cached materials: ${stats.size}`);
-        console.log(`Static textures: ${stats.staticTextures}`);
-        console.log(`Zoom-specific textures: ${stats.zoomSpecificTextures}`);
+        console.log(`Static base textures: ${stats.staticBaseTextures}`);
+        console.log(`Static zoom textures: ${stats.staticTextures}`);
+        console.log(`Dynamic zoom textures: ${stats.zoomSpecificTextures}`);
         console.log(`Mipmap generator cache size: ${stats.mipmapGeneratorCacheSize}`);
         console.log(`Pending texture loads: ${stats.pendingLoads}`);
         if (stats.pendingLoads > 0) {
@@ -2027,7 +2110,7 @@ export class QuadTreeTile {
 
     /**
      * Get OceanSurface texture with appropriate mipmap level for this tile's zoom
-     * OceanSurface uses a single texture file with mipmaps generated once and cached globally
+     * Uses the same optimized caching as buildStaticMipmapMaterial
      */
     async getOceanSurfaceTexture() {
         // Get the OceanSurface map source definition
@@ -2042,50 +2125,10 @@ export class QuadTreeTile {
             throw new Error('OceanSurface URL not available');
         }
 
-        // Create cache key for the base texture (without zoom, since it's the same texture)
-        const baseCacheKey = `${oceanUrl}_base`;
-        
-        // First, ensure we have the base texture loaded and cached
-        let baseTexture;
-        if (materialCache.has(baseCacheKey)) {
-            baseTexture = materialCache.get(baseCacheKey).map;
-        } else {
-            // Check if we're already loading this texture to prevent concurrent loads
-            if (textureLoadPromises.has(baseCacheKey)) {
-                console.log(`QuadTreeTile: Waiting for concurrent OceanSurface base texture load`);
-                const cachedMaterial = await textureLoadPromises.get(baseCacheKey);
-                baseTexture = cachedMaterial.map;
-            } else {
-                console.log(`QuadTreeTile: Loading OceanSurface base texture (one-time operation)`);
-                
-                // Create and cache the loading promise to prevent concurrent loads
-                const loadPromise = loadTextureWithRetries(oceanUrl).then((texture) => {
-                    const baseMaterial = new MeshStandardMaterial({map: texture, color: "#ffffff"});
-                    materialCache.set(baseCacheKey, baseMaterial);
-                    // Clean up the promise cache once loading is complete
-                    textureLoadPromises.delete(baseCacheKey);
-                    return baseMaterial;
-                });
-                
-                textureLoadPromises.set(baseCacheKey, loadPromise);
-                const cachedMaterial = await loadPromise;
-                baseTexture = cachedMaterial.map;
-            }
-        }
-        
-        // Now get the appropriate mipmap level for this zoom
-        if (oceanSourceDef.generateMipmaps && oceanSourceDef.maxZoom) {
-            // Use the existing generateTiledMipmap which handles caching internally
-            // OceanSurface is a seamless texture, so use the memory-efficient approach
-            return globalMipmapGenerator.generateTiledMipmap(
-                baseTexture, 
-                this.z, 
-                oceanSourceDef.maxZoom,
-                true  // isSeamless = true for OceanSurface
-            );
-        }
-        
-        return baseTexture;
+        // Use the same optimized static mipmap material building
+        // This ensures we share the same cache and avoid duplicate loads
+        const material = await this.buildStaticMipmapMaterial(oceanUrl, oceanSourceDef);
+        return material.map;
     }
 
 

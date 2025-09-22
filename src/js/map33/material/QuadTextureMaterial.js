@@ -32,6 +32,9 @@ export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, current
       loader.load(url[urlIndex],
           // On load
           (texture) => {
+
+        console.log(`Loaded ${url[urlIndex]} successfully`)
+
             resolve(texture);
             activeRequests--;
             processQueue();
