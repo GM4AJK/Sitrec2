@@ -110,26 +110,28 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
         const projection = this.options.mapProjection;
 
-        // quick check to see if it matches the last tile we found
-        // this is for when we do bulk operations and we want to avoid finding the same tile again
-        if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === null || desiredZoom === this.lastGeoTile.z)) {
-            let zoom = this.lastGeoTile.z;
-            const maxTile = Math.pow(2, zoom);
-            var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
-            var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
-
-            const xInt = Math.floor(x);
-            const yInt = Math.floor(y);
-            if (xInt === this.lastGeoTile.x && yInt === this.lastGeoTile.y) {
-                // if the last tile is the same as the current tile, return it
-                return {x, y, zoom};
-            }
-        }
-        this.lastGeoTile = null; // reset the last tile if it's not the same
-
         // if a desired zoom level is specified, we can just use that
         if (desiredZoom !== null) {
+
             assert(desiredZoom <= this.maxZoom, `geo2TileFractionAndZoom: desiredZoom (${desiredZoom}) must be less than or equal to maxZoom (${this.maxZoom})`);
+
+            // quick check to see if it matches the last tile we found
+            // for lat/lon derived x, y, and desired zoom
+            // this is for when we do bulk operations and we want to avoid finding the same tile again
+            if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === this.lastGeoTile.z)) {
+                let zoom = this.lastGeoTile.z;
+                const maxTile = Math.pow(2, zoom);
+                var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
+                var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
+
+                const xInt = Math.floor(x);
+                const yInt = Math.floor(y);
+                if (xInt === this.lastGeoTile.x && yInt === this.lastGeoTile.y) {
+                    // if the last tile is the same as the current tile, return it
+                    return {x, y, zoom};
+                }
+            }
+            this.lastGeoTile = null; // reset the last tile if it's not the same
 
             const maxTile = Math.pow(2, desiredZoom);
             var x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
