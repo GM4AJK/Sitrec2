@@ -1,8 +1,8 @@
 import {par} from "../par";
 import {f2m, normalizeLayerType} from "../utils";
-import {getLocalNorthVector, XYZ2EA, XYZJ2PR} from "../SphericalMath";
-import {setRenderOne, CustomManager, Globals, guiMenus, guiTweaks, infoDiv, keyHeld, NodeMan, Sit} from "../Globals";
-import {GlobalDaySkyScene, GlobalNightSkyScene,GlobalSunSkyScene, GlobalScene} from "../LocalFrame";
+import {XYZ2EA, XYZJ2PR} from "../SphericalMath";
+import {CustomManager, Globals, guiMenus, guiTweaks, keyHeld, NodeMan, setRenderOne, Sit} from "../Globals";
+import {GlobalDaySkyScene, GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene} from "../LocalFrame";
 import {DRAG, makeMouseRay} from "../mouseMoveView";
 import {
     Camera,
@@ -27,7 +27,7 @@ import {
     WebGLRenderer,
     WebGLRenderTarget
 } from "three";
-import {DebugArrowAB, forceFilterChange, scaleArrows} from "../threeExt";
+import {DebugArrowAB, DebugSphere, forceFilterChange, scaleArrows} from "../threeExt";
 import {CNodeViewCanvas} from "./CNodeViewCanvas";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {getCameraNode} from "./CNodeCamera";
@@ -38,9 +38,10 @@ import {ACESFilmicToneMappingShader} from "../shaders/ACESFilmicToneMappingShade
 import {ShaderPass} from "three/addons/postprocessing/ShaderPass.js";
 import {isLocal, SITREC_APP} from "../configUtils.js"
 import {VRButton} from 'three/addons/webxr/VRButton.js';
-import {mouseInViewOnly} from "../ViewUtils";
+import {mouseInViewOnly, mouseToView} from "../ViewUtils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {CameraMapControls} from "../js/CameraControls";
+import {GlobalContextMenu} from "../CContextMenu";
 
 
 function linearToSrgb(color) {
@@ -1221,6 +1222,103 @@ export class CNodeView3D extends CNodeViewCanvas {
 
     }
 
+    onContextMenu(event, mouseX, mouseY) {
+        if (!this.mouseEnabled) return;
+        
+        // mouseX, mouseY are screen coordinates (event.clientX, event.clientY)
+        // Convert to view-relative coordinates
+        const [viewX, viewY] = mouseToView(this, mouseX, mouseY);
+        
+        // Convert to coordinates relative to lower left of view (same as onMouseDown)
+        const mouseYUp = this.heightPx - viewY;
+        const mouseRay = makeMouseRay(this, viewX, mouseYUp);
+        
+        if (this.camera && mouseInViewOnly(this, mouseX, mouseY)) {
+            this.raycaster.setFromCamera(mouseRay, this.camera);
+            const intersects = this.raycaster.intersectObjects(this.scene.children, true);
+            
+            if (intersects.length > 0) {
+                // Find the closest intersected object that belongs to a CNode3DObject
+                for (const intersect of intersects) {
+                    const object = intersect.object;
+                    const objectID = this.findObjectID(object);
+                    
+                    if (objectID) {
+                        console.log(`Found object: ${objectID}`);
+
+                        // get coordinates of the intersection point
+                        const groundPoint = intersect.point;
+
+                        DebugSphere("DEBUGPIck"+par.frame, groundPoint, 2, 0xFFFF00)
+
+
+                        // Show context menu with object ID
+                        GlobalContextMenu.addItem(`Object: ${objectID}`, () => {
+                            console.log(`Selected object: ${objectID}`);
+                        });
+
+                        GlobalContextMenu.addSeparator();
+                        GlobalContextMenu.addItem('Properties', () => {
+                            console.log(`Show properties for: ${objectID}`);
+                        });
+
+                        GlobalContextMenu.show(event.clientX, event.clientY);
+                        break;
+                    } else {
+                        // Debug: log what we're hitting
+                        console.log(`Hit object without valid name: ${object.type}, name: "${object.name}", userData:`, object.userData);
+                    }
+                }
+            }
+        }
+    }
+    
+    // Helper method to find the CNode3DGroup object and its ID by traversing up the hierarchy
+    findObjectID(object) {
+        let current = object;
+        let depth = 0;
+        
+        console.log(`Starting object hierarchy traversal from: ${object.type} "${object.name}"`);
+        
+        // Traverse up the object hierarchy to find a CNode3DGroup or named object
+        while (current) {
+            const indent = "  ".repeat(depth);
+            console.log(`${indent}Level ${depth}: ${current.type} "${current.name}" userData:`, current.userData);
+            
+            // Check if this object has userData with nodeId (this indicates it's a CNode3DGroup)
+            if (current.userData && current.userData.nodeId) {
+                console.log(`${indent}Found CNode3DGroup! userData.nodeId: ${current.userData.nodeId}`);
+                
+                // Try to get the node using the nodeId
+                const node = NodeMan.get(current.userData.nodeId);
+                if (node && node.id) {
+                    console.log(`${indent}Successfully found node: ${node.id} (type: ${node.constructor.name})`);
+                    return node.id;
+                }
+                // Fallback to just using nodeId directly
+                console.log(`${indent}Using nodeId directly: ${current.userData.nodeId}`);
+                return current.userData.nodeId;
+            }
+            
+            // Don't return names without nodeId - keep traversing up to find CNode3DGroup
+            if (current.name && current.name !== '' && current.name !== 'mesh' && current.name !== 'Mesh') {
+                console.log(`${indent}Skipping meaningful name without nodeId: ${current.name} - continuing traversal`);
+            }
+            
+            current = current.parent;
+            depth++;
+            
+            // Safety check to prevent infinite loops
+            if (depth > 20) {
+                console.warn("Object hierarchy traversal exceeded maximum depth");
+                break;
+            }
+        }
+        
+        console.log("No CNode3DGroup with nodeId found in hierarchy");
+        // If no nodeId found, return null to indicate no valid CNode3DGroup object
+        return null;
+    }
 
     // given a 3D position in the scene and a length in pixele
     // we known the verical field of view of the camera

@@ -2,11 +2,9 @@ import {Group} from "three"
 import {propagateLayerMaskObject} from "../threeExt";
 import {GlobalScene} from "../LocalFrame"
 import {CNode3D} from "./CNode3D";
-import {normalizeLayerType} from "../utils";
 import {assert} from "../assert.js";
 import {convertColorInput} from "../ConvertColorInputs";
 import {guiShowHide, setRenderOne} from "../Globals";
-import {par} from "../par";
 import {toggles} from "../KeyBoardHandler";
 
 // a CNode3DGroup encapsulates a THREE.Group one or more 3D objects
@@ -33,6 +31,11 @@ export class CNode3DGroup extends CNode3D {
         this._object = new Group()
 
         this._object.layers.mask = v.layers ?? 1 // 1 is just the default layer 0 (1<<0)
+        
+        // Add userData for context menu identification
+        this._object.userData.nodeId = this.id;
+        this._object.userData.name = this.id;
+        this._object.name = this.id;
 
         this.container.add(this._object)
 

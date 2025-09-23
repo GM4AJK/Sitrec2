@@ -109,6 +109,11 @@ export class CMouseHandler {
         if (this.enabled === false) return;
 
         event.preventDefault();
+        
+        this.newPosition(event);
+        if (this.handlers.contextMenu) {
+            this.handlers.contextMenu(event);
+        }
 
     }
 

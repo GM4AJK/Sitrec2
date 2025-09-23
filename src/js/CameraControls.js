@@ -117,6 +117,11 @@ class CameraMapControls {
 		if ( this.enabled === false ) return;
 
 		event.preventDefault();
+		
+		// Check if the view has a context menu handler
+		if (this.view && this.view.onContextMenu) {
+			this.view.onContextMenu(event, event.clientX, event.clientY);
+		}
 
 	}
 
