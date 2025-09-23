@@ -5,6 +5,7 @@ import {debugLog} from "./Globals";
 import {isLocal} from "./configUtils";
 import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./SphericalMath";
 import * as LAYER from "./LayerMasks";
+import {assert} from "./assert";
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -164,6 +165,18 @@ export class QuadTreeMap {
         if (this.constructor.name === 'QuadTreeMapTexture') {
             for (const key in this.tileCache) {
                 const tile = this.tileCache[key];
+
+                if (tile.mesh) {
+                    if (tile.mesh.layers.mask !== tile.tileLayers) {
+                        const timeSinceSet = tile.mesh._lastLayerSetTime ? Date.now() - tile.mesh._lastLayerSetTime : 'unknown';
+                        const lastSetMask = tile.mesh._lastLayerSetMask || 'unknown';
+                        console.error(`LAYERS MISMATCH DETECTED: key=${key}, loaded=(${tile.loaded}), mesh.layers.mask=${tile.mesh.layers.mask.toString(2)} (${tile.mesh.layers.mask}), tile.tileLayers=${tile.tileLayers.toString(2)} (${tile.tileLayers})`);
+                        console.error(`Debug info: lastSetMask=${lastSetMask.toString ? lastSetMask.toString(2) : lastSetMask}, timeSinceSet=${timeSinceSet}ms`);
+                        console.trace('Stack trace for layers mismatch:');
+                    }
+                    assert(tile.mesh.layers.mask === tile.tileLayers, `Tile layers mismatch. key=${key}, loaded=(${tile.loaded}), tile. mesh.layers.mask=${tile.mesh.layers.mask.toString(2)}, tile.tileLayers=${tile.tileLayers.toString(2)}`)
+                }
+
 
                 // Skip if tile is not active in this view or doesn't have potential children
                 if (!(tile.tileLayers & tileLayers) || tile.z >= this.maxZoom) continue;
