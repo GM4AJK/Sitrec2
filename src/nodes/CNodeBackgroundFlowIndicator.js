@@ -60,7 +60,11 @@ export class CNodeBackgroundFlowIndicator extends CNode {
         const cameraPosB = losTrackB.position;
 
         const rayA = new Raycaster(cameraPosA, losA)
+        rayA.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+
         const rayB = new Raycaster(cameraPosB, losB)
+        rayB.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+
 
         const terrainNode = NodeMan.get("TerrainModel", false);
 

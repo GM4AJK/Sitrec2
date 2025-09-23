@@ -11,6 +11,7 @@ import {CTileMappingGoogleCRS84Quad, CTileMappingGoogleMapsCompatible} from "../
 import {EventManager} from "../CEventManager";
 import {QuadTreeMapTexture} from "../QuadTreeMapTexture";
 import {QuadTreeMapElevation} from "../QuadTreeMapElevation";
+import * as LAYER from "../LayerMasks";
 
 const terrainGUIColor = "#c0ffc0";
 
@@ -578,6 +579,8 @@ export class CNodeTerrain extends CNode {
             const BtoA = A.clone().sub(B).normalize()
 
             const rayCaster = new Raycaster(B, BtoA);
+            rayCaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+
             const ground = this.getClosestIntersect(rayCaster);
             if (ground !== null) {
                 let groundPoint = ground.point;

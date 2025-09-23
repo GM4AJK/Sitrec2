@@ -1541,6 +1541,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         // and atmospheric refraction also makes more visible.
 
         const raycaster = new Raycaster();
+        raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+
         var hitPoint = new Vector3();
         var hitPoint2 = new Vector3();
         // get the forward vector (-z) of the camera matrix, for perp distance

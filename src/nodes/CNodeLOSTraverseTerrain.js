@@ -5,6 +5,7 @@ import {Raycaster} from "three";
 import {vdump} from "../utils";
 
 import {V3} from "../threeUtils";
+import * as LAYER from "../LayerMasks";
 
 export class CNodeLOSTraverseTerrain extends CNodeEmptyArray {
     constructor(v) {
@@ -20,6 +21,8 @@ export class CNodeLOSTraverseTerrain extends CNodeEmptyArray {
         this.frames = this.in.LOS.frames
 
         var raycaster = new Raycaster();
+        raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+
 
         // the terrain group contains the meshes of the terrain
         // which we want to check for intersections

@@ -25,6 +25,7 @@ import {mouseInViewOnly, mouseToView} from "../ViewUtils";
 import {CNodeMeasureAB} from "../nodes/CNodeLabels3D";
 import {CNodePositionXYZ} from "../nodes/CNodePositionLLA";
 import {GlobalScene} from "../LocalFrame";
+import * as LAYER from "../LayerMasks";
 
 const STATE = {
 	NONE: - 1,
@@ -506,6 +507,7 @@ class CameraMapControls {
 
 				// find intersection for start and end mouse positions
 				const raycaster = new Raycaster();
+				raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
 
 
 				let width = this.view.widthPx

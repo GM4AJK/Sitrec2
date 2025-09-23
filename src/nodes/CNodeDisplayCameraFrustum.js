@@ -2,11 +2,11 @@ import {radians, tan, unitsToMeters} from "../utils";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {Line2} from "three/addons/lines/Line2.js";
 import {CNode3DGroup} from "./CNode3DGroup";
-import {DebugArrow, DebugArrowAB, dispose, removeDebugArrow} from "../threeExt";
+import {DebugArrow, dispose, removeDebugArrow} from "../threeExt";
 import {NodeMan} from "../Globals";
 import {disposeMatLine, makeMatLine} from "../MatLines";
 import {LineSegmentsGeometry} from "three/addons/lines/LineSegmentsGeometry.js";
-import {Color, Ray, Raycaster, Sphere, Vector3} from "three";
+import {Ray, Raycaster, Sphere, Vector3} from "three";
 import {getLocalUpVector} from "../SphericalMath";
 import {wgs84} from "../LLA-ECEF-ENU";
 import * as LAYER from "../LayerMasks";
@@ -353,6 +353,7 @@ export class CNodeDisplayGroundMovement extends CNode3DGroup {
 function terrainCollideCameraRelative(terrain, camera, localPos) {
     const pos = camera.localToWorld(localPos);
     const rayCaster = new Raycaster(camera.position, pos.sub(camera.position).normalize());
+    rayCaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
     const ground = terrain.getClosestIntersect(rayCaster);
     if (ground !== null) {
         return ground.point;

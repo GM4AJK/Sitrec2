@@ -1,12 +1,12 @@
 import {TransformControls} from "three/addons/controls/TransformControls.js";
 import {BoxGeometry, Line3, Mesh, MeshLambertMaterial, Raycaster, Vector2, Vector3} from "three";
-import {par} from "./par";
 import {EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
 import {assert} from "./assert.js";
 import {V3} from "./threeUtils";
 import {ViewMan} from "./CViewManager";
 import {mouseInViewOnly, mouseToViewNormalized} from "./ViewUtils";
 import {setRenderOne} from "./Globals";
+import * as LAYER from "./LayerMasks";
 
 // base class for curve editors
 // has a list of positions that are the control points
@@ -58,6 +58,7 @@ export class PointEditor {
         this.onChange = onChange   // external callback for when spline is changed
 
         this.raycaster = new Raycaster();         // for picking
+        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         this.pointer = new Vector2();
         this.onUpPosition = new Vector2();       // mouse position when up
         this.onDownPosition = new Vector2();      // and down

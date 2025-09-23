@@ -745,6 +745,7 @@ export class CNodeView3D extends CNodeViewCanvas {
 
     otherSetup(v) {
         this.raycaster = new Raycaster();
+        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         assert(this.scene, "CNodeView3D needs global GlobalScene")
 
         const spriteCrosshairMaterial = new SpriteMaterial({

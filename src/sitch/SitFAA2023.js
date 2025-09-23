@@ -1,10 +1,11 @@
 import {FileManager, GlobalDateTimeNode, NodeMan, setRenderOne} from "../Globals";
 import {ECEFToLLAVD_Sphere, EUSToECEF, LLAToEUS} from "../LLA-ECEF-ENU";
 import {DebugSphere, removeDebugSphere} from "../threeExt";
-import {Group, Raycaster, Vector2} from "three";
+import {Group, Raycaster} from "three";
 import {GlobalScene} from "../LocalFrame";
 import {makeMouseRay} from "../mouseMoveView";
 import * as LAYERS from "../LayerMasks";
+import * as LAYER from "../LayerMasks";
 import {CNodeViewUI} from "../nodes/CNodeViewUI";
 import {ViewMan} from "../CViewManager";
 
@@ -122,6 +123,7 @@ export const SitFAA2023 = {
         //  console.log("pointermove" + event.clientX + event.clientY)
         const raycaster = new Raycaster();
         raycaster.layers.mask = LAYERS.MASK_MAINRENDER
+        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         raycaster.setFromCamera(mouseRay, mainView.camera);
         const intersects = raycaster.intersectObjects(this.markerGroup.children);
 
