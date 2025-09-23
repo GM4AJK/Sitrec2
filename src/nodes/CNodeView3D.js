@@ -41,7 +41,6 @@ import {VRButton} from 'three/addons/webxr/VRButton.js';
 import {mouseInViewOnly, mouseToView} from "../ViewUtils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {CameraMapControls} from "../js/CameraControls";
-import {GlobalContextMenu} from "../CContextMenu";
 
 
 function linearToSrgb(color) {
@@ -1251,18 +1250,25 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                         DebugSphere("DEBUGPIck"+par.frame, groundPoint, 2, 0xFFFF00)
 
-
-                        // Show context menu with object ID
-                        GlobalContextMenu.addItem(`Object: ${objectID}`, () => {
-                            console.log(`Selected object: ${objectID}`);
-                        });
-
-                        GlobalContextMenu.addSeparator();
-                        GlobalContextMenu.addItem('Properties', () => {
-                            console.log(`Show properties for: ${objectID}`);
-                        });
-
-                        GlobalContextMenu.show(event.clientX, event.clientY);
+                        // Get the node from NodeManager
+                        const node = NodeMan.get(objectID);
+                        if (node && node.gui) {
+                            // Create a draggable window with the node's GUI controls
+                            const menuTitle = `3D Ob: ${objectID}`;
+                            
+                            // Create the standalone menu directly
+                            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
+                            
+                            // Mirror the node's GUI folder controls to the standalone menu
+                            CustomManager.mirrorGUIControls(node.gui, standaloneMenu);
+                            
+                            // Open the menu by default
+                            standaloneMenu.open();
+                            
+                            console.log(`Created standalone menu for object: ${objectID}`);
+                        } else {
+                            console.log(`Node ${objectID} not found or has no GUI folder`);
+                        }
                         break;
                     } else {
                         // Debug: log what we're hitting

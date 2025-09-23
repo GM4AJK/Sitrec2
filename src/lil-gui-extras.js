@@ -315,8 +315,20 @@ export class CGuiMenuBar {
         document.addEventListener("mousedown", (event) => {
             // if the click was not in the menu bar, close all the GUIs
             if (!this.menuBar.contains(event.target)) {
+                // Close regular menu bar items
                 this.slots.forEach((gui) => {
                     gui.close();
+                });
+                
+                // Close standalone menus
+                const allContainers = Array.from(this.menuBar.children);
+                allContainers.forEach((container) => {
+                    // Find the GUI associated with this container
+                    const gui = container._gui;
+                    if (gui && gui._standaloneContainer) {
+                        // This is a standalone menu, close it by removing the container
+                        gui.destroy();
+                    }
                 });
             }
         });
@@ -930,6 +942,9 @@ export class CGuiMenuBar {
         
         // Store reference to container for cleanup
         gui._standaloneContainer = containerDiv;
+        
+        // Store reference from container to GUI for click-outside detection
+        containerDiv._gui = gui;
         
         // Add destroy method override to clean up the container
         const originalDestroy = gui.destroy.bind(gui);
