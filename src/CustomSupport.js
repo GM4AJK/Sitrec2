@@ -335,10 +335,10 @@ export class CCustomManager {
         // Example of creating a standalone pop-up menu
         // This creates a draggable menu that behaves like the individual menus from the menu bar
         // but is not attached to the menu bar itself
-        this.setupStandaloneMenuExample();
-
-        // Example of mirroring the Flow Orbs menu (or effects menu if no Flow Orbs exist)
-        this.setupFlowOrbsMirrorExample();
+        // this.setupStandaloneMenuExample();
+        //
+        // // Example of mirroring the Flow Orbs menu (or effects menu if no Flow Orbs exist)
+        // this.setupFlowOrbsMirrorExample();
 
     }
 
