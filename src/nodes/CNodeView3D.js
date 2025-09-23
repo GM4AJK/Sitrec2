@@ -27,7 +27,7 @@ import {
     WebGLRenderer,
     WebGLRenderTarget
 } from "three";
-import {DebugArrowAB, DebugSphere, forceFilterChange, scaleArrows} from "../threeExt";
+import {DebugArrowAB, forceFilterChange, scaleArrows} from "../threeExt";
 import {CNodeViewCanvas} from "./CNodeViewCanvas";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {getCameraNode} from "./CNodeCamera";
@@ -1258,7 +1258,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                         // get coordinates of the intersection point
                         const groundPoint = intersect.point;
 
-                        DebugSphere("DEBUGPIck"+par.frame, groundPoint, 2, 0xFFFF00)
+//                        DebugSphere("DEBUGPIck"+par.frame, groundPoint, 2, 0xFFFF00)
 
                         // Get the node from NodeManager
                         const node = NodeMan.get(objectID);
@@ -1294,44 +1294,31 @@ export class CNodeView3D extends CNodeViewCanvas {
         let current = object;
         let depth = 0;
         
-        console.log(`Starting object hierarchy traversal from: ${object.type} "${object.name}"`);
-        
         // Traverse up the object hierarchy to find a CNode3DGroup or named object
         while (current) {
             const indent = "  ".repeat(depth);
-            console.log(`${indent}Level ${depth}: ${current.type} "${current.name}" userData:`, current.userData);
-            
+
             // Check if this object has userData with nodeId (this indicates it's a CNode3DGroup)
             if (current.userData && current.userData.nodeId) {
-                console.log(`${indent}Found CNode3DGroup! userData.nodeId: ${current.userData.nodeId}`);
-                
+
                 // Try to get the node using the nodeId
                 const node = NodeMan.get(current.userData.nodeId);
                 if (node && node.id) {
-                    console.log(`${indent}Successfully found node: ${node.id} (type: ${node.constructor.name})`);
                     return node.id;
                 }
                 // Fallback to just using nodeId directly
-                console.log(`${indent}Using nodeId directly: ${current.userData.nodeId}`);
                 return current.userData.nodeId;
             }
-            
-            // Don't return names without nodeId - keep traversing up to find CNode3DGroup
-            if (current.name && current.name !== '' && current.name !== 'mesh' && current.name !== 'Mesh') {
-                console.log(`${indent}Skipping meaningful name without nodeId: ${current.name} - continuing traversal`);
-            }
-            
+
             current = current.parent;
             depth++;
             
             // Safety check to prevent infinite loops
             if (depth > 20) {
-                console.warn("Object hierarchy traversal exceeded maximum depth");
                 break;
             }
         }
         
-        console.log("No CNode3DGroup with nodeId found in hierarchy");
         // If no nodeId found, return null to indicate no valid CNode3DGroup object
         return null;
     }
