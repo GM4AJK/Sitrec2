@@ -8,14 +8,7 @@
     "test-misb": "node ../test-all-misb-files.js",
     "build": "npx webpack --config webpack.dev.js",
     "deploy": "npx webpack --config webpack.prod.js",
-    "start": "webpack serve --config webpack.dev.js --mode development",
-    "copy": "npx webpack --config webpack.copy-files.js",
-    "build-standalone": "npx webpack --config webpack.standalone.js",
-    "build-standalone-debug": "npx webpack --config webpack.standalone.js --mode development --devtool eval-source-map",
-    "start-standalone": "node standalone-server.js",
-    "start-standalone-debug": "NODE_ENV=development DEBUG=* node --inspect standalone-server.js",
-    "dev-standalone": "npm run build-standalone && npm run start-standalone",
-    "dev-standalone-debug": "npm run build-standalone-debug && npm run start-standalone-debug"
+    "copy": "npx webpack --config webpack.copy-files.js"
   },
   "jest": {
     "testPathIgnorePatterns": [
