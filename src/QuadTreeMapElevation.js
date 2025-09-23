@@ -1,6 +1,7 @@
 import {QuadTreeMap} from "./QuadTreeMap";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {assert} from "./assert";
+import * as LAYER from "./LayerMasks";
 
 export class QuadTreeMapElevation extends QuadTreeMap {
     constructor(terrainNode, geoLocation, options = {}) {
@@ -42,7 +43,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
     }
 
 
-    activateTile(x,y,z) {
+    activateTile(x,y,z, layerMask = 0) {
 
 
         assert(z <= this.maxZoom, `activateTile: z (${z}) must be less than of equal to maxZoom (${this.maxZoom})`);
@@ -72,17 +73,40 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                 this.terrainNode.elevationTileLoaded(tile);
             })
         }
-        tile.active = true; // mark the tile as active
+        // Set the tile's layer mask to activate it - combine with existing layers
+        if (layerMask > 0) {
+            // OR the new layer mask with existing layers to support multiple views
+            tile.tileLayers = (tile.tileLayers || 0) | layerMask;
+        } else {
+            // Default case: activate for all layers
+            tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        }
+        
+        // Set layer mask if provided (elevation tiles may not have meshes, but we store the mask)
+        if (tile.tileLayers > 0) {
+            this.setTileLayerMask(tile, tile.tileLayers);
+        }
 
         this.refreshDebugGeometry(tile);
 
     }
 
-    deactivateTile(x,y,z) {
+    deactivateTile(x, y, z, layerMask = 0) {
         // console.log("DUMMY deactivateTile Elevation ", x, y, z);
         const key = `${z}/${x}/${y}`;
         let tile = this.tileCache[key];
-        tile.active = false; // mark the tile as inactive
+        if (tile === undefined) {
+            return;
+        }
+        
+        // If no specific layer mask provided, clear all layers (backward compatibility)
+        if (layerMask === 0) {
+            tile.tileLayers = 0;
+        } else {
+            // Clear only the specified layer bits using bitwise AND with NOT mask
+            tile.tileLayers = tile.tileLayers & (~layerMask);
+        }
+        
         this.refreshDebugGeometry(tile);
     }
 
@@ -160,7 +184,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                 // if we have a tile cache, check if the tile is in the cache
                 const tileKey = `${zoom}/${xInt}/${yInt}`;
                 const tile = this.tileCache[tileKey];
-                if (tile !== undefined && tile.active && tile.elevation && !tile.elevationLoadFailed) {
+                if (tile !== undefined && tile.tileLayers > 0 && tile.elevation && !tile.elevationLoadFailed) {
                     this.lastGeoTile = tile; // keep track of the last tile found
 
                     const maxTile = Math.pow(2, zoom);

@@ -385,6 +385,35 @@ export class QuadTreeTile {
             this.elevationLoadingIndicator.material.dispose();
             this.elevationLoadingIndicator = undefined;
         }
+        
+        // Remove layer mask indicators if they exist
+        if (this.mainLayerIndicator !== undefined) {
+            GlobalScene.remove(this.mainLayerIndicator);
+            this.mainLayerIndicator.geometry.dispose();
+            this.mainLayerIndicator.material.dispose();
+            this.mainLayerIndicator = undefined;
+        }
+        
+        if (this.lookLayerIndicator !== undefined) {
+            GlobalScene.remove(this.lookLayerIndicator);
+            this.lookLayerIndicator.geometry.dispose();
+            this.lookLayerIndicator.material.dispose();
+            this.lookLayerIndicator = undefined;
+        }
+        
+        if (this.worldLayerIndicator !== undefined) {
+            GlobalScene.remove(this.worldLayerIndicator);
+            this.worldLayerIndicator.geometry.dispose();
+            this.worldLayerIndicator.material.dispose();
+            this.worldLayerIndicator = undefined;
+        }
+        
+        if (this.activeIndicator !== undefined) {
+            GlobalScene.remove(this.activeIndicator);
+            this.activeIndicator.geometry.dispose();
+            this.activeIndicator.material.dispose();
+            this.activeIndicator = undefined;
+        }
     }
 
     // Dispose of this tile's resources (but keep materials in cache for reuse)
@@ -564,6 +593,68 @@ export class QuadTreeTile {
                 GlobalScene
             );
             this.elevationLoadingIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
+        }
+        
+        // Layer mask indicators (positioned 25% down from the top of the tile)
+        if (this.intendedLayerMask !== undefined && this.intendedLayerMask > 0) {
+            const layerIndicatorY = vertexNW.y + (vertexSW.y - vertexNW.y) * 0.25; // 25% down from top
+            
+            // Magenta square for MASK_MAIN (8)
+            if (this.intendedLayerMask & 8) { // MASK_MAIN = 8
+                const mainX = vertexNW.x + (vertexNE.x - vertexNW.x) * offsetFactor;
+                const mainZ = vertexNW.z;
+                
+                this.mainLayerIndicator = boxMark(
+                    {x: mainX, y: layerIndicatorY, z: mainZ}, 
+                    indicatorSize, indicatorSize, indicatorSize, 
+                    "#FF00FF", // Magenta color for MASK_MAIN
+                    GlobalScene
+                );
+                this.mainLayerIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
+            }
+            
+            // Yellow square for MASK_LOOK (16)
+            if (this.intendedLayerMask & 16) { // MASK_LOOK = 16
+                const lookX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.12); // Offset to the right
+                const lookZ = vertexNW.z;
+                
+                this.lookLayerIndicator = boxMark(
+                    {x: lookX, y: layerIndicatorY, z: lookZ}, 
+                    indicatorSize, indicatorSize, indicatorSize, 
+                    "#FFFF00", // Yellow color for MASK_LOOK
+                    GlobalScene
+                );
+                this.lookLayerIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
+            }
+            
+            // Green square for MASK_WORLD (1)
+            if (this.intendedLayerMask & 1) { // MASK_WORLD = 1
+                const worldX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.24); // Further to the right
+                const worldZ = vertexNW.z;
+                
+                this.worldLayerIndicator = boxMark(
+                    {x: worldX, y: layerIndicatorY, z: worldZ}, 
+                    indicatorSize, indicatorSize, indicatorSize, 
+                    "#00FF00", // Green color for MASK_WORLD
+                    GlobalScene
+                );
+                this.worldLayerIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
+            }
+        }
+        
+        // Brown square for active flag (positioned next to layer mask indicators)
+        if (this.active !== undefined) {
+            const activeIndicatorY = vertexNW.y + (vertexSW.y - vertexNW.y) * 0.25; // Same Y as layer indicators
+            const activeX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.36); // Further to the right
+            const activeZ = vertexNW.z;
+            
+            this.activeIndicator = boxMark(
+                {x: activeX, y: activeIndicatorY, z: activeZ}, 
+                indicatorSize, indicatorSize, indicatorSize, 
+                this.active ? "#8B4513" : "#404040", // Brown if active, dark gray if inactive
+                GlobalScene
+            );
+            this.activeIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
         }
 
     }
@@ -1802,6 +1893,11 @@ export class QuadTreeTile {
             }
             this.added = true; // mark the tile as added to the scene
             
+            // Apply current layer mask (use tileLayers which may have been combined from multiple views)
+            if (this.tileLayers > 0) {
+                this.map.setTileLayerMask(this, this.tileLayers);
+            }
+            
             // Return early for debug materials
             return Promise.resolve(this.mesh.material);
         }
@@ -1816,6 +1912,11 @@ export class QuadTreeTile {
                 this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
             }
             this.added = true; // mark the tile as added to the scene
+            
+            // Apply current layer mask (use tileLayers which may have been combined from multiple views)
+            if (this.tileLayers > 0) {
+                this.map.setTileLayerMask(this, this.tileLayers);
+            }
             
             // Return early for wireframe materials
             return Promise.resolve(this.mesh.material);
@@ -1832,6 +1933,11 @@ export class QuadTreeTile {
                     this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
                 }
                 this.added = true;
+                
+                // Apply intended layer mask if it was set
+                if (this.intendedLayerMask > 0) {
+                    this.map.setTileLayerMask(this, this.intendedLayerMask);
+                }
                 
                 // Check if elevation data is already available and apply elevation color texture
                 this.checkAndApplyElevationColorTexture();
@@ -1863,6 +1969,12 @@ export class QuadTreeTile {
                         this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
                     }
                     this.added = true; // mark the tile as added to the scene
+                    
+                    // Apply intended layer mask if it was set
+                    if (this.intendedLayerMask > 0) {
+                        this.map.setTileLayerMask(this, this.intendedLayerMask);
+                    }
+                    
                     this.loaded = true;
                     this.isLoading = false; // Clear loading state
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator

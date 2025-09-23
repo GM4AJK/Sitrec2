@@ -486,20 +486,28 @@ export class CNodeTerrainUI extends CNode {
             const views = [
                 NodeMan.get("lookView"),
                 NodeMan.get("mainView")
-
             ];
 
-            // subdivide the elevation first so elevation requests will come before texutres
+            // subdivide the elevation first so elevation requests will come before textures
             // this makes it more likely that the elevation will be ready when the texture is ready to make a tile.
             if (this.terrainNode.elevationMap !== undefined) {
-
+                // For elevation, call with all views so both cameras are applied for subdivision decisions
                 // not sure about this. elevation is used at a lower resolution than the textures
                 // as the tiles are 100x100
-                this.terrainNode.elevationMap.subdivideTiles(views, 2000*1.414);
+                for (const view of views) {
+                    if (view && view.visible) {
+                        this.terrainNode.elevationMap.subdivideTiles(view, 2000*1.414);
+                    }
+                }
             }
 
+            // For texture maps, call subdivideTiles separately for each view
             if (this.terrainNode.maps[this.mapType].map !== undefined) {
-                this.terrainNode.maps[this.mapType].map.subdivideTiles(views, 2000);
+                for (const view of views) {
+                    if (view && view.visible) {
+                        this.terrainNode.maps[this.mapType].map.subdivideTiles(view, 2000);
+                    }
+                }
             }
 
         }

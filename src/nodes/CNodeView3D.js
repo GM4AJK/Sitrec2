@@ -41,6 +41,7 @@ import {VRButton} from 'three/addons/webxr/VRButton.js';
 import {mouseInViewOnly, mouseToView} from "../ViewUtils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {CameraMapControls} from "../js/CameraControls";
+import * as LAYER from "../LayerMasks";
 
 
 function linearToSrgb(color) {
@@ -66,6 +67,14 @@ export class CNodeView3D extends CNodeViewCanvas {
 
         super(v);
 
+
+
+        this.tileLayers = 0;
+        if (this.id === "mainView") {
+            this.tileLayers |= LAYER.MASK_MAIN;
+        } else {
+            this.tileLayers |= LAYER.MASK_LOOK;
+        }
 
         this.northUp = v.northUp ?? false;
         if (this.id === "lookView") {

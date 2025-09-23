@@ -3,6 +3,7 @@ import {assert} from "./assert";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
 import {setRenderOne} from "./Globals";
+import * as LAYER from "./LayerMasks";
 
 class QuadTreeMapTexture extends QuadTreeMap {
     constructor(scene, terrainNode, geoLocation, options = {}) {
@@ -131,53 +132,76 @@ class QuadTreeMapTexture extends QuadTreeMap {
     }
 
 
-    deactivateTile(x, y, z, instant = false) {
+    deactivateTile(x, y, z, layerMask = 0, instant = false) {
 
         const key = `${z}/${x}/${y}`;
         let tile = this.tileCache[key];
         if (tile === undefined) {
             return;
         }
-        if (tile.active) {
-            tile.active = false; // mark the tile as inactive
-
-            if (instant) {
-                // remove the tile immediately
-                this.scene.remove(tile.mesh);
-                if (tile.skirtMesh) {
-                    this.scene.remove(tile.skirtMesh);
-                }
-            }
-
-
-            //   removeDebugSphere(key)
+        
+        // If no specific layer mask provided, clear all layers (backward compatibility)
+        if (layerMask === 0) {
+            tile.tileLayers = 0;
+        } else {
+            // Clear only the specified layer bits using bitwise AND with NOT mask
+            tile.tileLayers = tile.tileLayers & (~layerMask);
         }
+
+        if (instant && tile.tileLayers === 0) {
+            // remove the tile immediately (if inactive in all views)
+            this.scene.remove(tile.mesh);
+            if (tile.skirtMesh) {
+                this.scene.remove(tile.skirtMesh);
+            }
+            tile.added = false;
+        }
+
+        //   removeDebugSphere(key)
     }
 
     // if tile exists, activate it, otherwise create it
-    activateTile(x, y, z) {
+    activateTile(x, y, z, layerMask = 0) {
         const key = `${z}/${x}/${y}`;
         let tile = this.tileCache[key];
 
+
         if (tile) {
-            if (tile.active) {
-                // tile is already activated, do nothing
-                return;
-            }
             // tile already exists, just activate it
             // maybe later rebuild a mesh if we unloaded it
 
-            // console.log("Activating tile", key, "already exists in cache");
-            this.scene.add(tile.mesh); // add the mesh to the scene
-            if (tile.skirtMesh) {
-                this.scene.add(tile.skirtMesh); // add the skirt mesh to the scene
+            if (tile.tileLayers === 0) {
+                // Tile was deactivated, re-add to scene
+                this.scene.add(tile.mesh); // add the mesh to the scene
+                if (tile.skirtMesh) {
+                    this.scene.add(tile.skirtMesh); // add the skirt mesh to the scene
+                }
+                tile.added = true; // mark the tile as added to the scene
             }
-            tile.added = true; // mark the tile as added to the scene
+            
+            // Combine the new layer mask with existing layers (don't overwrite)
+            if (layerMask > 0) {
+                tile.tileLayers = (tile.tileLayers || 0) | layerMask;
+            } else {
+                // Default case: activate for all layers
+                tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+            }
+
+
+            if (tile.tileLayers !== 8 && tile.tileLayers !== 16) {
+                console.log("ActivateTile: tile.layers =", tile.tileLayers)
+            }
+
+            // Update the actual layer mask on the tile
+            if (tile.added) {
+                this.setTileLayerMask(tile, tile.tileLayers);
+            }
+            
             this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
             setRenderOne(true);
+            return tile;
         } else {
             // create a new tile
-//        console.log("Creating new tile", key);
             tile = new QuadTreeTile(this, z, x, y);
 
             tile.buildGeometry();
@@ -206,14 +230,22 @@ class QuadTreeMapTexture extends QuadTreeMap {
             this.trackTileLoading(key, materialPromise);
             this.refreshDebugGeometry(tile);
             setRenderOne(true);
-
         }
 
-        // if (tile.z === 6)
-        //   DebugSphere(`Tile ${key}`, tile.mesh.position, tile.mesh.geometry.boundingSphere.radius, "#ff0000", GlobalScene,LAYER.MASK_HELPERS , true)
+        // Set the tile's layer mask to activate it - combine with existing layers
+        if (layerMask > 0) {
+            // OR the new layer mask with existing layers to support multiple views
+            tile.tileLayers = (tile.tileLayers || 0) | layerMask;
+        } else {
+            // Default case: activate for all layers
+            tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        }
+        
+        // Apply the layer mask to the tile's mesh objects
+        //if (tile.added) {
+            this.setTileLayerMask(tile, tile.tileLayers);
+        //}
 
-        tile.active = true;
-        assert(this.scene !== undefined, 'Scene is undefined in QuadTreeMapTexture.activateTile');
         return tile;
     }
 
