@@ -214,38 +214,11 @@ export class QuadTreeMap {
                 continue;
             }
 
-            // we check two types of tiles:
-            // 1. active tiles - these are tiles that are currently active in this view
-            // 2. tiles that are not active in this view, but have four active children
-
-            let checkType = "none";
-            if (tile.tileLayers & tileLayers) {
-                checkType = "active";
-            } else {
-                // check if the tile has four active children in this view
-                const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
-                const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
-                const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
-                const child4 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`];
-
-                if (child1 && child2 && child3 && child4 &&
-                    (child1.tileLayers & tileLayers) && (child2.tileLayers & tileLayers) &&
-                    (child3.tileLayers & tileLayers) && (child4.tileLayers & tileLayers)) {
-                    checkType = "inactive";
-                }
-            }
-
-            if (checkType === "none") {
-                continue; // skip tiles that are not active in this view and don't have active children
-            }
 
             // the world sphere of the tile is used to
             // 1) determine visibility
             // 2) calculate the size of the tile on screen (using the radius and distance)
             let worldSphere = tile.getWorldSphere();
-
-            let screenSize = 0;           // size on screen in pixels for this view
-            let largestVisible = false;   // true if the tile is visible in this view
 
             let thisViewScreenSize = 0;
             let thisViewVisible = false;
@@ -283,9 +256,6 @@ export class QuadTreeMap {
                     thisViewScreenSize = screenFraction * 1024; // DUMMY: assume 1024 is the screen size in pixels, this should be configurable
                     thisViewVisible = true;
 
-                    largestVisible = true;
-                    screenSize = thisViewScreenSize;
-
                     // if (this.constructor.name === 'QuadTreeMapTexture') {
                     //     DebugSphere("Subdivider", worldSphere.center.clone(), radius, "#ff0000", undefined, undefined, true)
                     // }
@@ -294,8 +264,7 @@ export class QuadTreeMap {
 
 
             if (tile.z < 3) {
-                screenSize = 10000000000; // force subdivision of first three
-                largestVisible = true; // force subdivision of first three
+                thisViewScreenSize = 10000000000; // force subdivision of first three
             }
 
 
@@ -314,7 +283,7 @@ export class QuadTreeMap {
                 this.activateTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1, tileLayers); // activate the child tile
                 this.activateTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1, tileLayers); // activate the child tile
 
-                // Only deactivate parent if all children are loaded to prevent gaps in coverage
+                // Only immediately deactivate parent if all children are loaded, to prevent gaps in coverage
                 if (this.constructor.name === 'QuadTreeMapTexture') {
 
                     const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
@@ -350,7 +319,6 @@ export class QuadTreeMap {
                     (child1.tileLayers & tileLayers) && (child2.tileLayers & tileLayers) &&
                     (child3.tileLayers & tileLayers) && (child4.tileLayers & tileLayers)) {
 
-                    //    console.log("Merging tile", key, "screenSize:", screenSize, "subdivideSize:", subdivideSize, "fov:", fov, "distance:", distance);
 
                     // merge the children into this tile
                     this.activateTile(tile.x, tile.y, tile.z, tileLayers); // activate this tile
