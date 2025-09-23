@@ -205,15 +205,15 @@ class QuadTreeMapTexture extends QuadTreeMap {
         tile.buildMesh();
 
         // Set the tile's layer mask BEFORE applying material to ensure it's available in addAfterLoaded()
-        console.log(`activateTile: ${key} - layerMask=${layerMask}, existing tileLayers=${tile.tileLayers}`);
+//        console.log(`activateTile: ${key} - layerMask=${layerMask}, existing tileLayers=${tile.tileLayers}`);
         if (layerMask > 0) {
             // OR the new layer mask with existing layers to support multiple views
             tile.tileLayers = (tile.tileLayers || 0) | layerMask;
-            console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via layerMask`);
+     //       console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via layerMask`);
         } else {
             // Default case: activate for all layers
             tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
-            console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via default`);
+     //       console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via default`);
         }
 
         // Apply the layer mask to the tile's mesh objects immediately

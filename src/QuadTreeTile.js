@@ -1971,7 +1971,7 @@ export class QuadTreeTile {
     }
 
     addAfterLoaded() {
-        console.log(`addAfterLoaded: ${this.key()} - BEFORE: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
+//        console.log(`addAfterLoaded: ${this.key()} - BEFORE: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
         
         this.loaded = true; // mark the tile as loaded
 
@@ -1981,25 +1981,25 @@ export class QuadTreeTile {
         }
         this.added = true; // mark the tile as added to the scene
         
-        console.log(`addAfterLoaded: ${this.key()} - AFTER scene.add: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
+//        console.log(`addAfterLoaded: ${this.key()} - AFTER scene.add: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
         
         // Apply current layer mask (use tileLayers which may have been combined from multiple views)
         if (this.tileLayers > 0) {
             this.map.setTileLayerMask(this, this.tileLayers);
         }
         
-        console.log(`addAfterLoaded: ${this.key()} - FINAL: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
+//        console.log(`addAfterLoaded: ${this.key()} - FINAL: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
     }
 
     buildMesh() {
         this.mesh = new Mesh(this.geometry, tileMaterial)
-        console.log(`buildMesh: ${this.key()} - mesh created with layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask})`);
+//        console.log(`buildMesh: ${this.key()} - mesh created with layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask})`);
         
         // Build and create skirt mesh
         this.buildSkirtGeometry();
         // Create skirt mesh with the same material as the main tile initially
         this.skirtMesh = new Mesh(this.skirtGeometry, tileMaterial);
-        console.log(`buildMesh: ${this.key()} - skirtMesh created with layers.mask=${this.skirtMesh.layers.mask.toString(2)} (${this.skirtMesh.layers.mask})`);
+//        console.log(`buildMesh: ${this.key()} - skirtMesh created with layers.mask=${this.skirtMesh.layers.mask.toString(2)} (${this.skirtMesh.layers.mask})`);
     }
 
     // Update skirt material to match the main tile material
