@@ -1,4 +1,9 @@
 // Support functions for the custom sitches and mods
+// 
+// GUI Mirroring Functionality:
+// - mirrorGUIFolder(sourceFolderName, menuTitle, x, y): Mirror any GUI menu to a standalone draggable window
+// - setupFlowOrbsMirrorExample(): Example that mirrors Flow Orbs menu (or effects menu as fallback)
+// - showMirrorMenuDemo(): Interactive demo accessible from Help menu
 
 import {
     FileManager,
@@ -120,6 +125,8 @@ export class CCustomManager {
             }
         }
 
+        // Add GUI mirroring functionality to help menu
+        guiMenus.help.add(this, "showMirrorMenuDemo").name("Mirror Menu Demo").tooltip("Demonstrates how to mirror any GUI menu to create a standalone floating menu");
 
         // TODO - Multiple events passed to EventManager.addEventListener
 
@@ -325,9 +332,229 @@ export class CCustomManager {
             }
         }, 1000);
 
+        // Example of creating a standalone pop-up menu
+        // This creates a draggable menu that behaves like the individual menus from the menu bar
+        // but is not attached to the menu bar itself
+        this.setupStandaloneMenuExample();
+
+        // Example of mirroring the Flow Orbs menu (or effects menu if no Flow Orbs exist)
+        this.setupFlowOrbsMirrorExample();
+
     }
 
+    setupStandaloneMenuExample() {
+        // Create a standalone pop-up menu at position (300, 150)
+        const standaloneMenu = Globals.menuBar.createStandaloneMenu("Example Popup", 300, 150);
+        
+        // Add some example controls to the menu
+        const exampleObject = {
+            message: "Hello World!",
+            value: 42,
+            enabled: true,
+            color: "#ff0000",
+            showMenu: () => {
+                console.log("Standalone menu button clicked!");
+                alert("This is a standalone pop-up menu!\n\nYou can:\n- Drag it around by the title bar\n- Click anywhere on it to bring it to front\n- Add any lil-gui controls to it");
+            },
+            closeMenu: () => {
+                standaloneMenu.destroy();
+            }
+        };
+        
+        // Add various controls to demonstrate functionality
+        standaloneMenu.add(exampleObject, "message").name("Text Message");
+        standaloneMenu.add(exampleObject, "value", 0, 100).name("Numeric Value");
+        standaloneMenu.add(exampleObject, "enabled").name("Toggle Option");
+        standaloneMenu.addColor(exampleObject, "color").name("Color Picker");
+        
+        // Add a folder to show nested structure works
+        const subFolder = standaloneMenu.addFolder("Sub Menu");
+        subFolder.add(exampleObject, "showMenu").name("Show Info");
+        subFolder.add(exampleObject, "closeMenu").name("Close This Menu");
+        
+        // Open the menu by default to show it
+        standaloneMenu.open();
+        subFolder.open();
+        
+        // Store reference for potential cleanup
+        this.exampleStandaloneMenu = standaloneMenu;
+    }
 
+    /**
+     * Mirror a GUI folder to create a standalone menu with all the same functions
+     * @param {string} sourceFolderName - The name of the source folder in guiMenus to mirror
+     * @param {string} menuTitle - The title for the new standalone menu
+     * @param {number} x - X position for the standalone menu
+     * @param {number} y - Y position for the standalone menu
+     * @returns {GUI} The created standalone menu
+     */
+    mirrorGUIFolder(sourceFolderName, menuTitle, x = 200, y = 200) {
+        // Check if the source folder exists
+        if (!guiMenus[sourceFolderName]) {
+            console.error(`Source folder '${sourceFolderName}' not found in guiMenus`);
+            return null;
+        }
+
+        const sourceFolder = guiMenus[sourceFolderName];
+        
+        // Create the standalone menu
+        const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, x, y);
+        
+        // Recursively mirror all controls and folders
+        this.mirrorGUIControls(sourceFolder, standaloneMenu);
+        
+        // Open the menu by default
+        standaloneMenu.open();
+        
+        console.log(`Mirrored GUI folder '${sourceFolderName}' to standalone menu '${menuTitle}'`);
+        return standaloneMenu;
+    }
+
+    /**
+     * Recursively mirror GUI controls from source to target
+     * @param {GUI} source - Source GUI folder
+     * @param {GUI} target - Target GUI folder
+     */
+    mirrorGUIControls(source, target) {
+        // Mirror all controllers
+        source.controllers.forEach(controller => {
+            try {
+                // Get the controller properties
+                const object = controller.object;
+                const property = controller.property;
+                const name = controller._name;
+                
+                // Create the mirrored controller based on type
+                let mirroredController;
+                
+                if (controller.constructor.name === 'ColorController') {
+                    mirroredController = target.addColor(object, property);
+                } else if (controller.constructor.name === 'OptionController') {
+                    // For dropdown/select controllers
+                    mirroredController = target.add(object, property, controller._values);
+                } else if (controller.constructor.name === 'NumberController') {
+                    // For numeric controllers with min/max
+                    if (controller._min !== undefined && controller._max !== undefined) {
+                        mirroredController = target.add(object, property, controller._min, controller._max, controller._step);
+                    } else {
+                        mirroredController = target.add(object, property);
+                    }
+                } else {
+                    // For boolean and other basic controllers
+                    mirroredController = target.add(object, property);
+                }
+                
+                // Copy controller properties
+                if (mirroredController) {
+                    mirroredController.name(name);
+                    
+                    // Copy tooltip if it exists
+                    if (controller._tooltip) {
+                        mirroredController.tooltip(controller._tooltip);
+                    }
+                    
+                    // Copy listen state
+                    if (controller._listening) {
+                        mirroredController.listen();
+                    }
+                    
+                    // Copy elastic properties for numeric controllers
+                    if (controller._elastic && mirroredController.elastic) {
+                        mirroredController.elastic(controller._elastic.max, controller._elastic.maxMax, controller._elastic.allowNegative);
+                    }
+                    
+                    // Copy onChange handler by referencing the original controller's onChange
+                    if (controller._onChange) {
+                        mirroredController.onChange(controller._onChange);
+                    }
+                }
+            } catch (error) {
+                console.warn(`Failed to mirror controller '${controller._name}':`, error);
+            }
+        });
+        
+        // Mirror all folders recursively
+        source.folders.forEach(folder => {
+            const folderName = folder._title;
+            const mirroredFolder = target.addFolder(folderName);
+            
+            // Recursively mirror the folder contents
+            this.mirrorGUIControls(folder, mirroredFolder);
+            
+            // Copy folder open/closed state
+            if (!folder._closed) {
+                mirroredFolder.open();
+            }
+        });
+    }
+
+    /**
+     * Example of mirroring the Flow Orbs menu
+     */
+    setupFlowOrbsMirrorExample() {
+        // First check if there are any Flow Orbs nodes in the scene
+        let flowOrbsNode = null;
+        NodeMan.iterate((id, node) => {
+            if (node.constructor.name === 'CNodeFlowOrbs' || node.constructor.name === 'CNodeSpriteGroup') {
+                if (node.gui && node.gui._title === 'Flow Orbs') {
+                    flowOrbsNode = node;
+                    return false; // Break iteration
+                }
+            }
+        });
+
+        if (!flowOrbsNode) {
+            console.log("No Flow Orbs node found - creating example mirror of effects menu instead");
+            // Mirror the effects menu as an example
+            this.mirroredFlowOrbsMenu = this.mirrorGUIFolder("effects", "Mirrored Effects", 400, 200);
+            return;
+        }
+
+        // Create a standalone menu that mirrors the Flow Orbs controls
+        const standaloneMenu = Globals.menuBar.createStandaloneMenu("Mirrored Flow Orbs", 400, 200);
+        
+        // Mirror the Flow Orbs GUI controls
+        this.mirrorGUIControls(flowOrbsNode.gui, standaloneMenu);
+        
+        // Open the menu by default
+        standaloneMenu.open();
+        
+        // Store reference for potential cleanup
+        this.mirroredFlowOrbsMenu = standaloneMenu;
+        
+        console.log("Created mirrored Flow Orbs menu");
+    }
+
+    /**
+     * Demo function to show how to mirror different GUI menus
+     */
+    showMirrorMenuDemo() {
+        // Create a modal dialog showing available menus and how to mirror them
+        const availableMenus = Object.keys(guiMenus);
+        
+        let message = "GUI Menu Mirroring Demo\n\n";
+        message += "Available menus to mirror:\n";
+        availableMenus.forEach(menuName => {
+            message += `• ${menuName}\n`;
+        });
+        
+        message += "\nExample usage:\n";
+        message += "// Mirror the view menu to a standalone popup\n";
+        message += "this.mirrorGUIFolder('view', 'My View Controls', 300, 300);\n\n";
+        message += "// Mirror the objects menu\n";
+        message += "this.mirrorGUIFolder('objects', 'Object Controls', 500, 100);\n\n";
+        message += "The mirrored menu will have all the same controls and functionality as the original,\n";
+        message += "but in a draggable standalone window.\n\n";
+        message += "Would you like to create a demo mirror of the 'view' menu?";
+        
+        if (confirm(message)) {
+            // Create a demo mirror of the view menu
+            const demoMenu = this.mirrorGUIFolder("view", "Demo View Mirror", 500, 300);
+            if (demoMenu) {
+                alert("Demo mirror created! You can drag it around and use all the controls.\nCheck the console for more details.");
+            }
+        }
+    }
 
     updateViewFromPreset() {
         // update the views from the current view preset

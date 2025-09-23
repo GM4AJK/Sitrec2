@@ -366,27 +366,32 @@ export class CGuiMenuBar {
 
     // Bring a menu to the front by updating its z-index
     bringToFront(gui) {
+        if (gui._standaloneContainer) {
+            // This is a standalone menu
+            gui._bringToFront();
+        } else {
+            // This is a regular menu bar item - use original logic
+            const div = this.divs.find((div) => div === gui.domElement.parentElement);
 
-        const div = this.divs.find((div) => div === gui.domElement.parentElement);
-
-        let maxZIndex = this.baseZIndex;
-        // iterate over the slots. If on has a higher zIndex, set it as the maximum
-        for (const otherDiv of this.divs) {
-            if (div !== otherDiv) {
-                const zIndex = parseInt(otherDiv.style.zIndex);
-                if (zIndex > maxZIndex) {
-                    maxZIndex = zIndex;
+            let maxZIndex = this.baseZIndex;
+            // iterate over the slots. If one has a higher zIndex, set it as the maximum
+            for (const otherDiv of this.divs) {
+                if (div !== otherDiv) {
+                    const zIndex = parseInt(otherDiv.style.zIndex);
+                    if (zIndex > maxZIndex) {
+                        maxZIndex = zIndex;
+                    }
                 }
             }
-        }
 
-        // just use one higher than the max
-        maxZIndex++;
+            // just use one higher than the max
+            maxZIndex++;
 
-        if (div) {
-            div.style.zIndex = maxZIndex;
-            gui.$children.style.zIndex = maxZIndex;
-            gui.$children.style.position = 'relative'; // Ensure positioning context
+            if (div) {
+                div.style.zIndex = maxZIndex;
+                gui.$children.style.zIndex = maxZIndex;
+                gui.$children.style.position = 'relative'; // Ensure positioning context
+            }
         }
     }
 
@@ -560,7 +565,7 @@ export class CGuiMenuBar {
 
         // Add click listener to the entire GUI to bring it to front when any part is clicked
         newGUI.domElement.addEventListener("mousedown", (event) => {
-            // Only bring to front if this is a detached menu (not docked or currently being dragged)
+            // Only bring to front if this is a detached menu (not docked or currently being ed)
             // console.log(`GUI content mousedown on menu "${newGUI.$title.innerHTML}", mode: ${newGUI.mode}`);
             if (newGUI.mode === "DETACHED") {
                 this.bringToFront(newGUI);
@@ -823,6 +828,119 @@ export class CGuiMenuBar {
             }
         }
 
+    }
+
+    // Create a standalone pop-up menu that can be dragged around
+    // Returns a GUI object that behaves like the individual menus from the menu bar
+    // but is not attached to the menu bar itself
+    createStandaloneMenu(title, x = 100, y = 100) {
+        // Create a container div for the standalone menu
+        const containerDiv = document.createElement("div");
+        containerDiv.style.position = "absolute";
+        containerDiv.style.left = x + "px";
+        containerDiv.style.top = y + "px";
+        containerDiv.style.zIndex = this.baseZIndex + 1000; // Higher than menu bar items
+        containerDiv.style.width = "240px"; // Default lil-gui width
+        containerDiv.style.height = "auto";
+        
+        // Add to the menu bar container so it's managed by the same system
+        this.menuBar.appendChild(containerDiv);
+        
+        // Create the GUI with the container
+        const gui = new GUI({container: containerDiv, autoPlace: false});
+        gui.$title.innerHTML = title;
+        
+        // Set up the standalone menu properties
+        gui.mode = "DETACHED";
+        gui.lockOpenClose = false;
+        gui.originalLeft = x;
+        gui.originalTop = y;
+        
+        // Apply detached styling
+        this.applyModeStyles(gui);
+        
+        // Prevent double clicks
+        preventDoubleClicks(gui);
+        
+        // Add drag functionality to the title
+        gui.$title.addEventListener("mousedown", (event) => {
+            this.bringToFront(gui);
+            
+            let mouseX = event.clientX;
+            let mouseY = event.clientY;
+            
+            gui.mode = "DRAGGING";
+            this.applyModeStyles(gui);
+            
+            const boundHandleMouseMove = (event) => {
+                // Ensure it stays open while dragging
+                if (gui._closed) {
+                    gui.lockOpenClose = false;
+                    gui.open();
+                }
+                gui.lockOpenClose = true;
+                
+                containerDiv.style.left = (parseInt(containerDiv.style.left) + event.clientX - mouseX) + "px";
+                containerDiv.style.top = (parseInt(containerDiv.style.top) + event.clientY - mouseY) + "px";
+                mouseX = event.clientX;
+                mouseY = event.clientY;
+                
+                event.preventDefault();
+            };
+            
+            const boundHandleMouseUp = (event) => {
+                document.removeEventListener("mousemove", boundHandleMouseMove);
+                document.removeEventListener("mouseup", boundHandleMouseUp);
+                
+                gui.mode = "DETACHED";
+                this.applyModeStyles(gui);
+                gui.lockOpenClose = false;
+                
+                event.preventDefault();
+            };
+            
+            document.addEventListener("mousemove", boundHandleMouseMove);
+            document.addEventListener("mouseup", boundHandleMouseUp);
+            
+            event.preventDefault();
+        });
+        
+        // Add click listener to bring to front when any part is clicked
+        gui.domElement.addEventListener("mousedown", (event) => {
+            this.bringToFront(gui);
+        });
+        
+        // Store method to bring this standalone menu to front
+        gui._bringToFront = () => {
+            let maxZIndex = this.baseZIndex + 1000;
+            
+            // Check all standalone menus and regular menu bar items
+            const allContainers = Array.from(this.menuBar.children);
+            for (const container of allContainers) {
+                if (container !== containerDiv) {
+                    const zIndex = parseInt(container.style.zIndex);
+                    if (zIndex > maxZIndex) {
+                        maxZIndex = zIndex;
+                    }
+                }
+            }
+            
+            containerDiv.style.zIndex = maxZIndex + 1;
+        };
+        
+        // Store reference to container for cleanup
+        gui._standaloneContainer = containerDiv;
+        
+        // Add destroy method override to clean up the container
+        const originalDestroy = gui.destroy.bind(gui);
+        gui.destroy = (all = true) => {
+            if (containerDiv.parentElement) {
+                containerDiv.parentElement.removeChild(containerDiv);
+            }
+            originalDestroy(all);
+        };
+        
+        return gui;
     }
 
 
