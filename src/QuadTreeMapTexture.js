@@ -147,6 +147,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // Clear only the specified layer bits using bitwise AND with NOT mask
             tile.tileLayers = tile.tileLayers & (~layerMask);
         }
+        this.setTileLayerMask(tile, tile.tileLayers);
 
         if (instant && tile.tileLayers === 0) {
             // remove the tile immediately (if inactive in all views)
@@ -187,64 +188,60 @@ class QuadTreeMapTexture extends QuadTreeMap {
                 tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
             }
 
-
-            if (tile.tileLayers !== 8 && tile.tileLayers !== 16) {
-                console.log("ActivateTile: tile.layers =", tile.tileLayers)
-            }
-
             // Update the actual layer mask on the tile
-            if (tile.added) {
+            if (tile.mesh) {
                 this.setTileLayerMask(tile, tile.tileLayers);
             }
             
             this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
             setRenderOne(true);
             return tile;
-        } else {
-            // create a new tile
-            tile = new QuadTreeTile(this, z, x, y);
-
-            tile.buildGeometry();
-            tile.buildMesh();
-
-            // calculate the LLA position of the center of the tile
-            const lat1 = this.options.mapProjection.getNorthLatitude(tile.y, tile.z);
-            const lon1 = this.options.mapProjection.getLeftLongitude(tile.x, tile.z);
-            const lat2 = this.options.mapProjection.getNorthLatitude(tile.y + 1, tile.z);
-            const lon2 = this.options.mapProjection.getLeftLongitude(tile.x + 1, tile.z);
-            const lat = (lat1 + lat2) / 2;
-            const lon = (lon1 + lon2) / 2;
-            const center = LLAToEUS(lat, lon, 0);
-
-            tile.setPosition(center); // ???
-            tile.recalculateCurve(wgs84.RADIUS)
-            this.tileCache[key] = tile;
-
-            // Track the async texture loading
-            const materialPromise = tile.applyMaterial().catch(error => {
-                console.error(`Failed to load texture for tile ${key}:`, error);
-                // Tile will remain with wireframe material if texture loading fails
-            });
-            
-            // Track this tile's loading promise
-            this.trackTileLoading(key, materialPromise);
-            this.refreshDebugGeometry(tile);
-            setRenderOne(true);
         }
 
-        // Set the tile's layer mask to activate it - combine with existing layers
+        // create a new tile
+        tile = new QuadTreeTile(this, z, x, y);
+
+        tile.buildGeometry();
+        tile.buildMesh();
+
+        // Set the tile's layer mask BEFORE applying material to ensure it's available in addAfterLoaded()
+        console.log(`activateTile: ${key} - layerMask=${layerMask}, existing tileLayers=${tile.tileLayers}`);
         if (layerMask > 0) {
             // OR the new layer mask with existing layers to support multiple views
             tile.tileLayers = (tile.tileLayers || 0) | layerMask;
+            console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via layerMask`);
         } else {
             // Default case: activate for all layers
             tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+            console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via default`);
         }
-        
-        // Apply the layer mask to the tile's mesh objects
-        //if (tile.added) {
-            this.setTileLayerMask(tile, tile.tileLayers);
-        //}
+
+        // Apply the layer mask to the tile's mesh objects immediately
+        this.setTileLayerMask(tile, tile.tileLayers);
+
+        // calculate the LLA position of the center of the tile
+        const lat1 = this.options.mapProjection.getNorthLatitude(tile.y, tile.z);
+        const lon1 = this.options.mapProjection.getLeftLongitude(tile.x, tile.z);
+        const lat2 = this.options.mapProjection.getNorthLatitude(tile.y + 1, tile.z);
+        const lon2 = this.options.mapProjection.getLeftLongitude(tile.x + 1, tile.z);
+        const lat = (lat1 + lat2) / 2;
+        const lon = (lon1 + lon2) / 2;
+        const center = LLAToEUS(lat, lon, 0);
+
+        tile.setPosition(center); // ???
+        tile.recalculateCurve(wgs84.RADIUS)
+        this.tileCache[key] = tile;
+
+        // Track the async texture loading
+        const materialPromise = tile.applyMaterial().catch(error => {
+            console.error(`Failed to load texture for tile ${key}:`, error);
+            // Tile will remain with wireframe material if texture loading fails
+        });
+
+        // Track this tile's loading promise
+        this.trackTileLoading(key, materialPromise);
+        this.refreshDebugGeometry(tile);
+        setRenderOne(true);
 
         return tile;
     }

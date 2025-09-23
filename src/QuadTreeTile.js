@@ -46,7 +46,25 @@ export class QuadTreeTile {
         this.isLoading = false // Track if this tile is currently loading textures
         this.isLoadingElevation = false // Track if this tile is currently loading elevation data
         this.highestAltitude = 0;
+        
+        // Private property to store tileLayers value
+        this._tileLayers = undefined;
     }
+
+    // Getter and setter for tileLayers to track changes
+    // get tileLayers() {
+    //     return this._tileLayers;
+    // }
+    //
+    // set tileLayers(value) {
+    //     const oldValue = this._tileLayers;
+    //     this._tileLayers = value;
+    //
+    //     // Log the change with stack trace for debugging
+    //     console.log(`TILE LAYERS CHANGED: ${this.key()} - oldValue=${oldValue ? oldValue.toString(2) : 'undefined'} (${oldValue}) -> newValue=${value ? value.toString(2) : 'undefined'} (${value})`);
+    //     console.trace('Stack trace for tileLayers change:');
+    //
+    // }
 
 
     getWorldSphere() {
@@ -596,11 +614,11 @@ export class QuadTreeTile {
         }
         
         // Layer mask indicators (positioned 25% down from the top of the tile)
-        if (this.intendedLayerMask !== undefined && this.intendedLayerMask > 0) {
+        if (this.tileLayers !== undefined && this.tileLayers > 0) {
             const layerIndicatorY = vertexNW.y + (vertexSW.y - vertexNW.y) * 0.25; // 25% down from top
             
             // Magenta square for MASK_MAIN (8)
-            if (this.intendedLayerMask & 8) { // MASK_MAIN = 8
+            if (this.tileLayers & 8) { // MASK_MAIN = 8
                 const mainX = vertexNW.x + (vertexNE.x - vertexNW.x) * offsetFactor;
                 const mainZ = vertexNW.z;
                 
@@ -614,7 +632,7 @@ export class QuadTreeTile {
             }
             
             // Yellow square for MASK_LOOK (16)
-            if (this.intendedLayerMask & 16) { // MASK_LOOK = 16
+            if (this.tileLayers & 16) { // MASK_LOOK = 16
                 const lookX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.12); // Offset to the right
                 const lookZ = vertexNW.z;
                 
@@ -628,7 +646,7 @@ export class QuadTreeTile {
             }
             
             // Green square for MASK_WORLD (1)
-            if (this.intendedLayerMask & 1) { // MASK_WORLD = 1
+            if (this.tileLayers & 1) { // MASK_WORLD = 1
                 const worldX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.24); // Further to the right
                 const worldZ = vertexNW.z;
                 
@@ -1726,7 +1744,6 @@ export class QuadTreeTile {
             oldMaterial.dispose();
         }
         
-        // Apply the new material
         this.mesh.material = material;
         this.mesh.material.needsUpdate = true;
         this.updateSkirtMaterial(); // Update skirt to use the same material
@@ -1885,18 +1902,7 @@ export class QuadTreeTile {
 
 
             this.updateDebugMaterial();
-            this.loaded = true; // mark the tile as loaded
-
-            this.map.scene.add(this.mesh); // add the mesh to the scene
-            if (this.skirtMesh) {
-                this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
-            }
-            this.added = true; // mark the tile as added to the scene
-            
-            // Apply current layer mask (use tileLayers which may have been combined from multiple views)
-            if (this.tileLayers > 0) {
-                this.map.setTileLayerMask(this, this.tileLayers);
-            }
+            this.addAfterLoaded();
             
             // Return early for debug materials
             return Promise.resolve(this.mesh.material);
@@ -1905,18 +1911,7 @@ export class QuadTreeTile {
         // Handle wireframe material
         if (sourceDef.name === "Wireframe") {
             this.updateWireframeMaterial();
-            this.loaded = true; // mark the tile as loaded
-
-            this.map.scene.add(this.mesh); // add the mesh to the scene
-            if (this.skirtMesh) {
-                this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
-            }
-            this.added = true; // mark the tile as added to the scene
-            
-            // Apply current layer mask (use tileLayers which may have been combined from multiple views)
-            if (this.tileLayers > 0) {
-                this.map.setTileLayerMask(this, this.tileLayers);
-            }
+            this.addAfterLoaded();
             
             // Return early for wireframe materials
             return Promise.resolve(this.mesh.material);
@@ -1927,18 +1922,8 @@ export class QuadTreeTile {
             // For elevation color, we need to wait for elevation data and then generate the texture
             // For now, use the debug info texture showing tile coordinates
             this.updateDebugMaterial().then((material) => {
-                this.loaded = true;
-                this.map.scene.add(this.mesh);
-                if (this.skirtMesh) {
-                    this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
-                }
-                this.added = true;
-                
-                // Apply intended layer mask if it was set
-                if (this.intendedLayerMask > 0) {
-                    this.map.setTileLayerMask(this, this.intendedLayerMask);
-                }
-                
+                this.addAfterLoaded();
+
                 // Check if elevation data is already available and apply elevation color texture
                 this.checkAndApplyElevationColorTexture();
             });
@@ -1964,18 +1949,7 @@ export class QuadTreeTile {
                         this.updateDebugGeometry();
                         return resolve(material);
                     }
-                    this.map.scene.add(this.mesh); // add the mesh to the scene
-                    if (this.skirtMesh) {
-                        this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
-                    }
-                    this.added = true; // mark the tile as added to the scene
-                    
-                    // Apply intended layer mask if it was set
-                    if (this.intendedLayerMask > 0) {
-                        this.map.setTileLayerMask(this, this.intendedLayerMask);
-                    }
-                    
-                    this.loaded = true;
+                    this.addAfterLoaded();
                     this.isLoading = false; // Clear loading state
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
                     resolve(material)
@@ -1996,13 +1970,36 @@ export class QuadTreeTile {
         });
     }
 
+    addAfterLoaded() {
+        console.log(`addAfterLoaded: ${this.key()} - BEFORE: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
+        
+        this.loaded = true; // mark the tile as loaded
+
+        this.map.scene.add(this.mesh); // add the mesh to the scene
+        if (this.skirtMesh) {
+            this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
+        }
+        this.added = true; // mark the tile as added to the scene
+        
+        console.log(`addAfterLoaded: ${this.key()} - AFTER scene.add: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
+        
+        // Apply current layer mask (use tileLayers which may have been combined from multiple views)
+        if (this.tileLayers > 0) {
+            this.map.setTileLayerMask(this, this.tileLayers);
+        }
+        
+        console.log(`addAfterLoaded: ${this.key()} - FINAL: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
+    }
+
     buildMesh() {
         this.mesh = new Mesh(this.geometry, tileMaterial)
+        console.log(`buildMesh: ${this.key()} - mesh created with layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask})`);
         
         // Build and create skirt mesh
         this.buildSkirtGeometry();
         // Create skirt mesh with the same material as the main tile initially
         this.skirtMesh = new Mesh(this.skirtGeometry, tileMaterial);
+        console.log(`buildMesh: ${this.key()} - skirtMesh created with layers.mask=${this.skirtMesh.layers.mask.toString(2)} (${this.skirtMesh.layers.mask})`);
     }
 
     // Update skirt material to match the main tile material
@@ -2019,6 +2016,7 @@ export class QuadTreeTile {
                     this.skirtMesh.material.dispose();
                 }
                 
+                // Preserve the layer mask when assigning new material to skirt
                 this.skirtMesh.material = skirtMaterial;
                 this.skirtMesh.material.needsUpdate = true;
             }
