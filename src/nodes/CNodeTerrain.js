@@ -1,5 +1,5 @@
 import {CNode} from "./CNode";
-import {pointAbove, propagateLayerMaskObject} from "../threeExt";
+import {pointAbove} from "../threeExt";
 import {cos, radians} from "../utils";
 import {Globals, NodeMan, Sit} from "../Globals";
 import {EUSToLLA, RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
@@ -377,7 +377,7 @@ export class CNodeTerrain extends CNode {
                         o.recalculateCascade()
                     })
 //                    console.log("CNodeTerrain: id = "+id+" map loaded");
-                    propagateLayerMaskObject(this.group)
+             //      propagateLayerMaskObject(this.group)
 
                     // call the terrainLoadedCallback on any node that has it
                     NodeMan.iterate((id, n) => {
@@ -542,7 +542,7 @@ export class CNodeTerrain extends CNode {
         assert(this.maps[this.UI.mapType].map !== undefined, "CNodeTerrain: map is undefined")
         this.maps[this.UI.mapType].map.recalculateCurveMap(this.radius, true)
 
-        propagateLayerMaskObject(this.group)
+       //  propagateLayerMaskObject(this.group)
 
     }
 
