@@ -81,11 +81,6 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             // Default case: activate for all layers
             tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         }
-        
-        // Set layer mask if provided (elevation tiles may not have meshes, but we store the mask)
-        if (tile.tileLayers > 0) {
-            this.setTileLayerMask(tile, tile.tileLayers);
-        }
 
         this.refreshDebugGeometry(tile);
 
