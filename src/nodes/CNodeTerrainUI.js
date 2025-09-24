@@ -262,7 +262,7 @@ export class CNodeTerrainUI extends CNode {
 
         this.disableDynamicSubdivision = false;
         if (isLocal) {
-            this.gui.add(this, "disableDynamicSubdivision").name("Disable Dynamic Subdivision")
+            this.disableDynamicSubdivisionController = this.gui.add(this, "disableDynamicSubdivision").name("Disable Dynamic Subdivision")
                 .tooltip("Disable dynamic subdivision of terrain tiles. Freezes the terrain at the current level of detail. Useful for debugging.")
         }
 
@@ -274,7 +274,8 @@ export class CNodeTerrainUI extends CNode {
         // this.addSimpleSerial("elevationType")
 
         this.dynamic = v.dynamic ?? false;
-        this.gui.add(this, "dynamic").name("Dynamic Subdivision").onChange(v => {
+        this.dynamicController = this.gui.add(this, "dynamic").name("Dynamic Subdivision").onChange(v => {
+            this.updateUIVisibility();
             this.terrainNode.reloadMap(this.mapType)
         });
 
@@ -285,7 +286,57 @@ export class CNodeTerrainUI extends CNode {
                 UINode: this});
         })
 
+        // Set initial UI visibility
+        this.updateUIVisibility();
 
+    }
+
+    updateUIVisibility() {
+        // When Dynamic Subdivision is true, hide lat, lon, zoom, nTiles and zoom to track
+        // When Dynamic Subdivision is false, hide Disable Dynamic Subdivision
+        if (this.dynamic) {
+            // Hide lat, lon, zoom, nTiles and zoom to track controllers
+            if (this.latController) {
+                this.latController.domElement.style.display = 'none';
+            }
+            if (this.lonController) {
+                this.lonController.domElement.style.display = 'none';
+            }
+            if (this.zoomController) {
+                this.zoomController.domElement.style.display = 'none';
+            }
+            if (this.nTilesController) {
+                this.nTilesController.domElement.style.display = 'none';
+            }
+            if (this.zoomToTrackSwitchObject && this.zoomToTrackSwitchObject.controller) {
+                this.zoomToTrackSwitchObject.controller.domElement.style.display = 'none';
+            }
+            // Show Disable Dynamic Subdivision controller (if it exists)
+            if (this.disableDynamicSubdivisionController) {
+                this.disableDynamicSubdivisionController.domElement.style.display = '';
+            }
+        } else {
+            // Show lat, lon, zoom, nTiles and zoom to track controllers
+            if (this.latController) {
+                this.latController.domElement.style.display = '';
+            }
+            if (this.lonController) {
+                this.lonController.domElement.style.display = '';
+            }
+            if (this.zoomController) {
+                this.zoomController.domElement.style.display = '';
+            }
+            if (this.nTilesController) {
+                this.nTilesController.domElement.style.display = '';
+            }
+            if (this.zoomToTrackSwitchObject && this.zoomToTrackSwitchObject.controller) {
+                this.zoomToTrackSwitchObject.controller.domElement.style.display = '';
+            }
+            // Hide Disable Dynamic Subdivision controller (if it exists)
+            if (this.disableDynamicSubdivisionController) {
+                this.disableDynamicSubdivisionController.domElement.style.display = 'none';
+            }
+        }
     }
 
     getSourceDef() {
