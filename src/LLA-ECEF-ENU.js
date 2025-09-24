@@ -2,19 +2,20 @@
 // as well as some other useful related functions
 
 import {Matrix3, Vector3} from "three";
-import {cos, degrees, radians, sin} from "./utils";
+// Removed import of cos, degrees, radians, sin - using direct Math functions instead
 import {Sit} from "./Globals";
 import {assert} from "./assert.js";
-import {V3} from "./threeUtils";
 
+// Earth radius in kilometers (average)
+const earthRadiusKM = 6371;
 
 // This is the distance in KM between two lat/long locations
 // assumes a sphere of average radius
 export function haversineDistanceKM(lat1, lon1, lat2, lon2) {
-    var dLat = radians(lat2 - lat1);
-    var dLon = radians(lon2 - lon1);
-    var rLat1 = radians(lat1);
-    var rLat2 = radians(lat2);
+    var dLat = (lat2 - lat1) * Math.PI / 180;
+    var dLon = (lon2 - lon1) * Math.PI / 180;
+    var rLat1 = lat1 * Math.PI / 180;
+    var rLat2 = lat2 * Math.PI / 180;
     const sin_dLat = Math.sin(dLat / 2);
     const sin_dLon = Math.sin(dLon / 2);
     var a = sin_dLat * sin_dLat +
@@ -72,7 +73,7 @@ wgs84.CIRC = 2*Math.PI*wgs84.RADIUS
  * Convert GPS coordinates (degrees) to Cartesian coordinates (meters)
  */
 export function project(latitude, longitude, altitude) {
-    return RLLAToECEF(radians(latitude), radians(longitude), altitude);
+    return RLLAToECEF(latitude * Math.PI / 180, longitude * Math.PI / 180, altitude);
 }
 
 /*
@@ -81,8 +82,8 @@ export function project(latitude, longitude, altitude) {
 export function unproject(x, y, z) {
     var gps = ECEFToLLA(x, y, z);
 
-    gps[0] = degrees(gps[0]);
-    gps[1] = degrees(gps[1]);
+    gps[0] = gps[0] * 180 / Math.PI;
+    gps[1] = gps[1] * 180 / Math.PI;
 
     return gps;
 }
@@ -110,7 +111,8 @@ export function RLLAToECEF(latitude, longitude, altitude) {
     //Sine of latitude looks right here
     var Z = (ratio * N + altitude) * Math.sin(latitude);
 
-    return V3(X,Y,Z)
+    return new Vector3(X, Y, Z);
+
 }
 
 
@@ -188,7 +190,7 @@ export function ECEFToLLA_Sphere(X, Y, Z) {
 // with LL as degrees
 export function ECEFToLLAVD_Sphere(V) {
     var a = ECEFToLLA_Sphere(V.x,V.y,V.z);
-    return new Vector3(degrees(a[0]),degrees(a[1]),a[2])
+    return new Vector3(a[0] * 180 / Math.PI, a[1] * 180 / Math.PI, a[2])
 }
 
 export function EUSToLLA(eus) {
@@ -203,7 +205,7 @@ export function EUSToLLA(eus) {
 // with LL as degrees
 export function ECEFToLLAVD(V) {
     var a = ECEFToLLA(V.x,V.y,V.z);
-    return new Vector3(degrees(a[0]),degrees(a[1]),a[2])
+    return new Vector3(a[0] * 180 / Math.PI, a[1] * 180 / Math.PI, a[2])
 }
 
 // and with radians
@@ -214,7 +216,7 @@ export function ECEFToLLAV(V) {
 
 
 export function LLAToECEFVD(V) {
-    var a = RLLAToECEF(radians(V.x),radians(V.y),V.z);
+    var a = RLLAToECEF(V.x * Math.PI / 180, V.y * Math.PI / 180, V.z);
     return new Vector3(a[0],a[1],a[2])
 }
 
@@ -262,9 +264,9 @@ export function ECEF2ENU(pos,lat1, lon1, radius, justRotate=false) {
     // the origin in ECEF coordinates is at the surface with lat1, lon1
 
     var mECEF2ENU = new Matrix3().set(
-        -sin(lon1), cos(lon1), 0,
-        -sin(lat1) * cos(lon1), -sin(lat1) * sin(lon1), cos(lat1),
-        cos(lat1) * cos(lon1), cos(lat1) * sin(lon1), sin(lat1)
+        -Math.sin(lon1), Math.cos(lon1), 0,
+        -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
+        Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
     );
     var enu
     if (!justRotate) {
@@ -279,7 +281,7 @@ export function ECEF2ENU(pos,lat1, lon1, radius, justRotate=false) {
 
 export function ECEF2EUS(pos,lat1, lon1, radius, justRotate=false) {
     var enu = ECEF2ENU(pos,lat1, lon1, radius, justRotate)
-    return V3(enu.x, enu.z, -enu.y)
+    return new Vector3(enu.x, enu.z, -enu.y)
 }
 
 // This is a work in progress.
@@ -291,7 +293,7 @@ export function ECEF2EUS(pos,lat1, lon1, radius, justRotate=false) {
 //     );
 //     var mENU2ECEF = new Matrix3().getInverse(ECEF2ENU);
 //     var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0, radius)
-//     var enu = V3(eus.x, -eus.z, eus.y)
+//     var enu = new Vector3(eus.x, -eus.z, eus.y)
 //     var ecef = enu.applyMatrix3() // TODO!!!!!!!!
 //
 // }
@@ -299,8 +301,8 @@ export function ECEF2EUS(pos,lat1, lon1, radius, justRotate=false) {
 export function EUSToECEF(posEUS, radius) {
     assert(radius === undefined, "undexpected radius in EUSToECEF")
 
-    const lat1 = radians(Sit.lat)
-    const lon1 = radians(Sit.lon)
+    const lat1 = Sit.lat * Math.PI / 180
+    const lon1 = Sit.lon * Math.PI / 180
 
     var mECEF2ENU = new Matrix3().set(
         -Math.sin(lon1), Math.cos(lon1), 0,
@@ -401,7 +403,7 @@ export function LLAToEUSRadians(lat, lon, alt=0, radius) {
     const enu_z = _m20 * rel_x + _m21 * rel_y + _m22 * rel_z;
     
     // Convert ENU to EUS coordinate system and return
-    return V3(enu_x, enu_z, -enu_y);
+    return new Vector3(enu_x, enu_z, -enu_y);
 }
 
 // Convert LLA to Spherical EUS. Optional earth's radius parameter is deprecated, and should not be used.
