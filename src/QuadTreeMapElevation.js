@@ -49,14 +49,14 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         assert(z <= this.maxZoom, `activateTile: z (${z}) must be less than of equal to maxZoom (${this.maxZoom})`);
 
 //        console.log("NEW activateTile Elevation ", x, y, z);
-        const key = `${z}/${x}/${y}`;
-        let tile = this.tileCache[key];
+        let tile = this.getTile(x, y, z);
         if (tile) {
             // Tile already exists, just reactivate it
             this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
         } else {
             tile = new QuadTreeTile(this, z, x, y);
-            this.tileCache[key] = tile;
+            this.setTile(x, y, z, tile);
+            const key = `${z}/${x}/${y}`;
             tile.fetchElevationTile(this.controller.signal).then(tile => {
                 if (this.controller.signal.aborted) {
                     // flag that it's aborted, so we can filter it out later
@@ -88,8 +88,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
     deactivateTile(x, y, z, layerMask = 0) {
         // console.log("DUMMY deactivateTile Elevation ", x, y, z);
-        const key = `${z}/${x}/${y}`;
-        let tile = this.tileCache[key];
+        let tile = this.getTile(x, y, z);
         if (tile === undefined) {
             return;
         }
@@ -126,17 +125,98 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
 
     geo2TileFractionAndZoom(geoLocation, desiredZoom = null) {
+        // Use generic version for all projections for now
+        return this._geo2TileFractionAndZoomGeneric(geoLocation, desiredZoom);
+    }
 
+    // Unoptimized version using new array cache but old logic (for debugging)
+    geo2TileFractionAndZoomUnoptimized(geoLocation, desiredZoom = null) {
         const projection = this.options.mapProjection;
-
         // if a desired zoom level is specified, we can just use that
         if (desiredZoom !== null) {
-
             assert(desiredZoom <= this.maxZoom, `geo2TileFractionAndZoom: desiredZoom (${desiredZoom}) must be less than or equal to maxZoom (${this.maxZoom})`);
-
             // quick check to see if it matches the last tile we found
             // for lat/lon derived x, y, and desired zoom
             // this is for when we do bulk operations and we want to avoid finding the same tile again
+            if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === this.lastGeoTile.z)) {
+                let zoom = this.lastGeoTile.z;
+                const maxTile = Math.pow(2, zoom);
+                var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
+                var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
+                const xInt = Math.floor(x);
+                const yInt = Math.floor(y);
+                if (xInt === this.lastGeoTile.x && yInt === this.lastGeoTile.y) {
+                    // if the last tile is the same as the current tile, return it
+                    return {x, y, zoom};
+                }
+            }
+            this.lastGeoTile = null; // reset the last tile if it's not the same
+            const maxTile = Math.pow(2, desiredZoom);
+            var x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
+            var y = Math.abs(projection.lat2Tile(geoLocation[0], desiredZoom) % maxTile);
+            let xInt = Math.floor(x);
+            let yInt = Math.floor(y);
+            // if we have a tile cache, check if the tile is in the cache
+            const tile = this.getTile(xInt, yInt, desiredZoom);
+            if (tile !== undefined && tile.elevation && !tile.elevationLoadFailed) {
+                this.lastGeoTile = tile; // keep track of the last tile found
+                return {x, y, zoom: desiredZoom};
+            }
+            // not this one, so go up the tree with xInt, yInt
+            // until we find a tile that has elevation data
+            let zoom = desiredZoom - 1;
+            while (zoom >= 0) {
+                const maxTile = Math.pow(2, zoom);
+                xInt = Math.floor(x / (2 ** (desiredZoom - zoom)));
+                yInt = Math.floor(y / (2 ** (desiredZoom - zoom)));
+                // if we have a tile cache, check if the tile is in the cache
+                const tile = this.getTile(xInt, yInt, zoom);
+                if (tile !== undefined && tile.tileLayers > 0 && tile.elevation && !tile.elevationLoadFailed) {
+                    this.lastGeoTile = tile; // keep track of the last tile found
+                    // BUG FIX: Recalculate x,y for the actual zoom level found, not desiredZoom
+                    const maxTileAtZoom = Math.pow(2, zoom);
+                    var xFixed = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTileAtZoom);
+                    var yFixed = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTileAtZoom);
+                    return {x: xFixed, y: yFixed, zoom};
+                }
+                
+                // If tile exists but is still loading elevation data, continue searching for a parent
+                // but remember this tile for potential future use
+                if (tile !== undefined && tile.isLoadingElevation && !tile.elevationLoadFailed) {
+                    // Continue searching for a parent tile with elevation data
+                    // but don't return null immediately
+                }
+                zoom--;
+            }
+        }
+        // if no desired zoom level, we need to search through all zoom levels
+        // (which is a bit inefficient)
+        let zoom = this.maxZoom;
+        while (zoom >= 0) {
+            const maxTile = Math.pow(2, zoom);
+            var x = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTile);
+            var y = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTile);
+            const xInt = Math.floor(x);
+            const yInt = Math.floor(y);
+            // if we have a tile cache, check if the tile is in the cache
+            const tile = this.getTile(xInt, yInt, zoom);
+            if (tile !== undefined /* && tile.elevation */ && !tile.elevationLoadFailed) {
+                this.lastGeoTile = tile; // keep track of the last tile found
+                return {x, y, zoom};
+            }
+            zoom--;
+        }
+        return {x: null, y: null, zoom: null}; // return null if no tile found
+    }
+
+    // Generic version for all projections
+    _geo2TileFractionAndZoomGeneric(geoLocation, desiredZoom = null) {
+        const projection = this.options.mapProjection;
+
+        if (desiredZoom !== null) {
+            assert(desiredZoom <= this.maxZoom, `geo2TileFractionAndZoom: desiredZoom (${desiredZoom}) must be less than or equal to maxZoom (${this.maxZoom})`);
+
+            // Quick check against last tile
             if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === this.lastGeoTile.z)) {
                 let zoom = this.lastGeoTile.z;
                 const maxTile = Math.pow(2, zoom);
@@ -146,11 +226,10 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                 const xInt = Math.floor(x);
                 const yInt = Math.floor(y);
                 if (xInt === this.lastGeoTile.x && yInt === this.lastGeoTile.y) {
-                    // if the last tile is the same as the current tile, return it
                     return {x, y, zoom};
                 }
             }
-            this.lastGeoTile = null; // reset the last tile if it's not the same
+            this.lastGeoTile = null;
 
             const maxTile = Math.pow(2, desiredZoom);
             var x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
@@ -158,43 +237,26 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
             let xInt = Math.floor(x);
             let yInt = Math.floor(y);
-            // if we have a tile cache, check if the tile is in the cache
-            const tileKey = `${desiredZoom}/${xInt}/${yInt}`;
-            const tile = this.tileCache[tileKey];
-//            if (tile !== undefined && tile.active && tile.elevation && !tile.elevationLoadFailed) {
-            if (tile !== undefined && tile.elevation && !tile.elevationLoadFailed) {
-                this.lastGeoTile = tile; // keep track of the last tile found
+            const tile = this.getTile(xInt, yInt, desiredZoom);
+            if (tile && tile.elevation && !tile.elevationLoadFailed) {
+                this.lastGeoTile = tile;
                 return {x, y, zoom: desiredZoom};
             }
 
-            // not this one, so go up the tree with xInt, yInt
-            // until we find a tile that has elevation data
-
+            // Search parent tiles
             let zoom = desiredZoom - 1;
             while (zoom >= 0) {
-                const maxTile = Math.pow(2, zoom);
                 xInt = Math.floor(x / (2 ** (desiredZoom - zoom)));
                 yInt = Math.floor(y / (2 ** (desiredZoom - zoom)));
 
-                // if we have a tile cache, check if the tile is in the cache
-                const tileKey = `${zoom}/${xInt}/${yInt}`;
-                const tile = this.tileCache[tileKey];
-                if (tile !== undefined && tile.tileLayers > 0 && tile.elevation && !tile.elevationLoadFailed) {
-                    this.lastGeoTile = tile; // keep track of the last tile found
-
-                    const maxTile = Math.pow(2, zoom);
-                    var x = Math.abs(projection.lon2Tile(geoLocation[1], desiredZoom) % maxTile);
-                    var y = Math.abs(projection.lat2Tile(geoLocation[0], desiredZoom) % maxTile);
-
-
-                    return {x, y, zoom};
-                }
-                
-                // If tile exists but is still loading elevation data, continue searching for a parent
-                // but remember this tile for potential future use
-                if (tile !== undefined && tile.isLoadingElevation && !tile.elevationLoadFailed) {
-                    // Continue searching for a parent tile with elevation data
-                    // but don't return null immediately
+                const tile = this.getTile(xInt, yInt, zoom);
+                if (tile && tile.tileLayers > 0 && tile.elevation && !tile.elevationLoadFailed) {
+                    this.lastGeoTile = tile;
+                    // Recalculate x,y for the actual zoom level found
+                    const maxTileAtZoom = Math.pow(2, zoom);
+                    const xAtZoom = Math.abs(projection.lon2Tile(geoLocation[1], zoom) % maxTileAtZoom);
+                    const yAtZoom = Math.abs(projection.lat2Tile(geoLocation[0], zoom) % maxTileAtZoom);
+                    return {x: xAtZoom, y: yAtZoom, zoom};
                 }
                 zoom--;
             }
@@ -207,8 +269,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
 
 
-        // if no desired zoom level, we need to search through all zoom levels
-        // (which is a bit inefficient)
+        // Search all zoom levels
         let zoom = this.maxZoom;
         while (zoom >= 0) {
             const maxTile = Math.pow(2, zoom);
@@ -217,20 +278,15 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
             const xInt = Math.floor(x);
             const yInt = Math.floor(y);
-            // if we have a tile cache, check if the tile is in the cache
-            const tileKey = `${zoom}/${xInt}/${yInt}`;
-            const tile = this.tileCache[tileKey];
-            if (tile !== undefined /* && tile.elevation */ && !tile.elevationLoadFailed) {
-                this.lastGeoTile = tile; // keep track of the last tile found
-
+            const tile = this.getTile(xInt, yInt, zoom);
+            if (tile && !tile.elevationLoadFailed) {
+                this.lastGeoTile = tile;
                 return {x, y, zoom};
             }
             zoom--;
         }
 
-        return {x: null, y: null, zoom: null}; // return null if no tile found
-
-
+        return {x: null, y: null, zoom: null};
     }
 
     // using geo2tileFraction to get the position in tile coordinates
@@ -243,6 +299,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         // new, we have multiple zoom levels, so we we need to calculate the zoom level
         // for the highest resolution tile that contains the lat/lon
         // as well as finding the tile coordinates
+        
+        // Use the optimized version now that cache access is fixed
         const {x, y, zoom} = this.geo2TileFractionAndZoom([lat, lon], desiredZoom);
 
         if (x === null)
@@ -251,7 +309,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         const intX = Math.floor(x)
         const intY = Math.floor(y)
 //    const tile = this.tileCache[`${this.zoom}/${intX}/${intY}`]
-        const tile = this.tileCache[`${zoom}/${intX}/${intY}`]
+        const tile = this.getTile(intX, intY, zoom)
         if (tile && tile.elevation) {
             const nElevation = Math.sqrt(tile.elevation.length)
             const xIndex = (x - tile.x) * nElevation
@@ -286,7 +344,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         // abort the pending loading of tiles
         this.controller.abort();
 
-        Object.values(this.tileCache).forEach(tile => {
+        this.getAllTiles().forEach(tile => {
             tile.removeDebugGeometry(); // any debug arrows, etc
         })
         this.tileCache = {}

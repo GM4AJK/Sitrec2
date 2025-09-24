@@ -27,6 +27,69 @@ export class QuadTreeMap {
 
     }
 
+    // Helper methods for nested cache access
+    getTile(x, y, z) {
+        return this.tileCache[z] && this.tileCache[z][x] && this.tileCache[z][x][y];
+    }
+
+    setTile(x, y, z, tile) {
+        if (!this.tileCache[z]) this.tileCache[z] = {};
+        if (!this.tileCache[z][x]) this.tileCache[z][x] = {};
+        this.tileCache[z][x][y] = tile;
+    }
+
+    deleteTile(x, y, z) {
+        if (this.tileCache[z] && this.tileCache[z][x] && this.tileCache[z][x][y]) {
+            delete this.tileCache[z][x][y];
+            // Clean up empty objects to prevent memory leaks
+            if (Object.keys(this.tileCache[z][x]).length === 0) {
+                delete this.tileCache[z][x];
+                if (Object.keys(this.tileCache[z]).length === 0) {
+                    delete this.tileCache[z];
+                }
+            }
+        }
+    }
+
+    // Helper to get all tiles (for Object.values() replacement)
+    getAllTiles() {
+        const tiles = [];
+        for (const zLevel in this.tileCache) {
+            for (const xLevel in this.tileCache[zLevel]) {
+                for (const yLevel in this.tileCache[zLevel][xLevel]) {
+                    tiles.push(this.tileCache[zLevel][xLevel][yLevel]);
+                }
+            }
+        }
+        return tiles;
+    }
+
+    // Helper to get all tile keys (for Object.keys() replacement)
+    getAllTileKeys() {
+        const keys = [];
+        for (const z in this.tileCache) {
+            for (const x in this.tileCache[z]) {
+                for (const y in this.tileCache[z][x]) {
+                    keys.push(`${z}/${x}/${y}`);
+                }
+            }
+        }
+        return keys;
+    }
+
+    // Helper to iterate over all tiles (for for...in replacement)
+    forEachTile(callback) {
+        for (const z in this.tileCache) {
+            for (const x in this.tileCache[z]) {
+                for (const y in this.tileCache[z][x]) {
+                    const tile = this.tileCache[z][x][y];
+                    const key = `${z}/${x}/${y}`;
+                    callback(key, tile);
+                }
+            }
+        }
+    }
+
     initTiles() {
         if (this.dynamic) {
             this.initTilePositionsDynamic()
@@ -42,7 +105,7 @@ export class QuadTreeMap {
     }
 
     refreshDebugGrid(color, altitude = 0) {
-        Object.values(this.tileCache).forEach(tile => {
+        this.getAllTiles().forEach(tile => {
             this.debugColor = color
             this.debugAltitude = altitude
             tile.buildDebugGeometry(this.debugColor, this.debugAltitude)
@@ -50,7 +113,7 @@ export class QuadTreeMap {
     }
 
     removeDebugGrid() {
-        Object.values(this.tileCache).forEach(tile => {
+        this.getAllTiles().forEach(tile => {
             tile.removeDebugGeometry()
         })
     }
@@ -125,14 +188,12 @@ export class QuadTreeMap {
 
         // debug counting and output to debugLog
         if (isLocal) {
-            let totalTileCount = Object.keys(this.tileCache).length; // count of tiles in the cache
+            let totalTileCount = this.getAllTileKeys().length; // count of tiles in the cache
             let pendingLoads = 0; // count of pending loads
             let activeTileCount = 0; // count of tiles active in this view
             let inactiveTileCount = 0; // count of tiles inactive in this view
 
-            for (const key in this.tileCache) {
-                const tile = this.tileCache[key];
-
+            this.forEachTile((key, tile) => {
                 // Check if tile is active in this view using layer mask
                 if (tile.tileLayers && (tile.tileLayers & tileLayers)) {
                     activeTileCount++;
@@ -143,7 +204,7 @@ export class QuadTreeMap {
                 if (tile.isLoading) {
                     pendingLoads++; // increment the pending load counter
                 }
-            }
+            });
 
             if (pendingLoads > 0) {
                 debugLog(`[${view.id || 'View'}] Total Tiles: ${totalTileCount}, Active Tiles: ${activeTileCount}, Inactive Tiles: ${inactiveTileCount}, Pending Loads: ${pendingLoads}`);
@@ -163,8 +224,7 @@ export class QuadTreeMap {
         // First pass: Check for parent tiles that can now be deactivated because their children are loaded and active in this layer
         // Only do this for texture maps, not elevation maps, since elevation tiles are used by texture tiles at different zoom levels
         if (this.constructor.name === 'QuadTreeMapTexture') {
-            for (const key in this.tileCache) {
-                const tile = this.tileCache[key];
+            this.forEachTile((key, tile) => {
 
                 if (tile.mesh) {
                     if (tile.mesh.layers.mask !== tile.tileLayers) {
@@ -179,13 +239,13 @@ export class QuadTreeMap {
 
 
                 // Skip if tile is not active in this view or doesn't have potential children
-                if (!(tile.tileLayers & tileLayers) || tile.z >= this.maxZoom) continue;
+                if (!(tile.tileLayers & tileLayers) || tile.z >= this.maxZoom) return;
 
                 // Check if all four children exist and are loaded
-                const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
-                const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
-                const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
-                const child4 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`];
+                const child1 = this.getTile(tile.x * 2, tile.y * 2, tile.z + 1);
+                const child2 = this.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1);
+                const child3 = this.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1);
+                const child4 = this.getTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1);
 
                 if (child1 && child2 && child3 && child4 &&
                     (child1.tileLayers & tileLayers) && (child2.tileLayers & tileLayers) &&
@@ -194,21 +254,20 @@ export class QuadTreeMap {
                     // All children are active in this view and loaded, safe to deactivate parent texture tile for this view
                     this.deactivateTile(tile.x, tile.y, tile.z, tileLayers);
                 }
-            }
+            });
         }
 
         // Second pass: go over the tile cache for subdivision/merging
 
-        for (const key in this.tileCache) {
-            const tile = this.tileCache[key];
+        this.forEachTile((key, tile) => {
 
             // if the tile is added but not active in ANY view, then we can remove it from scene
             // if it has a mesh and all the children are loaded
             if (tile.added && !(tile.tileLayers) && tile.mesh) {
-                const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
-                const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
-                const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
-                const child4 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`];
+                const child1 = this.getTile(tile.x * 2, tile.y * 2, tile.z + 1);
+                const child2 = this.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1);
+                const child3 = this.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1);
+                const child4 = this.getTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1);
                 // if all four child tiles are loaded, then we can remove this tile from the scene
                 if (child1 && child2 && child3 && child4 &&
                     child1.loaded && child2.loaded && child3.loaded && child4.loaded) {
@@ -224,7 +283,7 @@ export class QuadTreeMap {
             }
 
             if (!this.canSubdivide(tile)) {
-                continue;
+                return;
             }
 
 
@@ -299,10 +358,10 @@ export class QuadTreeMap {
                 // Only immediately deactivate parent if all children are loaded, to prevent gaps in coverage
                 if (this.constructor.name === 'QuadTreeMapTexture') {
 
-                    const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
-                    const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
-                    const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
-                    const child4 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`];
+                    const child1 = this.getTile(tile.x * 2, tile.y * 2, tile.z + 1);
+                    const child2 = this.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1);
+                    const child3 = this.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1);
+                    const child4 = this.getTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1);
 
                     if (child1 && child2 && child3 && child4 &&
                         child1.loaded && child2.loaded && child3.loaded && child4.loaded) {
@@ -322,10 +381,10 @@ export class QuadTreeMap {
                 // if the tile is inactive in this view and the screen size is small enough, merge the tile
                 // we will merge the children tiles into this tile
                 // but only if they are all active in this view
-                const child1 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`];
-                const child2 = this.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`];
-                const child3 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`];
-                const child4 = this.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`];
+                const child1 = this.getTile(tile.x * 2, tile.y * 2, tile.z + 1);
+                const child2 = this.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1);
+                const child3 = this.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1);
+                const child4 = this.getTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1);
 
 
                 if (child1 && child2 && child3 && child4 &&
@@ -344,9 +403,7 @@ export class QuadTreeMap {
                     // return;
                 }
             }
-
-
-        }
+        });
 
 
     }

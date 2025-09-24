@@ -416,11 +416,10 @@ export class CNodeTerrain extends CNode {
     applyElevationTo(z,x,y) {
         // TODO - make it work for differnt subdivisions
         const terrainMap = this.maps[this.UI.mapType].map;
-        const key = z + "/" + x + "/" + y;
 
         // if the corresponding tile is active, then recalculate the curve map
         // we can then return, as an active has no children
-        const terrainTile = terrainMap.tileCache[key];
+        const terrainTile = terrainMap.getTile(x, y, z);
         this.applyElevationToTile(terrainTile, terrainMap)
         if (this.UI.dynamic) {
 
@@ -448,8 +447,7 @@ export class CNodeTerrain extends CNode {
         const parentX = Math.floor(tile.x / 2);
         const parentY = Math.floor(tile.y / 2);
         const parentZ = tile.z - 1;
-        const parentKey = `${parentZ}/${parentX}/${parentY}`;
-        const parentTile = terrainMap.tileCache[parentKey];
+        const parentTile = terrainMap.getTile(parentX, parentY, parentZ);
 
 
 
@@ -485,10 +483,10 @@ export class CNodeTerrain extends CNode {
             // this is recursive, so we can just call this function on the children
             // undefined children will be ignored
             // since we don't dispose the higher level elevation tiles, this should generally only be one deep
-            this.applyElevationToTile(terrainMap.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2}`],      terrainMap);
-            this.applyElevationToTile(terrainMap.tileCache[`${tile.z + 1}/${tile.x * 2}/${tile.y * 2 + 1}`],  terrainMap);
-            this.applyElevationToTile(terrainMap.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2}`],  terrainMap);
-            this.applyElevationToTile(terrainMap.tileCache[`${tile.z + 1}/${tile.x * 2 + 1}/${tile.y * 2 + 1}`], terrainMap);
+            this.applyElevationToTile(terrainMap.getTile(tile.x * 2, tile.y * 2, tile.z + 1), terrainMap);
+            this.applyElevationToTile(terrainMap.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1), terrainMap);
+            this.applyElevationToTile(terrainMap.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1), terrainMap);
+            this.applyElevationToTile(terrainMap.getTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1), terrainMap);
         }
     }
 

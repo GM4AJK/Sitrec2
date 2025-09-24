@@ -76,7 +76,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             return;
         }
         this.radius = radius
-        Object.values(this.tileCache).forEach(tile => {
+        this.getAllTiles().forEach(tile => {
             tile.recalculateCurve(radius)
         })
         setRenderOne(true);
@@ -89,7 +89,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         // abort the pending loading of tiles
         this.controller.abort();
 
-        Object.values(this.tileCache).forEach(tile => {
+        this.getAllTiles().forEach(tile => {
             tile.removeDebugGeometry(); // any debug arrows, etc
             if (tile.mesh !== undefined) {
                 this.scene.remove(tile.mesh)
@@ -133,9 +133,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
 
     deactivateTile(x, y, z, layerMask = 0, instant = false) {
-
-        const key = `${z}/${x}/${y}`;
-        let tile = this.tileCache[key];
+        let tile = this.getTile(x, y, z);
         if (tile === undefined) {
             return;
         }
@@ -163,8 +161,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
     // if tile exists, activate it, otherwise create it
     activateTile(x, y, z, layerMask = 0) {
-        const key = `${z}/${x}/${y}`;
-        let tile = this.tileCache[key];
+        let tile = this.getTile(x, y, z);
 
 
         if (tile) {
@@ -230,9 +227,10 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
         tile.setPosition(center); // ???
         tile.recalculateCurve(wgs84.RADIUS)
-        this.tileCache[key] = tile;
+        this.setTile(x, y, z, tile);
 
         // Track the async texture loading
+        const key = `${z}/${x}/${y}`;
         const materialPromise = tile.applyMaterial().catch(error => {
             console.error(`Failed to load texture for tile ${key}:`, error);
             // Tile will remain with wireframe material if texture loading fails
