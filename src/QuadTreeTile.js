@@ -16,6 +16,7 @@ import {Sphere} from "three/src/math/Sphere";
 import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
+import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
 
 const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020"})
 
@@ -185,7 +186,7 @@ export class QuadTreeTile {
         
         // Ensure main geometry has normals computed
         if (!this.geometry.attributes.normal) {
-            this.geometry.computeVertexNormals();
+            fastComputeVertexNormals(this.geometry);
         }
         const mainNormals = this.geometry.attributes.normal.array;
         
@@ -302,7 +303,7 @@ export class QuadTreeTile {
         
         // Ensure main geometry has normals computed
         if (!this.geometry.attributes.normal) {
-            this.geometry.computeVertexNormals();
+            fastComputeVertexNormals(this.geometry);
         }
         const mainNormals = this.geometry.attributes.normal.array;
         const skirtNormals = this.skirtGeometry.attributes.normal.array;
@@ -769,9 +770,9 @@ export class QuadTreeTile {
         // Also check if we can now use actual elevation tile data instead of interpolated
         this.checkAndApplyElevationColorTexture();
 
-        // Removed this as it's expensive. And seems not needed for just curve flattenog.
+        // Optimized version - much faster than the original
         // might be an ideal candidate for multi-threading
-        geometry.computeVertexNormals()
+        fastComputeVertexNormals(geometry)
 
         geometry.computeBoundingBox()
         geometry.computeBoundingSphere()
@@ -956,7 +957,7 @@ export class QuadTreeTile {
         });
 
         // Update geometry
-        geometry.computeVertexNormals();
+        fastComputeVertexNormals(geometry);
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
@@ -1031,7 +1032,7 @@ export class QuadTreeTile {
         });
 
         // Update geometry
-        geometry.computeVertexNormals();
+        fastComputeVertexNormals(geometry);
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
@@ -1213,7 +1214,7 @@ export class QuadTreeTile {
         });
 
         // Update geometry
-        geometry.computeVertexNormals();
+        fastComputeVertexNormals(geometry);
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;

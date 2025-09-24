@@ -7,6 +7,7 @@
 import {CNode3DLight} from "./CNode3DLight";
 import {CNode3DGroup} from "./CNode3DGroup";
 import * as LAYER from "../LayerMasks";
+import {fastComputeVertexNormals} from "../FastComputeVertexNormals";
 import {
     Box3,
     BoxGeometry,
@@ -1074,8 +1075,8 @@ export class CNode3DObject extends CNode3DGroup {
     getNormalsFromGeometry(geometry) {
         let normals = geometry.attributes.normal;
         if (!normals) {
-            // Compute normals if they don't exist
-            geometry.computeVertexNormals();
+            // Compute normals if they don't exist - using optimized version
+            fastComputeVertexNormals(geometry);
             normals = geometry.attributes.normal;
         }
         return Array.from(normals.array);
