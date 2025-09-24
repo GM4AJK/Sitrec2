@@ -327,28 +327,101 @@ export function EUSToECEF(posEUS, radius) {
     return ecef;
 }
 
-// Convert LLA to Spherical EUS. Optional earth's radius parameter is deprecated, and should not be used.
-export function LLAToEUSRadians(lat, lon, alt=0, radius) {
-    assert(radius === undefined, "undexpected radius in LLAToEUS")
-    assert(Sit.lat != undefined, "Sit.lat undefined in LLAToEUS")
-    const ecef = RLLAToECEFV_Sphere(lat,lon,alt,wgs84.RADIUS)
-    // Sit.lat/lon is the EUS origin, which can be defined per Sit
-    // it's mostly legacy, but the math will be more accurate if the origin is near the action
-    // when there's a terrain, Sit.lat/lon is set to center of the map in CNodeTerrain
-    var enu = ECEF2ENU(ecef, radians(Sit.lat), radians(Sit.lon), wgs84.RADIUS)
-    var eus = V3(enu.x,enu.z,-enu.y)
-    return eus
+// Pre-computed constants for optimization - updated when Sit location changes
+let _sitLatRad, _sitLonRad, _sitSinLat, _sitCosLat, _sitSinLon, _sitCosLon;
+let _originEcefX, _originEcefY, _originEcefZ;
+let _m00, _m01, _m10, _m11, _m12, _m20, _m21, _m22;
+let _lastSitLat = null, _lastSitLon = null;
+
+// Constant for radians conversion (Math.PI / 180)
+const _DEG_TO_RAD = 0.017453292519943295;
+
+// Update pre-computed constants when Sit location changes
+function _updateSitConstants() {
+    if (Sit.lat === _lastSitLat && Sit.lon === _lastSitLon) {
+        return; // No change, constants are still valid
+    }
+    
+    _lastSitLat = Sit.lat;
+    _lastSitLon = Sit.lon;
+    
+    _sitLatRad = Sit.lat * _DEG_TO_RAD;
+    _sitLonRad = Sit.lon * _DEG_TO_RAD;
+    _sitSinLat = Math.sin(_sitLatRad);
+    _sitCosLat = Math.cos(_sitLatRad);
+    _sitSinLon = Math.sin(_sitLonRad);
+    _sitCosLon = Math.cos(_sitLonRad);
+    
+    // Pre-compute origin ECEF coordinates
+    _originEcefX = wgs84.RADIUS * _sitCosLat * _sitCosLon;
+    _originEcefY = wgs84.RADIUS * _sitCosLat * _sitSinLon;
+    _originEcefZ = wgs84.RADIUS * _sitSinLat;
+    
+    // Pre-compute transformation matrix elements
+    _m00 = -_sitSinLon;
+    _m01 = _sitCosLon;
+    // _m02 = 0 (not needed, always zero)
+    _m10 = -_sitSinLat * _sitCosLon;
+    _m11 = -_sitSinLat * _sitSinLon;
+    _m12 = _sitCosLat;
+    _m20 = _sitCosLat * _sitCosLon;
+    _m21 = _sitCosLat * _sitSinLon;
+    _m22 = _sitSinLat;
 }
 
 // Convert LLA to Spherical EUS. Optional earth's radius parameter is deprecated, and should not be used.
+// OPTIMIZED VERSION: All calculations inlined with pre-computed constants for maximum performance
+export function LLAToEUSRadians(lat, lon, alt=0, radius) {
+    assert(radius === undefined, "undexpected radius in LLAToEUS")
+    assert(Sit.lat != undefined, "Sit.lat undefined in LLAToEUS")
+    
+    // Update constants if Sit location changed
+    _updateSitConstants();
+    
+    // Pre-compute trigonometric functions
+    const cos_lat = Math.cos(lat);
+    const sin_lat = Math.sin(lat);
+    const cos_lon = Math.cos(lon);
+    const sin_lon = Math.sin(lon);
+    
+    // Convert LLA to ECEF (spherical) - inlined for speed
+    const r_plus_alt = wgs84.RADIUS + alt;
+    const ecef_x = r_plus_alt * cos_lat * cos_lon;
+    const ecef_y = r_plus_alt * cos_lat * sin_lon;
+    const ecef_z = r_plus_alt * sin_lat;
+    
+    // Subtract origin ECEF to get relative position
+    const rel_x = ecef_x - _originEcefX;
+    const rel_y = ecef_y - _originEcefY;
+    const rel_z = ecef_z - _originEcefZ;
+    
+    // Apply ECEF to ENU transformation matrix (inlined)
+    const enu_x = _m00 * rel_x + _m01 * rel_y;  // _m02 * rel_z is always 0
+    const enu_y = _m10 * rel_x + _m11 * rel_y + _m12 * rel_z;
+    const enu_z = _m20 * rel_x + _m21 * rel_y + _m22 * rel_z;
+    
+    // Convert ENU to EUS coordinate system and return
+    return V3(enu_x, enu_z, -enu_y);
+}
+
+// Convert LLA to Spherical EUS. Optional earth's radius parameter is deprecated, and should not be used.
+// OPTIMIZED VERSION: Uses constant multiplier for degree to radian conversion
 export function LLAToEUS(lat, lon, alt=0, radius) {
-    return LLAToEUSRadians(radians(lat), radians(lon), alt, radius)
+    // Convert degrees to radians using constant multiplier (faster than radians() function)
+    return LLAToEUSRadians(lat * _DEG_TO_RAD, lon * _DEG_TO_RAD, alt, radius);
 }
 
 // vector input version
 export function LLAVToEUS(lla, radius) {
     assert(radius === undefined, "undexpected radius in LLAVToEUS")
     return LLAToEUS(lla.x, lla.y, lla.z)
+}
+
+// Force update of LLA to EUS constants (call this if you manually change Sit.lat/lon)
+export function updateLLAToEUSConstants() {
+    _lastSitLat = null;
+    _lastSitLon = null;
+    _updateSitConstants();
 }
 
 
