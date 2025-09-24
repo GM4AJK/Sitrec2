@@ -134,7 +134,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         const projection = this.options.mapProjection;
         // if a desired zoom level is specified, we can just use that
         if (desiredZoom !== null) {
-            assert(desiredZoom <= this.maxZoom, `geo2TileFractionAndZoom: desiredZoom (${desiredZoom}) must be less than or equal to maxZoom (${this.maxZoom})`);
+            // If desiredZoom is higher than maxZoom, we'll search for the best available parent tile
+            // No need to assert here - let the function handle it gracefully
             // quick check to see if it matches the last tile we found
             // for lat/lon derived x, y, and desired zoom
             // this is for when we do bulk operations and we want to avoid finding the same tile again
@@ -164,7 +165,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             }
             // not this one, so go up the tree with xInt, yInt
             // until we find a tile that has elevation data
-            let zoom = desiredZoom - 1;
+            let zoom = Math.min(desiredZoom - 1, this.maxZoom);
             while (zoom >= 0) {
                 const maxTile = Math.pow(2, zoom);
                 xInt = Math.floor(x / (2 ** (desiredZoom - zoom)));
@@ -214,7 +215,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         const projection = this.options.mapProjection;
 
         if (desiredZoom !== null) {
-            assert(desiredZoom <= this.maxZoom, `geo2TileFractionAndZoom: desiredZoom (${desiredZoom}) must be less than or equal to maxZoom (${this.maxZoom})`);
+            // If desiredZoom is higher than maxZoom, we'll search for the best available parent tile
+            // No need to assert here - let the function handle it gracefully
 
             // Quick check against last tile
             if (this.lastGeoTile && this.lastGeoTile.elevation && !this.lastGeoTile.elevationLoadFailed && (desiredZoom === this.lastGeoTile.z)) {
@@ -243,8 +245,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                 return {x, y, zoom: desiredZoom};
             }
 
-            // Search parent tiles
-            let zoom = desiredZoom - 1;
+            // Search parent tiles, starting from maxZoom if desiredZoom exceeds it
+            let zoom = Math.min(desiredZoom - 1, this.maxZoom);
             while (zoom >= 0) {
                 xInt = Math.floor(x / (2 ** (desiredZoom - zoom)));
                 yInt = Math.floor(y / (2 ** (desiredZoom - zoom)));

@@ -54,14 +54,25 @@ export class QuadTreeMap {
     // Helper to get all tiles (for Object.values() replacement)
     getAllTiles() {
         const tiles = [];
-        for (const zLevel in this.tileCache) {
-            for (const xLevel in this.tileCache[zLevel]) {
-                for (const yLevel in this.tileCache[zLevel][xLevel]) {
-                    tiles.push(this.tileCache[zLevel][xLevel][yLevel]);
+        for (const z in this.tileCache) {
+            for (const x in this.tileCache[z]) {
+                for (const y in this.tileCache[z][x]) {
+                    tiles.push(this.tileCache[z][x][y]);
                 }
             }
         }
         return tiles;
+    }
+
+    // Helper to get tile count (more efficient than getAllTileKeys().length)
+    getTileCount() {
+        let count = 0;
+        for (const z in this.tileCache) {
+            for (const x in this.tileCache[z]) {
+                count += Object.keys(this.tileCache[z][x]).length;
+            }
+        }
+        return count;
     }
 
     // Helper to get all tile keys (for Object.keys() replacement)
@@ -77,14 +88,12 @@ export class QuadTreeMap {
         return keys;
     }
 
-    // Helper to iterate over all tiles (for for...in replacement)
+    // Helper to iterate over all tiles
     forEachTile(callback) {
         for (const z in this.tileCache) {
             for (const x in this.tileCache[z]) {
                 for (const y in this.tileCache[z][x]) {
-                    const tile = this.tileCache[z][x][y];
-                    const key = `${z}/${x}/${y}`;
-                    callback(key, tile);
+                    callback(this.tileCache[z][x][y]);
                 }
             }
         }
@@ -188,12 +197,12 @@ export class QuadTreeMap {
 
         // debug counting and output to debugLog
         if (isLocal) {
-            let totalTileCount = this.getAllTileKeys().length; // count of tiles in the cache
+            let totalTileCount = this.getTileCount(); // count of tiles in the cache
             let pendingLoads = 0; // count of pending loads
             let activeTileCount = 0; // count of tiles active in this view
             let inactiveTileCount = 0; // count of tiles inactive in this view
 
-            this.forEachTile((key, tile) => {
+            this.forEachTile((tile) => {
                 // Check if tile is active in this view using layer mask
                 if (tile.tileLayers && (tile.tileLayers & tileLayers)) {
                     activeTileCount++;
@@ -224,16 +233,18 @@ export class QuadTreeMap {
         // First pass: Check for parent tiles that can now be deactivated because their children are loaded and active in this layer
         // Only do this for texture maps, not elevation maps, since elevation tiles are used by texture tiles at different zoom levels
         if (this.constructor.name === 'QuadTreeMapTexture') {
-            this.forEachTile((key, tile) => {
+            this.forEachTile((tile) => {
 
                 if (tile.mesh) {
                     if (tile.mesh.layers.mask !== tile.tileLayers) {
+                        const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for error
                         const timeSinceSet = tile.mesh._lastLayerSetTime ? Date.now() - tile.mesh._lastLayerSetTime : 'unknown';
                         const lastSetMask = tile.mesh._lastLayerSetMask || 'unknown';
                         console.error(`LAYERS MISMATCH DETECTED: key=${key}, loaded=(${tile.loaded}), mesh.layers.mask=${tile.mesh.layers.mask.toString(2)} (${tile.mesh.layers.mask}), tile.tileLayers=${tile.tileLayers.toString(2)} (${tile.tileLayers})`);
                         console.error(`Debug info: lastSetMask=${lastSetMask.toString ? lastSetMask.toString(2) : lastSetMask}, timeSinceSet=${timeSinceSet}ms`);
                         console.trace('Stack trace for layers mismatch:');
                     }
+                    const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for assertion
                     assert(tile.mesh.layers.mask === tile.tileLayers, `Tile layers mismatch. key=${key}, loaded=(${tile.loaded}), tile. mesh.layers.mask=${tile.mesh.layers.mask.toString(2)}, tile.tileLayers=${tile.tileLayers.toString(2)}`)
                 }
 
@@ -259,7 +270,7 @@ export class QuadTreeMap {
 
         // Second pass: go over the tile cache for subdivision/merging
 
-        this.forEachTile((key, tile) => {
+        this.forEachTile((tile) => {
 
             // if the tile is added but not active in ANY view, then we can remove it from scene
             // if it has a mesh and all the children are loaded

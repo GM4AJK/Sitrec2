@@ -814,7 +814,7 @@ export class QuadTreeTile {
         let tileFractionY = 1.0;
         
         // First try exact match
-        elevationTile = this.map.elevationMap?.tileCache?.[this.key()];
+        elevationTile = this.map.elevationMap?.getTile(this.x, this.y, this.z);
         
         if (!elevationTile || !elevationTile.elevation) {
             // Try lower zoom levels (parent tiles with less detailed but available elevation data)
@@ -826,8 +826,7 @@ export class QuadTreeTile {
                 // Find the parent tile coordinates
                 const elevationX = Math.floor(this.x / tilesPerParent);
                 const elevationY = Math.floor(this.y / tilesPerParent);
-                const elevationKey = `${searchZoom}/${elevationX}/${elevationY}`;
-                const candidateTile = this.map.elevationMap.tileCache[elevationKey];
+                const candidateTile = this.map.elevationMap.getTile(elevationX, elevationY, searchZoom);
                 
                 if (candidateTile && candidateTile.elevation) {
                     elevationTile = candidateTile;
@@ -2178,7 +2177,7 @@ export class QuadTreeTile {
         let tileFractionY = 1.0;
         
         // First try exact match
-        elevationTile = this.map.elevationMap?.tileCache?.[this.key()];
+        elevationTile = this.map.elevationMap?.getTile(this.x, this.y, this.z);
         
         if (!elevationTile || !elevationTile.elevation) {
             // Try lower zoom levels (parent tiles with less detailed but available elevation data)
@@ -2190,8 +2189,7 @@ export class QuadTreeTile {
                 // Find the parent tile coordinates
                 const elevationX = Math.floor(this.x / tilesPerParent);
                 const elevationY = Math.floor(this.y / tilesPerParent);
-                const elevationKey = `${searchZoom}/${elevationX}/${elevationY}`;
-                const candidateTile = this.map.elevationMap?.tileCache?.[elevationKey];
+                const candidateTile = this.map.elevationMap?.getTile(elevationX, elevationY, searchZoom);
                 
                 if (candidateTile && candidateTile.elevation) {
                     elevationTile = candidateTile;
