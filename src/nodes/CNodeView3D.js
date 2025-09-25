@@ -1263,19 +1263,20 @@ export class CNodeView3D extends CNodeViewCanvas {
                         // Get the node from NodeManager
                         const node = NodeMan.get(objectID);
                         if (node && node.gui) {
-                            // Create a draggable window with the node's GUI controls
+                            // Create a draggable window with the node's GUI controls using dynamic mirroring
                             const menuTitle = `3D Ob: ${objectID}`;
                             
-                            // Create the standalone menu directly
-                            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
+                            // Use the new dynamic mirroring system that automatically updates when the node's GUI changes
+                            // This handles model/geometry switching and other programmatic GUI changes
+                            const standaloneMenu = CustomManager.mirrorNodeGUI(objectID, menuTitle, event.clientX, event.clientY);
                             
-                            // Mirror the node's GUI folder controls to the standalone menu
-                            CustomManager.mirrorGUIControls(node.gui, standaloneMenu);
-                            
-                            // Open the menu by default
-                            standaloneMenu.open();
-                            
-                            console.log(`Created standalone menu for object: ${objectID}`);
+                            if (standaloneMenu) {
+                                // Open the menu by default
+                                standaloneMenu.open();
+                                console.log(`Created dynamic standalone menu for object: ${objectID}`);
+                            } else {
+                                console.log(`Failed to create dynamic menu for object: ${objectID}`);
+                            }
                         } else {
                             console.log(`Node ${objectID} not found or has no GUI folder`);
                         }

@@ -1353,6 +1353,7 @@ export class CNode3DObject extends CNode3DGroup {
         const common = this.common;
 
         this.destroyLights();
+        this.rebuildMaterial();
 
 
         if (this.modelOrGeometry === "model") {
@@ -1422,8 +1423,8 @@ export class CNode3DObject extends CNode3DGroup {
                 });
             }
 
+
             if (this.common.applyMaterial) {
-                this.rebuildMaterial();
                 this.applyMaterialToModel();
             } else {
                 // restore the original materials
@@ -1487,8 +1488,6 @@ export class CNode3DObject extends CNode3DGroup {
         if (common.rotateZ) {
             this.geometry.rotateZ(common.rotateZ * Math.PI / 180);
         }
-
-        this.rebuildMaterial();
 
         if (common.wireframe) {
             this.wireframe = new WireframeGeometry(this.geometry);
@@ -1772,6 +1771,10 @@ export class CNode3DObject extends CNode3DGroup {
             let c = gui.controllers[i];
             if (!c.isCommon) {
                 c.destroy();
+                // Explicitly remove the controller from the array if destroy() didn't do it
+                if (gui.controllers[i] === c) {
+                    gui.controllers.splice(i, 1);
+                }
             }
         }
     }

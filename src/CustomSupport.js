@@ -1,9 +1,18 @@
 // Support functions for the custom sitches and mods
 // 
 // GUI Mirroring Functionality:
-// - mirrorGUIFolder(sourceFolderName, menuTitle, x, y): Mirror any GUI menu to a standalone draggable window
+// - mirrorGUIFolder(sourceFolderName, menuTitle, x, y): Mirror any GUI menu to a standalone draggable window with dynamic updates
+// - mirrorNodeGUI(nodeId, menuTitle, x, y): Mirror a specific node's GUI with dynamic updates
+// - createDynamicMirror(sourceType, sourceName, title, x, y): Universal function to create dynamic mirrors
 // - setupFlowOrbsMirrorExample(): Example that mirrors Flow Orbs menu (or effects menu as fallback)
 // - showMirrorMenuDemo(): Interactive demo accessible from Help menu
+//
+// Dynamic Mirroring Features:
+// - Automatically detects when original menu items are added/removed/changed
+// - Uses event-based detection when possible, falls back to polling
+// - Handles model/geometry switching and other programmatic GUI changes
+// - Provides manual refresh capability via refreshMirror() method
+// - Proper cleanup when mirrors are destroyed
 
 import {
     FileManager,
@@ -400,14 +409,252 @@ export class CCustomManager {
         // Create the standalone menu
         const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, x, y);
         
-        // Recursively mirror all controls and folders
-        this.mirrorGUIControls(sourceFolder, standaloneMenu);
+        // Set up dynamic mirroring
+        this.setupDynamicMirroring(sourceFolder, standaloneMenu);
         
         // Open the menu by default
         standaloneMenu.open();
         
         console.log(`Mirrored GUI folder '${sourceFolderName}' to standalone menu '${menuTitle}'`);
+        
+        // Add a method to manually refresh the mirror
+        standaloneMenu.refreshMirror = () => {
+            this.updateMirror(standaloneMenu);
+        };
+        
         return standaloneMenu;
+    }
+
+    /**
+     * Set up dynamic mirroring that automatically updates when the source changes
+     * @param {GUI} sourceFolder - Source GUI folder to mirror
+     * @param {GUI} standaloneMenu - Target standalone menu
+     */
+    setupDynamicMirroring(sourceFolder, standaloneMenu) {
+        console.log('setupDynamicMirroring called for sourceFolder:', sourceFolder._title || 'root');
+        
+        // Store reference to source for updates
+        standaloneMenu._mirrorSource = sourceFolder;
+        standaloneMenu._lastMirrorState = null;
+        
+        // Initial mirror
+        this.updateMirror(standaloneMenu);
+        
+        // Try event-based approach first, fall back to polling if needed
+        console.log('About to call setupEventBasedMirroring');
+        if (this.setupEventBasedMirroring(sourceFolder, standaloneMenu)) {
+            console.log('Using event-based mirroring for', standaloneMenu._title);
+        } else {
+            // Fallback to periodic checking for changes
+            console.log('Using polling-based mirroring for', standaloneMenu._title);
+            const checkInterval = 100; // Check every 100ms
+            standaloneMenu._mirrorUpdateInterval = setInterval(() => {
+                this.updateMirror(standaloneMenu);
+            }, checkInterval);
+        }
+        
+        // Clean up when menu is destroyed
+        const originalDestroy = standaloneMenu.destroy.bind(standaloneMenu);
+        standaloneMenu.destroy = () => {
+            if (standaloneMenu._mirrorUpdateInterval) {
+                clearInterval(standaloneMenu._mirrorUpdateInterval);
+                standaloneMenu._mirrorUpdateInterval = null;
+            }
+            if (standaloneMenu._mirrorEventCleanup) {
+                standaloneMenu._mirrorEventCleanup();
+                standaloneMenu._mirrorEventCleanup = null;
+            }
+            originalDestroy();
+        };
+    }
+
+    /**
+     * Set up event-based mirroring by hooking into GUI methods
+     * @param {GUI} sourceFolder - Source GUI folder to monitor
+     * @param {GUI} standaloneMenu - Target standalone menu to update
+     * @returns {boolean} True if event-based mirroring was successfully set up
+     */
+    setupEventBasedMirroring(sourceFolder, standaloneMenu) {
+        try {
+            // Store all hooked methods for cleanup
+            const allHookedMethods = [];
+            
+            // Recursively hook into all folders and sub-folders
+            this.hookFolderRecursively(sourceFolder, standaloneMenu, allHookedMethods);
+            
+            // Store cleanup function
+            standaloneMenu._mirrorEventCleanup = () => {
+                // Restore all original methods
+                allHookedMethods.forEach(({ folder, methodName, originalMethod }) => {
+                    folder[methodName] = originalMethod;
+                });
+            };
+            
+            return true;
+        } catch (error) {
+            console.warn('Failed to set up event-based mirroring:', error);
+            return false;
+        }
+    }
+
+    /**
+     * Recursively hook into a folder and all its sub-folders
+     * @param {GUI} folder - The folder to hook into
+     * @param {GUI} standaloneMenu - Target standalone menu to update
+     * @param {Array} allHookedMethods - Array to store hooked methods for cleanup
+     */
+    hookFolderRecursively(folder, standaloneMenu, allHookedMethods) {
+        console.log('hookFolderRecursively called for folder:', folder._title || 'root', 'controllers:', folder.controllers.length);
+        
+        const methodsToHook = ['add', 'addColor', 'addFolder', 'remove'];
+        
+        // Hook into GUI methods that modify the structure
+        methodsToHook.forEach(methodName => {
+            if (typeof folder[methodName] === 'function') {
+                const originalMethod = folder[methodName].bind(folder);
+                
+                // Store for cleanup
+                allHookedMethods.push({ folder, methodName, originalMethod });
+                
+                folder[methodName] = (...args) => {
+                    const result = originalMethod(...args);
+                    
+                    // If we just added a folder, hook into it too
+                    if (methodName === 'addFolder' && result) {
+                        setTimeout(() => {
+                            this.hookFolderRecursively(result, standaloneMenu, allHookedMethods);
+                        }, 0);
+                    }
+                    
+                    // If we just added a controller, hook its destroy method
+                    if ((methodName === 'add' || methodName === 'addColor') && result && typeof result.destroy === 'function') {
+                        if (folder._controllerHookFunction) {
+                            folder._controllerHookFunction(result);
+                        }
+                    }
+                    
+                    // Defer update to next tick to allow GUI to stabilize
+                    setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                    return result;
+                };
+            }
+        });
+        
+        // Hook into controller destroy method for any existing controllers
+        console.log('About to call hookControllerDestroy for folder:', folder._title || 'root');
+        this.hookControllerDestroy(folder, standaloneMenu);
+        
+        // Recursively hook into existing sub-folders
+        console.log('Processing sub-folders, count:', folder.folders.length);
+        folder.folders.forEach(subfolder => {
+            this.hookFolderRecursively(subfolder, standaloneMenu, allHookedMethods);
+        });
+    }
+
+    /**
+     * Hook into controller destroy methods to detect when controllers are removed
+     * @param {GUI} sourceFolder - Source GUI folder
+     * @param {GUI} standaloneMenu - Target standalone menu
+     */
+    hookControllerDestroy(sourceFolder, standaloneMenu) {
+        const hookController = (controller) => {
+            if (controller._mirrorHooked) return; // Already hooked
+            controller._mirrorHooked = true;
+            
+            const originalDestroy = controller.destroy.bind(controller);
+            controller.destroy = () => {
+                originalDestroy();
+                // Defer update to next tick
+                setTimeout(() => this.updateMirror(standaloneMenu), 0);
+            };
+        };
+        
+        // Hook existing controllers in this folder
+        console.log('hookControllerDestroy: sourceFolder.controllers.length =', sourceFolder.controllers.length);
+        sourceFolder.controllers.forEach((controller, index) => {
+            console.log(`Hooking controller ${index}:`, controller);
+            hookController(controller);
+        });
+        
+        // Store the hook function so the recursive method can use it for new controllers
+        sourceFolder._controllerHookFunction = hookController;
+    }
+
+    /**
+     * Update the mirror to match the current state of the source
+     * @param {GUI} standaloneMenu - The mirrored menu to update
+     */
+    updateMirror(standaloneMenu) {
+        const sourceFolder = standaloneMenu._mirrorSource;
+        if (!sourceFolder) return;
+        
+        // Create a signature of the current source state
+        const currentState = this.createGUISignature(sourceFolder);
+        
+        // Compare with last known state
+        if (standaloneMenu._lastMirrorState !== currentState) {
+            // State has changed, rebuild the mirror
+            this.rebuildMirror(sourceFolder, standaloneMenu);
+            standaloneMenu._lastMirrorState = currentState;
+        }
+    }
+
+    /**
+     * Create a signature string representing the current state of a GUI folder
+     * @param {GUI} folder - The GUI folder to create a signature for
+     * @returns {string} A signature representing the folder's structure
+     */
+    createGUISignature(folder) {
+        const parts = [];
+        
+        // Add controller signatures
+        folder.controllers.forEach(controller => {
+            const name = controller._name || 'unnamed';
+            const type = controller.constructor.name;
+            const visible = controller._hidden ? 'hidden' : 'visible';
+            parts.push(`ctrl:${name}:${type}:${visible}`);
+        });
+        
+        // Add folder signatures recursively
+        folder.folders.forEach(subfolder => {
+            const name = subfolder._title || 'unnamed';
+            const open = subfolder._closed ? 'closed' : 'open';
+            const subSignature = this.createGUISignature(subfolder);
+            parts.push(`folder:${name}:${open}:${subSignature}`);
+        });
+        
+        return parts.join('|');
+    }
+
+    /**
+     * Completely rebuild the mirror to match the source
+     * @param {GUI} sourceFolder - Source GUI folder
+     * @param {GUI} standaloneMenu - Target standalone menu to rebuild
+     */
+    rebuildMirror(sourceFolder, standaloneMenu) {
+        // Clear existing controllers and folders
+        this.clearMirror(standaloneMenu);
+        
+        // Rebuild from source
+        this.mirrorGUIControls(sourceFolder, standaloneMenu);
+    }
+
+    /**
+     * Clear all controllers and folders from a GUI menu
+     * @param {GUI} menu - The GUI menu to clear
+     */
+    clearMirror(menu) {
+        // Remove all controllers
+        while (menu.controllers.length > 0) {
+            const controller = menu.controllers[menu.controllers.length - 1];
+            controller.destroy();
+        }
+        
+        // Remove all folders
+        while (menu.folders.length > 0) {
+            const folder = menu.folders[menu.folders.length - 1];
+            folder.destroy();
+        }
     }
 
     /**
@@ -489,7 +736,7 @@ export class CCustomManager {
     }
 
     /**
-     * Example of mirroring the Flow Orbs menu
+     * Example of mirroring the Flow Orbs menu with dynamic updates
      */
     setupFlowOrbsMirrorExample() {
         // First check if there are any Flow Orbs nodes in the scene
@@ -505,24 +752,72 @@ export class CCustomManager {
 
         if (!flowOrbsNode) {
             console.log("No Flow Orbs node found - creating example mirror of effects menu instead");
-            // Mirror the effects menu as an example
+            // Mirror the effects menu as an example with dynamic updates
             this.mirroredFlowOrbsMenu = this.mirrorGUIFolder("effects", "Mirrored Effects", 400, 200);
             return;
         }
 
-        // Create a standalone menu that mirrors the Flow Orbs controls
+        // Create a standalone menu that mirrors the Flow Orbs controls with dynamic updates
         const standaloneMenu = Globals.menuBar.createStandaloneMenu("Mirrored Flow Orbs", 400, 200);
         
-        // Mirror the Flow Orbs GUI controls
-        this.mirrorGUIControls(flowOrbsNode.gui, standaloneMenu);
-        
-        // Open the menu by default
-        standaloneMenu.open();
+        // Set up dynamic mirroring for the Flow Orbs GUI
+        this.setupDynamicMirroring(flowOrbsNode.gui, standaloneMenu);
         
         // Store reference for potential cleanup
         this.mirroredFlowOrbsMenu = standaloneMenu;
         
-        console.log("Created mirrored Flow Orbs menu");
+        console.log("Created dynamically mirrored Flow Orbs menu");
+    }
+
+    /**
+     * Create a dynamic mirror for any node's GUI
+     * @param {string} nodeId - The ID of the node whose GUI to mirror
+     * @param {string} menuTitle - Title for the mirrored menu
+     * @param {number} x - X position for the menu
+     * @param {number} y - Y position for the menu
+     * @returns {GUI|null} The created mirrored menu or null if node not found
+     */
+    mirrorNodeGUI(nodeId, menuTitle, x = 200, y = 200) {
+        const node = NodeMan.get(nodeId);
+        if (!node || !node.gui) {
+            console.error(`Node '${nodeId}' not found or has no GUI`);
+            return null;
+        }
+
+        // Create a standalone menu
+        const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, x, y);
+        
+        // Set up dynamic mirroring
+        this.setupDynamicMirroring(node.gui, standaloneMenu);
+        
+        // Add a method to manually refresh the mirror
+        standaloneMenu.refreshMirror = () => {
+            this.updateMirror(standaloneMenu);
+        };
+        
+        console.log(`Created dynamic mirror for node '${nodeId}' GUI`);
+        return standaloneMenu;
+    }
+
+    /**
+     * Global utility function to create dynamic mirrors
+     * Can be called from console: CustomManager.createDynamicMirror('nodeId', 'Mirror Title')
+     * @param {string} sourceType - Either 'menu' for guiMenus or 'node' for node GUI
+     * @param {string} sourceName - Name of the menu in guiMenus or node ID
+     * @param {string} title - Title for the mirrored menu
+     * @param {number} x - X position
+     * @param {number} y - Y position
+     * @returns {GUI|null} The created mirrored menu
+     */
+    createDynamicMirror(sourceType, sourceName, title, x = 200, y = 200) {
+        if (sourceType === 'menu') {
+            return this.mirrorGUIFolder(sourceName, title, x, y);
+        } else if (sourceType === 'node') {
+            return this.mirrorNodeGUI(sourceName, title, x, y);
+        } else {
+            console.error(`Invalid source type '${sourceType}'. Use 'menu' or 'node'.`);
+            return null;
+        }
     }
 
     /**
