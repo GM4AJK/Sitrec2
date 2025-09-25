@@ -456,6 +456,11 @@ const materialTypes = {
 
 const commonMaterialParams = {
     material: [["basic", "lambert", "phong", "physical"],"Type of Material lighting"],
+    wireframe: [false, "Display geometry object as a wireframe"],
+    edges: [false, "Display geometry object as edges"],
+    depthTest: [true, "Enable depth testing"],
+    opacity: [[1,0,1,0.01], "Opacity of the object"],
+    transparent: [false,"Enable transparency"],
 }
 
 const commonParams = {
@@ -479,12 +484,6 @@ const commonParams = {
     rotateX: [[0, -180, 180, 1], "Rotation about the X-axis"],
     rotateY: [[0, -180, 180, 1], "Rotation about the Y-axis"],
     rotateZ: [[0, -180, 180, 1], "Rotation about the Z-axis"],
-
-    wireframe: [false, "Display geometry object as a wireframe"],
-    edges: [false, "Display geometry object as edges"],
-    depthTest: [true, "Enable depth testing"],
-    opacity: [[1,0,1,0.01], "Opacity of the object"],
-    transparent: [false,"Enable transparency"],
    // color: "white",
 }
 
