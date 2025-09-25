@@ -25,8 +25,9 @@ class MockCustomManager {
         if (gui.folders) {
             for (const folder of gui.folders) {
                 const state = folder._closed ? 'closed' : 'open';
+                const visible = folder._hidden ? 'hidden' : 'visible';
                 const folderSig = this.createGUISignature(folder);
-                signature += `folder:${folder._title}:${state}:${folderSig};`;
+                signature += `folder:${folder._title}:${state}:${visible}:${folderSig};`;
             }
         }
         
@@ -121,14 +122,23 @@ class MockCustomManager {
     mirrorGUIControls(sourceGUI, targetGUI) {
         // Mirror controllers
         sourceGUI.controllers.forEach(controller => {
+            let mirrored;
             if (controller.constructor.name === 'ColorController') {
-                const mirrored = targetGUI.addColor(controller.object, controller.property);
-                if (mirrored && mirrored.name) mirrored.name(controller._name);
-                if (mirrored && mirrored.tooltip && controller._tooltip) mirrored.tooltip(controller._tooltip);
+                mirrored = targetGUI.addColor(controller.object, controller.property);
             } else {
-                const mirrored = targetGUI.add(controller.object, controller.property);
-                if (mirrored && mirrored.name) mirrored.name(controller._name);
-                if (mirrored && mirrored.tooltip && controller._tooltip) mirrored.tooltip(controller._tooltip);
+                mirrored = targetGUI.add(controller.object, controller.property);
+            }
+            
+            if (mirrored) {
+                if (mirrored.name) mirrored.name(controller._name);
+                if (mirrored.tooltip && controller._tooltip) mirrored.tooltip(controller._tooltip);
+                
+                // Copy visibility state - this is the key fix we're testing
+                if (controller._hidden) {
+                    if (mirrored.hide) mirrored.hide();
+                } else {
+                    if (mirrored.show) mirrored.show();
+                }
             }
         });
         
@@ -138,6 +148,13 @@ class MockCustomManager {
             this.mirrorGUIControls(folder, mirroredFolder);
             if (!folder._closed && mirroredFolder.open) {
                 mirroredFolder.open();
+            }
+            
+            // Copy folder visibility state
+            if (folder._hidden) {
+                if (mirroredFolder.hide) mirroredFolder.hide();
+            } else {
+                if (mirroredFolder.show) mirroredFolder.show();
             }
         });
     }
@@ -174,6 +191,64 @@ class MockCustomManager {
             this.hookFolderRecursively(subfolder, standaloneMenu, allHookedMethods);
         });
     }
+    
+    hookControllerVisibility(sourceFolder, standaloneMenu, allHookedMethods) {
+        sourceFolder.controllers.forEach(controller => {
+            this.hookSingleControllerVisibility(controller, standaloneMenu, allHookedMethods);
+        });
+    }
+    
+    hookSingleControllerVisibility(controller, standaloneMenu, allHookedMethods) {
+        // Hook hide method
+        if (typeof controller.hide === 'function') {
+            const originalHide = controller.hide.bind(controller);
+            allHookedMethods.push({ folder: controller, methodName: 'hide', originalMethod: originalHide });
+            
+            controller.hide = () => {
+                const result = originalHide();
+                setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                return result;
+            };
+        }
+        
+        // Hook show method
+        if (typeof controller.show === 'function') {
+            const originalShow = controller.show.bind(controller);
+            allHookedMethods.push({ folder: controller, methodName: 'show', originalMethod: originalShow });
+            
+            controller.show = () => {
+                const result = originalShow();
+                setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                return result;
+            };
+        }
+    }
+    
+    hookFolderVisibility(folder, standaloneMenu, allHookedMethods) {
+        // Hook hide method
+        if (typeof folder.hide === 'function') {
+            const originalHide = folder.hide.bind(folder);
+            allHookedMethods.push({ folder, methodName: 'hide', originalMethod: originalHide });
+            
+            folder.hide = () => {
+                const result = originalHide();
+                setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                return result;
+            };
+        }
+        
+        // Hook show method
+        if (typeof folder.show === 'function') {
+            const originalShow = folder.show.bind(folder);
+            allHookedMethods.push({ folder, methodName: 'show', originalMethod: originalShow });
+            
+            folder.show = () => {
+                const result = originalShow();
+                setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                return result;
+            };
+        }
+    }
 }
 
 // Mock dependencies
@@ -187,7 +262,9 @@ const mockGUI = {
     addFolder: jest.fn(),
     remove: jest.fn(),
     open: jest.fn(),
-    destroy: jest.fn()
+    destroy: jest.fn(),
+    hide: jest.fn(),
+    show: jest.fn()
 };
 
 const mockController = {
@@ -206,7 +283,9 @@ const mockController = {
     name: jest.fn().mockReturnThis(),
     tooltip: jest.fn().mockReturnThis(),
     listen: jest.fn().mockReturnThis(),
-    onChange: jest.fn().mockReturnThis()
+    onChange: jest.fn().mockReturnThis(),
+    hide: jest.fn().mockReturnThis(),
+    show: jest.fn().mockReturnThis()
 };
 
 const mockStandaloneMenu = {
@@ -281,17 +360,55 @@ describe('Dynamic GUI Mirroring', () => {
             expect(signature1).not.toBe(signature2);
         });
 
+        test('should detect visibility changes in signature', () => {
+            // Initial signature with visible controller
+            const signature1 = customManager.createGUISignature(mockGUI);
+            expect(signature1).toContain('ctrl:testController:NumberController:visible');
+            
+            // Hide the controller
+            mockController._hidden = true;
+            
+            // New signature should show hidden state
+            const signature2 = customManager.createGUISignature(mockGUI);
+            expect(signature2).toContain('ctrl:testController:NumberController:hidden');
+            expect(signature1).not.toBe(signature2);
+        });
+
         test('should handle folders in signature', () => {
             const mockFolder = {
                 _title: 'Test Folder',
                 _closed: false,
+                _hidden: false,
                 controllers: [],
                 folders: []
             };
             mockGUI.folders = [mockFolder];
             
             const signature = customManager.createGUISignature(mockGUI);
-            expect(signature).toContain('folder:Test Folder:open:');
+            expect(signature).toContain('folder:Test Folder:open:visible:');
+        });
+
+        test('should detect folder visibility changes in signature', () => {
+            const mockFolder = {
+                _title: 'Test Folder',
+                _closed: false,
+                _hidden: false,
+                controllers: [],
+                folders: []
+            };
+            mockGUI.folders = [mockFolder];
+            
+            // Initial signature with visible folder
+            const signature1 = customManager.createGUISignature(mockGUI);
+            expect(signature1).toContain('folder:Test Folder:open:visible:');
+            
+            // Hide the folder
+            mockFolder._hidden = true;
+            
+            // New signature should show hidden state
+            const signature2 = customManager.createGUISignature(mockGUI);
+            expect(signature2).toContain('folder:Test Folder:open:hidden:');
+            expect(signature1).not.toBe(signature2);
         });
     });
 
@@ -552,6 +669,197 @@ describe('Dynamic GUI Mirroring', () => {
             const updateMirrorCallCount = customManager.updateMirror.mock.calls.length;
             mockNewController.destroy();
             expect(customManager.updateMirror.mock.calls.length).toBe(updateMirrorCallCount + 1);
+        });
+    });
+
+    describe('visibility state copying', () => {
+        test('should copy controller visibility state when mirroring', () => {
+            // Create a hidden controller
+            const hiddenController = {
+                _name: 'hiddenController',
+                constructor: { name: 'NumberController' },
+                object: { value: 10 },
+                property: 'value',
+                _hidden: true
+            };
+            
+            // Create a visible controller
+            const visibleController = {
+                _name: 'visibleController',
+                constructor: { name: 'BooleanController' },
+                object: { flag: true },
+                property: 'flag',
+                _hidden: false
+            };
+            
+            // Set up source GUI with both controllers
+            mockGUI.controllers = [hiddenController, visibleController];
+            
+            // Create mock mirrored controllers with hide/show methods
+            const mockHiddenMirrored = {
+                name: jest.fn().mockReturnThis(),
+                hide: jest.fn(),
+                show: jest.fn()
+            };
+            
+            const mockVisibleMirrored = {
+                name: jest.fn().mockReturnThis(),
+                hide: jest.fn(),
+                show: jest.fn()
+            };
+            
+            // Mock the target GUI to return our mock controllers
+            const mockTargetGUI = {
+                add: jest.fn()
+                    .mockReturnValueOnce(mockHiddenMirrored)
+                    .mockReturnValueOnce(mockVisibleMirrored)
+            };
+            
+            // Mirror the controls
+            customManager.mirrorGUIControls(mockGUI, mockTargetGUI);
+            
+            // Verify that the hidden controller's mirror was hidden
+            expect(mockHiddenMirrored.hide).toHaveBeenCalled();
+            expect(mockHiddenMirrored.show).not.toHaveBeenCalled();
+            
+            // Verify that the visible controller's mirror was shown
+            expect(mockVisibleMirrored.show).toHaveBeenCalled();
+            expect(mockVisibleMirrored.hide).not.toHaveBeenCalled();
+        });
+
+        test('should copy folder visibility state when mirroring', () => {
+            // Create a hidden folder
+            const hiddenFolder = {
+                _title: 'Hidden Folder',
+                _closed: false,
+                _hidden: true,
+                controllers: [],
+                folders: []
+            };
+            
+            // Create a visible folder
+            const visibleFolder = {
+                _title: 'Visible Folder',
+                _closed: false,
+                _hidden: false,
+                controllers: [],
+                folders: []
+            };
+            
+            // Set up source GUI with both folders
+            const sourceGUI = {
+                controllers: [],
+                folders: [hiddenFolder, visibleFolder]
+            };
+            
+            // Create mock mirrored folders with hide/show methods
+            const mockHiddenMirroredFolder = {
+                hide: jest.fn(),
+                show: jest.fn(),
+                open: jest.fn()
+            };
+            
+            const mockVisibleMirroredFolder = {
+                hide: jest.fn(),
+                show: jest.fn(),
+                open: jest.fn()
+            };
+            
+            // Mock the target GUI to return our mock folders
+            const mockTargetGUI = {
+                addFolder: jest.fn()
+                    .mockReturnValueOnce(mockHiddenMirroredFolder)
+                    .mockReturnValueOnce(mockVisibleMirroredFolder)
+            };
+            
+            // Mirror the controls
+            customManager.mirrorGUIControls(sourceGUI, mockTargetGUI);
+            
+            // Verify that the hidden folder's mirror was hidden
+            expect(mockHiddenMirroredFolder.hide).toHaveBeenCalled();
+            expect(mockHiddenMirroredFolder.show).not.toHaveBeenCalled();
+            
+            // Verify that the visible folder's mirror was shown
+            expect(mockVisibleMirroredFolder.show).toHaveBeenCalled();
+            expect(mockVisibleMirroredFolder.hide).not.toHaveBeenCalled();
+        });
+
+        test('should trigger mirror update when visibility changes', () => {
+            // Reset controller visibility to false first
+            mockController._hidden = false;
+            
+            // Set up initial state
+            mockStandaloneMenu._mirrorSource = mockGUI;
+            const initialSignature = customManager.createGUISignature(mockGUI);
+            mockStandaloneMenu._lastMirrorState = initialSignature;
+            
+            // Change controller visibility
+            mockController._hidden = true;
+            
+            // Update mirror should detect the change
+            const spy = jest.spyOn(customManager, 'rebuildMirror');
+            customManager.updateMirror(mockStandaloneMenu);
+            
+            // Should trigger rebuild due to visibility change
+            expect(spy).toHaveBeenCalledWith(mockGUI, mockStandaloneMenu);
+        });
+
+        test('should hook controller visibility methods and trigger updates', async () => {
+            const allHookedMethods = [];
+            
+            // Hook controller visibility methods
+            customManager.hookControllerVisibility(mockGUI, mockStandaloneMenu, allHookedMethods);
+            
+            // Verify that hide and show methods were hooked
+            expect(allHookedMethods).toHaveLength(2); // hide and show methods
+            expect(allHookedMethods[0].methodName).toBe('hide');
+            expect(allHookedMethods[1].methodName).toBe('show');
+            
+            // Call the hooked hide method
+            mockController.hide();
+            
+            // Wait for the setTimeout to execute
+            await new Promise(resolve => setTimeout(resolve, 10));
+            
+            // Should trigger updateMirror
+            expect(customManager.updateMirror).toHaveBeenCalled();
+        });
+
+        test('should hook folder visibility methods and trigger updates', async () => {
+            const allHookedMethods = [];
+            
+            // Hook folder visibility methods
+            customManager.hookFolderVisibility(mockGUI, mockStandaloneMenu, allHookedMethods);
+            
+            // Verify that hide and show methods were hooked
+            expect(allHookedMethods).toHaveLength(2); // hide and show methods
+            expect(allHookedMethods[0].methodName).toBe('hide');
+            expect(allHookedMethods[1].methodName).toBe('show');
+            
+            // Call the hooked show method
+            mockGUI.show();
+            
+            // Wait for the setTimeout to execute
+            await new Promise(resolve => setTimeout(resolve, 10));
+            
+            // Should trigger updateMirror
+            expect(customManager.updateMirror).toHaveBeenCalled();
+        });
+
+        test('should hook single controller visibility methods', () => {
+            const allHookedMethods = [];
+            
+            // Hook single controller visibility methods
+            customManager.hookSingleControllerVisibility(mockController, mockStandaloneMenu, allHookedMethods);
+            
+            // Verify that hide and show methods were hooked
+            expect(allHookedMethods).toHaveLength(2);
+            expect(allHookedMethods[0].methodName).toBe('hide');
+            expect(allHookedMethods[1].methodName).toBe('show');
+            
+            // Verify the original methods are stored for cleanup
+            expect(typeof allHookedMethods[0].originalMethod).toBe('function');
+            expect(typeof allHookedMethods[1].originalMethod).toBe('function');
         });
     });
 });

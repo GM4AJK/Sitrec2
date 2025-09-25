@@ -1320,12 +1320,58 @@ export class CNode3DObject extends CNode3DGroup {
                 controller = gui.add(toHere, key).name(key).listen()
                     .onChange((v) => {
                         this.rebuild();
-                        setRenderOne(true)
+                        setRenderOne(true);
+                        // Note: updateControlVisibility() is already called in rebuild(), so no need to call it again
                     }).tooltip(tip);
             }
 
             controller.isCommon = isCommon;
 
+            // Store reference to controllers for visibility control
+            if (key === "applyMaterial") {
+                this.applyMaterialController = controller;
+            } else if (key === "geometry") {
+                this.geometryController = controller;
+            }
+
+        }
+    }
+
+    updateControlVisibility() {
+        // Hide/show material folder based on mode and applyMaterial setting
+        if (this.materialFolder) {
+            if (this.modelOrGeometry === "model" && !this.common.applyMaterial) {
+                this.materialFolder.hide();
+            } else {
+                this.materialFolder.show();
+            }
+        }
+
+        // Hide/show applyMaterial control based on mode
+        if (this.applyMaterialController) {
+            if (this.modelOrGeometry === "geometry") {
+                this.applyMaterialController.hide();
+            } else {
+                this.applyMaterialController.show();
+            }
+        }
+
+        // Hide/show model dropdown in geometry mode
+        if (this.modelMenu) {
+            if (this.modelOrGeometry === "geometry") {
+                this.modelMenu.hide();
+            } else {
+                this.modelMenu.show();
+            }
+        }
+
+        // Hide/show geometry dropdown in model mode
+        if (this.geometryController) {
+            if (this.modelOrGeometry === "model") {
+                this.geometryController.hide();
+            } else {
+                this.geometryController.show();
+            }
         }
     }
 
@@ -1338,6 +1384,8 @@ export class CNode3DObject extends CNode3DGroup {
             this.lastModelOrGeometry = this.modelOrGeometry;
             newType = true;
         }
+
+        this.updateControlVisibility();
 
         // remove the BB measure, in case we don't rebuild them
         NodeMan.disposeRemove(this.measureX, true);
@@ -1514,11 +1562,7 @@ export class CNode3DObject extends CNode3DGroup {
         this.propagateLayerMask()
         this.recalculate()
 
-
-
         this.rebuildBoundingBox();
-
-
 
     }
 

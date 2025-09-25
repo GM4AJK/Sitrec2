@@ -526,11 +526,16 @@ export class CCustomManager {
                         }, 0);
                     }
                     
-                    // If we just added a controller, hook its destroy method
+                    // If we just added a controller, hook its destroy method and visibility methods
                     if ((methodName === 'add' || methodName === 'addColor') && result && typeof result.destroy === 'function') {
                         if (folder._controllerHookFunction) {
                             folder._controllerHookFunction(result);
                         }
+                        
+                        // Also hook visibility methods for the new controller
+                        setTimeout(() => {
+                            this.hookSingleControllerVisibility(result, standaloneMenu, allHookedMethods);
+                        }, 0);
                     }
                     
                     // Defer update to next tick to allow GUI to stabilize
@@ -543,6 +548,12 @@ export class CCustomManager {
         // Hook into controller destroy method for any existing controllers
         console.log('About to call hookControllerDestroy for folder:', folder._title || 'root');
         this.hookControllerDestroy(folder, standaloneMenu);
+        
+        // Hook into visibility methods for existing controllers
+        this.hookControllerVisibility(folder, standaloneMenu, allHookedMethods);
+        
+        // Hook into visibility methods for this folder
+        this.hookFolderVisibility(folder, standaloneMenu, allHookedMethods);
         
         // Recursively hook into existing sub-folders
         console.log('Processing sub-folders, count:', folder.folders.length);
@@ -581,6 +592,75 @@ export class CCustomManager {
     }
 
     /**
+     * Hook into controller visibility methods to detect hide/show changes
+     * @param {GUI} sourceFolder - The folder containing controllers to hook
+     * @param {GUI} standaloneMenu - The mirrored menu to update
+     * @param {Array} allHookedMethods - Array to store hooked methods for cleanup
+     */
+    hookControllerVisibility(sourceFolder, standaloneMenu, allHookedMethods) {
+        sourceFolder.controllers.forEach(controller => {
+            // Hook show method
+            if (typeof controller.show === 'function') {
+                const originalShow = controller.show.bind(controller);
+                allHookedMethods.push({ folder: controller, methodName: 'show', originalMethod: originalShow });
+                
+                controller.show = (show) => {
+                    const result = originalShow(show);
+                    setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                    return result;
+                };
+            }
+        });
+    }
+
+    /**
+     * Hook into visibility methods for a single controller
+     * @param {Controller} controller - The controller to hook
+     * @param {GUI} standaloneMenu - The mirrored menu to update
+     * @param {Array} allHookedMethods - Array to store hooked methods for cleanup
+     */
+    hookSingleControllerVisibility(controller, standaloneMenu, allHookedMethods) {
+        // Hook show method
+        if (typeof controller.show === 'function') {
+            const originalShow = controller.show.bind(controller);
+            allHookedMethods.push({ folder: controller, methodName: 'show', originalMethod: originalShow });
+            
+            controller.show = (show) => {
+                const result = originalShow(show);
+                setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                return result;
+            };
+        }
+    }
+
+    /**
+     * Hook into folder visibility methods to detect hide/show changes
+     * @param {GUI} folder - The folder to hook visibility methods for
+     * @param {GUI} standaloneMenu - The mirrored menu to update
+     * @param {Array} allHookedMethods - Array to store hooked methods for cleanup
+     */
+    hookFolderVisibility(folder, standaloneMenu, allHookedMethods) {
+
+        // Hook show method
+        if (typeof folder.show === 'function') {
+            const originalShow = folder.show.bind(folder);
+            allHookedMethods.push({ folder, methodName: 'show', originalMethod: originalShow });
+
+            folder.show = ( show = true) => {
+                const result = originalShow(show);
+                setTimeout(() => this.updateMirror(standaloneMenu), 0);
+                return result;
+            };
+        }
+
+        // we don't hook the hide method
+        // because hide calls show(false)
+        // so we only need to hook the show method, and ensure the parameter is passed
+        // (and has the same default value of true)
+
+    }
+
+    /**
      * Update the mirror to match the current state of the source
      * @param {GUI} standaloneMenu - The mirrored menu to update
      */
@@ -601,6 +681,8 @@ export class CCustomManager {
 
     /**
      * Create a signature string representing the current state of a GUI folder
+     * i.e. what items it has in it, and what their visiblity state is
+     * it does NOT include values, only structure and visibility states.
      * @param {GUI} folder - The GUI folder to create a signature for
      * @returns {string} A signature representing the folder's structure
      */
@@ -619,11 +701,13 @@ export class CCustomManager {
         folder.folders.forEach(subfolder => {
             const name = subfolder._title || 'unnamed';
             const open = subfolder._closed ? 'closed' : 'open';
+            const visible = subfolder._hidden ? 'hidden' : 'visible';
             const subSignature = this.createGUISignature(subfolder);
-            parts.push(`folder:${name}:${open}:${subSignature}`);
+            parts.push(`folder:${name}:${open}:${visible}:${subSignature}`);
         });
         
-        return parts.join('|');
+        const sig =  parts.join('|');
+        return sig;
     }
 
     /**
@@ -714,6 +798,9 @@ export class CCustomManager {
                     if (controller._onChange) {
                         mirroredController.onChange(controller._onChange);
                     }
+                    
+                    // Copy visibility state
+                    mirroredController.show(!controller._hidden);
                 }
             } catch (error) {
                 console.warn(`Failed to mirror controller '${controller._name}':`, error);
@@ -732,6 +819,9 @@ export class CCustomManager {
             if (!folder._closed) {
                 mirroredFolder.open();
             }
+            
+            // Copy folder visibility state
+            mirroredFolder.show(!folder._hidden);
         });
     }
 
