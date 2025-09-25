@@ -20,7 +20,7 @@ function processQueue() {
 }
 
 // Function to load a texture with retries and delay on error
-export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, currentAttempt = 0, urlIndex = 0) {
+export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, currentAttempt = 0, urlIndex = 0, abortSignal = null) {
   // we expect url to be an array of 1 or more urls which we try in sequence until one works
   // if we are passed in a single string, convert it to an array
   if (typeof url === 'string') {
@@ -28,10 +28,32 @@ export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, current
   }
 
   return new Promise((resolve, reject) => {
+    // Check if already aborted
+    if (abortSignal?.aborted) {
+      reject(new Error('Aborted'));
+      return;
+    }
+
     const attemptLoad = () => {
+      // Check abort signal before each attempt
+      if (abortSignal?.aborted) {
+        activeRequests--;
+        processQueue();
+        reject(new Error('Aborted'));
+        return;
+      }
+
       loader.load(url[urlIndex],
           // On load
           (texture) => {
+            // Check if aborted after loading completes
+            if (abortSignal?.aborted) {
+              texture.dispose();
+              activeRequests--;
+              processQueue();
+              reject(new Error('Aborted'));
+              return;
+            }
 
       //  console.log(`Loaded ${url[urlIndex]} successfully`)
 
@@ -46,6 +68,13 @@ export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, current
             // this is no longer an active request
             activeRequests--;
 
+            // Check if aborted
+            if (abortSignal?.aborted) {
+              processQueue();
+              reject(new Error('Aborted'));
+              return;
+            }
+
             // If we have more urls to try, immediately try the next one
             if (urlIndex < url.length - 1) {
 //              console.log(`Failed to load ${url[urlIndex]}, trying next url`);
@@ -56,7 +85,12 @@ export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, current
             } else if (currentAttempt < maxRetries) {
               console.log(`Retry ${currentAttempt + 1}/${maxRetries} for ${url[urlIndex]} after delay. urlIndex=${urlIndex}`);
               setTimeout(() => {
-                loadTextureWithRetries(url, maxRetries, delay, currentAttempt + 1)
+                // Check abort signal before retry
+                if (abortSignal?.aborted) {
+                  reject(new Error('Aborted'));
+                  return;
+                }
+                loadTextureWithRetries(url, maxRetries, delay, currentAttempt + 1, urlIndex, abortSignal)
                     .then(resolve)
                     .catch(reject);
               }, delay);
@@ -68,6 +102,13 @@ export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, current
           }
       );
     };
+
+    // Set up abort listener
+    if (abortSignal) {
+      abortSignal.addEventListener('abort', () => {
+        reject(new Error('Aborted'));
+      });
+    }
 
     if (activeRequests < MAX_CONCURRENT_REQUESTS) {
       activeRequests++;

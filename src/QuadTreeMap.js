@@ -220,6 +220,13 @@ export class QuadTreeMap {
             }
         }
 
+        // Cleanup pass: Cancel pending loads for tiles that are no longer active in any view
+        this.forEachTile((tile) => {
+            if (!tile.tileLayers && (tile.isLoading || tile.isLoadingElevation)) {
+                tile.cancelPendingLoads();
+            }
+        });
+
 
         camera.updateMatrixWorld();
         const frustum = new Frustum();
@@ -275,6 +282,9 @@ export class QuadTreeMap {
             // if the tile is added but not active in ANY view, then we can remove it from scene
             // if it has a mesh and all the children are loaded
             if (tile.added && !(tile.tileLayers) && tile.mesh) {
+                // Cancel any pending loads for this inactive tile
+                tile.cancelPendingLoads();
+                
                 const child1 = this.getTile(tile.x * 2, tile.y * 2, tile.z + 1);
                 const child2 = this.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1);
                 const child3 = this.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1);

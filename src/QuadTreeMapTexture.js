@@ -132,7 +132,8 @@ class QuadTreeMapTexture extends QuadTreeMap {
     }
 
 
-    deactivateTile(x, y, z, layerMask = 0, instant = false) {
+    // note now defaults to instatn = true
+    deactivateTile(x, y, z, layerMask = 0, instant = true) {
         let tile = this.getTile(x, y, z);
         if (tile === undefined) {
             return;
@@ -146,6 +147,11 @@ class QuadTreeMapTexture extends QuadTreeMap {
             tile.tileLayers = tile.tileLayers & (~layerMask);
         }
         this.setTileLayerMask(tile, tile.tileLayers);
+
+        // If tile is no longer active in any view, cancel any pending loads
+        if (tile.tileLayers === 0) {
+            tile.cancelPendingLoads();
+        }
 
         if (instant && tile.tileLayers === 0) {
             // remove the tile immediately (if inactive in all views)
@@ -165,6 +171,11 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
 
         if (tile) {
+            // Don't activate tile if it's currently being cancelled - let the system retry later
+            if (tile.isCancelling) {
+                return false;
+            }
+            
             // tile already exists, just activate it
             // maybe later rebuild a mesh if we unloaded it
 
@@ -188,6 +199,20 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // Update the actual layer mask on the tile
             if (tile.mesh) {
                 this.setTileLayerMask(tile, tile.tileLayers);
+            }
+            
+            // Check if the tile needs its texture loaded (e.g., if it was aborted previously)
+            if (tile.mesh && tile.mesh.material && tile.mesh.material.wireframe && 
+                tile.textureUrl() && !tile.isLoading && !tile.isCancelling) {
+                console.log(`Reactivated tile ${tile.key()} needs texture loading`);
+                const key = `${z}/${x}/${y}`;
+                const materialPromise = tile.applyMaterial().catch(error => {
+                    // Don't log abort errors or cancellation errors - they're expected when tiles are cancelled
+                    if (error.message !== 'Aborted' && error.message !== 'Tile is being cancelled') {
+                        console.error(`Failed to load texture for reactivated tile ${key}:`, error);
+                    }
+                });
+                this.trackTileLoading(`${key}-reactivated`, materialPromise);
             }
             
             this.refreshDebugGeometry(tile); // Update debug geometry for reactivated tiles
@@ -232,7 +257,15 @@ class QuadTreeMapTexture extends QuadTreeMap {
         // Track the async texture loading
         const key = `${z}/${x}/${y}`;
         const materialPromise = tile.applyMaterial().catch(error => {
-            console.error(`Failed to load texture for tile ${key}:`, error);
+            // Don't log abort errors or cancellation errors - they're expected when tiles are cancelled
+            if (error.message !== 'Aborted' && error.message !== 'Tile is being cancelled') {
+                console.error(`Failed to load texture for tile ${key}:`, error);
+            } else if (error.message === 'Aborted') {
+                // Check if the tile is active again - this should now be rare since we prevent reactivation during cancellation
+                if (tile.tileLayers > 0) {
+                    console.error(`Tile ${key} ABORTED load texture but is still active - this should not happen with the new prevention logic.`);
+                }
+            }
             // Tile will remain with wireframe material if texture loading fails
         });
 

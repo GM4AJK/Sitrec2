@@ -101,6 +101,11 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             tile.tileLayers = tile.tileLayers & (~layerMask);
         }
         
+        // If tile is no longer active in any view, cancel any pending loads
+        if (tile.tileLayers === 0) {
+            tile.cancelPendingLoads();
+        }
+        
         this.refreshDebugGeometry(tile);
     }
 

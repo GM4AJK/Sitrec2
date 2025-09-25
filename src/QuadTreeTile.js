@@ -46,7 +46,11 @@ export class QuadTreeTile {
         this.loaded = false // Track if this tile has finished loading
         this.isLoading = false // Track if this tile is currently loading textures
         this.isLoadingElevation = false // Track if this tile is currently loading elevation data
+        this.isCancelling = false // Track if this tile is currently being cancelled
         this.highestAltitude = 0;
+        
+        // AbortController for cancelling texture loading
+        this.textureAbortController = null;
         
         // Private property to store tileLayers value
         this._tileLayers = undefined;
@@ -1264,8 +1268,11 @@ export class QuadTreeTile {
             return textureLoadPromises.get(cacheKey);
         }
         
+        // Create AbortController for this texture load
+        this.textureAbortController = new AbortController();
+        
         // Create and cache the loading promise to prevent concurrent loads
-        const loadPromise = loadTextureWithRetries(url).then((texture) => {
+        const loadPromise = loadTextureWithRetries(url, 3, 100, 0, 0, this.textureAbortController.signal).then((texture) => {
             let finalTexture = texture;
 
 
@@ -1285,7 +1292,14 @@ export class QuadTreeTile {
             materialCache.set(cacheKey, material);
             // Clean up the promise cache once loading is complete
             textureLoadPromises.delete(cacheKey);
+            // Clear the abort controller since loading is complete
+            this.textureAbortController = null;
             return material;
+        }).catch((error) => {
+            // Clean up on error
+            textureLoadPromises.delete(cacheKey);
+            this.textureAbortController = null;
+            throw error;
         });
         
         textureLoadPromises.set(cacheKey, loadPromise);
@@ -1311,53 +1325,65 @@ export class QuadTreeTile {
             return textureLoadPromises.get(materialCacheKey);
         }
         
+        // Create AbortController for this texture load
+        this.textureAbortController = new AbortController();
+        
         // Create cache key for the base texture (without zoom level)
         const baseCacheKey = `static_${url}_base`;
         
         // Create the material building promise
         const buildPromise = (async () => {
-            // First, ensure we have the base texture loaded and cached
-            let baseTexture;
-            if (materialCache.has(baseCacheKey)) {
-                baseTexture = materialCache.get(baseCacheKey).map;
-            } else {
-                // Check if we're already loading the base texture
-                if (textureLoadPromises.has(baseCacheKey)) {
-                    const cachedMaterial = await textureLoadPromises.get(baseCacheKey);
-                    baseTexture = cachedMaterial.map;
+            try {
+                // First, ensure we have the base texture loaded and cached
+                let baseTexture;
+                if (materialCache.has(baseCacheKey)) {
+                    baseTexture = materialCache.get(baseCacheKey).map;
                 } else {
-                    
-                    // Create and cache the base texture loading promise
-                    const baseLoadPromise = loadTextureWithRetries(url).then((texture) => {
-                        const baseMaterial = new MeshStandardMaterial({map: texture, color: "#ffffff"});
-                        materialCache.set(baseCacheKey, baseMaterial);
-                        // Clean up the promise cache once loading is complete
-                        textureLoadPromises.delete(baseCacheKey);
-                        return baseMaterial;
-                    });
-                    
-                    textureLoadPromises.set(baseCacheKey, baseLoadPromise);
-                    const cachedMaterial = await baseLoadPromise;
-                    baseTexture = cachedMaterial.map;
+                    // Check if we're already loading the base texture
+                    if (textureLoadPromises.has(baseCacheKey)) {
+                        const cachedMaterial = await textureLoadPromises.get(baseCacheKey);
+                        baseTexture = cachedMaterial.map;
+                    } else {
+                        
+                        // Create and cache the base texture loading promise
+                        const baseLoadPromise = loadTextureWithRetries(url, 3, 100, 0, 0, this.textureAbortController.signal).then((texture) => {
+                            const baseMaterial = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+                            materialCache.set(baseCacheKey, baseMaterial);
+                            // Clean up the promise cache once loading is complete
+                            textureLoadPromises.delete(baseCacheKey);
+                            return baseMaterial;
+                        });
+                        
+                        textureLoadPromises.set(baseCacheKey, baseLoadPromise);
+                        const cachedMaterial = await baseLoadPromise;
+                        baseTexture = cachedMaterial.map;
+                    }
                 }
+                
+                // Generate the appropriate mipmap level for this zoom
+                const mipmapTexture = globalMipmapGenerator.generateTiledMipmap(
+                    baseTexture, 
+                    this.z, 
+                    sourceDef.maxZoom,
+                    true  // isSeamless = true for static textures
+                );
+                
+                const material = new MeshStandardMaterial({map: mipmapTexture, color: "#ffffff"});
+                
+                // Cache the final material
+                materialCache.set(materialCacheKey, material);
+                // Clean up the promise cache once building is complete
+                textureLoadPromises.delete(materialCacheKey);
+                // Clear the abort controller since loading is complete
+                this.textureAbortController = null;
+                
+                return material;
+            } catch (error) {
+                // Clean up on error
+                textureLoadPromises.delete(materialCacheKey);
+                this.textureAbortController = null;
+                throw error;
             }
-            
-            // Generate the appropriate mipmap level for this zoom
-            const mipmapTexture = globalMipmapGenerator.generateTiledMipmap(
-                baseTexture, 
-                this.z, 
-                sourceDef.maxZoom,
-                true  // isSeamless = true for static textures
-            );
-            
-            const material = new MeshStandardMaterial({map: mipmapTexture, color: "#ffffff"});
-            
-            // Cache the final material
-            materialCache.set(materialCacheKey, material);
-            // Clean up the promise cache once building is complete
-            textureLoadPromises.delete(materialCacheKey);
-            
-            return material;
         })();
         
         textureLoadPromises.set(materialCacheKey, buildPromise);
@@ -1379,6 +1405,71 @@ export class QuadTreeTile {
         // Also clear the mipmap generator cache
         globalMipmapGenerator.clearCache();
         console.log('Material cache cleared');
+    }
+
+    // Method to cancel pending loads for this specific tile
+    cancelPendingLoads() {
+        let cancelledCount = 0;
+        
+        // Cancel texture loading if in progress
+        if (this.isLoading) {
+            // Set cancelling state to prevent reactivation during cancellation
+            this.isCancelling = true;
+            
+            // Abort the texture loading using AbortController
+            if (this.textureAbortController) {
+                console.log(`Aborting texture load for tile ${this.key()}`);
+                this.textureAbortController.abort();
+                this.textureAbortController = null;
+                cancelledCount++;
+            }
+            
+            const url = this.textureUrl();
+            if (url) {
+                const sourceDef = this.map.terrainNode.getMapSourceDef();
+                
+                // Determine the cache keys that might be associated with this tile
+                const hasXParam = url.includes(`/${this.x}/`) || url.includes(`x=${this.x}`) || url.includes(`&x=${this.x}`);
+                const hasYParam = url.includes(`/${this.y}/`) || url.includes(`y=${this.y}`) || url.includes(`&y=${this.y}`);
+                const hasZParam = url.includes(`/${this.z}/`) || url.includes(`z=${this.z}`) || url.includes(`&z=${this.z}`);
+                const isStaticTexture = !hasXParam && !hasYParam && !hasZParam;
+                
+                // Determine the single cache key for this tile's pending load
+                let cacheKey;
+                if (isStaticTexture && sourceDef.generateMipmaps) {
+                    // For static textures with mipmaps, use the material-specific key
+                    cacheKey = `static_${url}_z${this.z}`;
+                } else if (isStaticTexture) {
+                    // For static textures without mipmaps
+                    cacheKey = `static_${url}`;
+                } else {
+                    // For non-static (tile-specific) textures
+                    cacheKey = sourceDef.generateMipmaps ? `${url}_z${this.z}` : url;
+                }
+                
+                // Remove the pending promise for this tile
+                if (textureLoadPromises.has(cacheKey)) {
+                    console.log(`Removing pending promise for key: ${cacheKey}`);
+                    textureLoadPromises.delete(cacheKey);
+                }
+            }
+            
+            // Clear the texture loading state
+            this.isLoading = false;
+        }
+        
+        // Cancel elevation loading if in progress
+        if (this.isLoadingElevation) {
+            // Clear the elevation loading state
+            this.isLoadingElevation = false;
+            cancelledCount++;
+        }
+        
+        if (cancelledCount > 0) {
+            console.log(`Cancelled ${cancelledCount} pending load(s) for tile ${this.key()}`);
+            // Update debug geometry to reflect the cancelled loading state
+            this.updateDebugGeometry();
+        }
     }
 
     // Static method to remove a specific material from cache
@@ -2127,6 +2218,12 @@ export class QuadTreeTile {
             return Promise.resolve(this.mesh.material);
         }
 
+        // Don't start loading if cancellation is in progress
+        if (this.isCancelling) {
+            console.log(`Tile ${this.key()} is being cancelled, deferring material application`);
+            return Promise.reject(new Error('Tile is being cancelled'));
+        }
+
         // Set loading state and update debug geometry
         this.isLoading = true;
         this.updateDebugGeometry();
@@ -2140,17 +2237,20 @@ export class QuadTreeTile {
                         console.warn("QuadTreeTile.applyMaterial: map.scene is not defined, not adding mesh to scene (changed levels?)")
                         this.loaded = true; // Mark as loaded even if scene is not available
                         this.isLoading = false;
+                        this.isCancelling = false; // Clear cancelling state
                         this.updateDebugGeometry();
                         return resolve(material);
                     }
                     this.addAfterLoaded();
                     this.isLoading = false; // Clear loading state
+                    this.isCancelling = false; // Clear cancelling state
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
                     resolve(material)
                 }).catch((error) => {
                     // Even if material loading fails, mark tile as "loaded" to prevent infinite pending state
                     this.loaded = true;
                     this.isLoading = false; // Clear loading state on error
+                    this.isCancelling = false; // Clear cancelling state on error
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
                     reject(error);
                 })
@@ -2158,6 +2258,7 @@ export class QuadTreeTile {
                 // No texture URL available, but tile is still considered "loaded"
                 this.loaded = true;
                 this.isLoading = false;
+                this.isCancelling = false; // Clear cancelling state
                 this.updateDebugGeometry();
                 resolve(null)
             }
