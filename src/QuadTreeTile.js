@@ -1,6 +1,6 @@
 import {assert} from "./assert";
 import {boxMark, DebugArrowAB, removeDebugArrow} from "./threeExt";
-import {LLAToEUS} from "./LLA-ECEF-ENU";
+import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
 import {GlobalScene} from "./LocalFrame";
 import {getLocalDownVector, getLocalNorthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
 import {loadTextureWithRetries} from "./js/map33/material/QuadTextureMaterial";
@@ -792,7 +792,7 @@ export class QuadTreeTile {
     // NEW OPTIMIZED VERSION - works with elevation tiles at same or lower zoom levels
     // Tries exact coordinate match first, then searches parent tiles (lower zoom) and uses tile fractions
     // Applies elevation data directly from elevation tiles with bilinear interpolation
-    recalculateCurve(radius) {
+    recalculateCurve(radius=wgs84.RADIUS) {
 
         this.highestAltitude = 0;
 
@@ -2231,7 +2231,7 @@ export class QuadTreeTile {
         return new Promise((resolve, reject) => {
             if (this.textureUrl() != null) {
                 this.buildMaterial().then((material) => {
-                    this.mesh.material = material
+                     this.mesh.material = material
                     this.updateSkirtMaterial(); // Update skirt to use the same material
                     if (! this.map.scene) {
                         console.warn("QuadTreeTile.applyMaterial: map.scene is not defined, not adding mesh to scene (changed levels?)")

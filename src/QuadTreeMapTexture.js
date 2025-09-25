@@ -1,4 +1,4 @@
-import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
+import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {assert} from "./assert";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
@@ -251,7 +251,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         const center = LLAToEUS(lat, lon, 0);
 
         tile.setPosition(center); // ???
-        tile.recalculateCurve(wgs84.RADIUS)
+        tile.recalculateCurve()
         this.setTile(x, y, z, tile);
 
         // Track the async texture loading
