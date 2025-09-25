@@ -5,7 +5,6 @@ import {debugLog} from "./Globals";
 import {isLocal} from "./configUtils";
 import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./SphericalMath";
 import * as LAYER from "./LayerMasks";
-import {assert} from "./assert";
 
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -228,6 +227,7 @@ export class QuadTreeMap {
         });
 
 
+        // we need to make sure the fustrum is up to date, as we use it to determine visiblity.
         camera.updateMatrixWorld();
         const frustum = new Frustum();
         frustum.setFromProjectionMatrix(new Matrix4().multiplyMatrices(
@@ -237,27 +237,39 @@ export class QuadTreeMap {
         //})
 
 
-        // First pass: Check for parent tiles that can now be deactivated because their children are loaded and active in this layer
-        // Only do this for texture maps, not elevation maps, since elevation tiles are used by texture tiles at different zoom levels
+        // First pass: Check for parent tiles that can now be deactivated because
+        // their children are loaded and active in this layer
+        // Only do this for texture maps, not elevation maps, since elevation tiles
+        // are used by texture tiles at different zoom levels
+        // (i.e. elevation tiles are never deactivated if they have active children)
+        // Note: the deactivation here is on a per-layer basis
+        // the tile will only get removed from the scene when its on no layers
         if (this.constructor.name === 'QuadTreeMapTexture') {
             this.forEachTile((tile) => {
 
-                if (tile.mesh) {
-                    if (tile.mesh.layers.mask !== tile.tileLayers) {
-                        const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for error
-                        const timeSinceSet = tile.mesh._lastLayerSetTime ? Date.now() - tile.mesh._lastLayerSetTime : 'unknown';
-                        const lastSetMask = tile.mesh._lastLayerSetMask || 'unknown';
-                        console.error(`LAYERS MISMATCH DETECTED: key=${key}, loaded=(${tile.loaded}), mesh.layers.mask=${tile.mesh.layers.mask.toString(2)} (${tile.mesh.layers.mask}), tile.tileLayers=${tile.tileLayers.toString(2)} (${tile.tileLayers})`);
-                        console.error(`Debug info: lastSetMask=${lastSetMask.toString ? lastSetMask.toString(2) : lastSetMask}, timeSinceSet=${timeSinceSet}ms`);
-                        console.trace('Stack trace for layers mismatch:');
-                    }
-                    const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for assertion
-                    assert(tile.mesh.layers.mask === tile.tileLayers, `Tile layers mismatch. key=${key}, loaded=(${tile.loaded}), tile. mesh.layers.mask=${tile.mesh.layers.mask.toString(2)}, tile.tileLayers=${tile.tileLayers.toString(2)}`)
-                }
+                // if (tile.mesh) {
+                //     if (tile.mesh.layers.mask !== tile.tileLayers) {
+                //         const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for error
+                //         const timeSinceSet = tile.mesh._lastLayerSetTime ? Date.now() - tile.mesh._lastLayerSetTime : 'unknown';
+                //         const lastSetMask = tile.mesh._lastLayerSetMask || 'unknown';
+                //         console.error(`LAYERS MISMATCH DETECTED: key=${key}, loaded=(${tile.loaded}), mesh.layers.mask=${tile.mesh.layers.mask.toString(2)} (${tile.mesh.layers.mask}), tile.tileLayers=${tile.tileLayers.toString(2)} (${tile.tileLayers})`);
+                //         console.error(`Debug info: lastSetMask=${lastSetMask.toString ? lastSetMask.toString(2) : lastSetMask}, timeSinceSet=${timeSinceSet}ms`);
+                //         console.trace('Stack trace for layers mismatch:');
+                //     }
+                //     const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for assertion
+                //     assert(tile.mesh.layers.mask === tile.tileLayers, `Tile layers mismatch. key=${key}, loaded=(${tile.loaded}), tile. mesh.layers.mask=${tile.mesh.layers.mask.toString(2)}, tile.tileLayers=${tile.tileLayers.toString(2)}`)
+                // }
 
 
-                // Skip if tile is not active in this view or doesn't have potential children
-                if (!(tile.tileLayers & tileLayers) || tile.z >= this.maxZoom) return;
+                // Skip if tile is not active in this layer
+                // if (!(tile.tileLayers & tileLayers)) return;
+
+                // If we cant have children (at max zoom), then no need for the child checks.
+                if (tile.z >= this.maxZoom) return;
+
+                // if the parent tile is still loading, hold off on checking children
+                // we don't want to deactivate a parent tile before its texture is loaded
+                if (tile.isLoading) return;
 
                 // Check if all four children exist and are loaded
                 const child1 = this.getTile(tile.x * 2, tile.y * 2, tile.z + 1);
@@ -267,10 +279,13 @@ export class QuadTreeMap {
 
                 if (child1 && child2 && child3 && child4 &&
                     (child1.tileLayers & tileLayers) && (child2.tileLayers & tileLayers) &&
-                    (child3.tileLayers & tileLayers) && (child4.tileLayers & tileLayers) &&
-                    child1.loaded && child2.loaded && child3.loaded && child4.loaded) {
-                    // All children are active in this view and loaded, safe to deactivate parent texture tile for this view
-                    this.deactivateTile(tile.x, tile.y, tile.z, tileLayers);
+                    (child3.tileLayers & tileLayers) && (child4.tileLayers & tileLayers)
+                    && child1.loaded && child2.loaded && child3.loaded && child4.loaded
+                    && child1.added && child2.added && child3.added && child4.added
+                ) {
+                    // All children are active in this view and loaded, and aded to the scene
+                    // safe to FULLY deactivate parent texture tile for this view
+                    this.deactivateTile(tile.x, tile.y, tile.z, tileLayers, true);
                 }
             });
         }
@@ -363,7 +378,8 @@ export class QuadTreeMap {
 
             // Check if this view needs subdivision
             let shouldSubdivide = false;
-            
+
+            // it needs to be both visible and large
             if (thisViewVisible && thisViewScreenSize > subdivideSize) {
                 shouldSubdivide = true;
             }
@@ -394,10 +410,11 @@ export class QuadTreeMap {
                 }
 
 
+                // wait, this will not work, as we ar in an iterator!!!! return just goes to the next one
                 return; // just doing one tile group (four tiles) at a time, might want to change this later
             }
 
-            // Check if we should merge - this view doesn't need subdivision
+            // Check if we should merge the children - the tile does not need subdivision
             if (!(tile.tileLayers & tileLayers) && !shouldSubdivide) {
                 // if the tile is inactive in this view and the screen size is small enough, merge the tile
                 // we will merge the children tiles into this tile
@@ -414,7 +431,8 @@ export class QuadTreeMap {
 
 
                     // merge the children into this tile
-                    this.activateTile(tile.x, tile.y, tile.z, tileLayers); // activate this tile
+                    // since we have childern, we know that activating the tile will be instant as the material will be loaded
+                    this.activateTile(tile.x, tile.y, tile.z, tileLayers); // activate this parent tile
                     this.deactivateTile(child1.x, child1.y, child1.z, tileLayers, true); // deactivate the child tile for this view, instantly
                     this.deactivateTile(child2.x, child2.y, child2.z, tileLayers, true); // deactivate the child tile for this view, instantly
                     this.deactivateTile(child3.x, child3.y, child3.z, tileLayers, true); // deactivate the child tile for this view, instantly

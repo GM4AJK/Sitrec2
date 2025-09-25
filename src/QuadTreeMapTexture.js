@@ -132,8 +132,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
     }
 
 
-    // note now defaults to instatn = true
-    deactivateTile(x, y, z, layerMask = 0, instant = true) {
+    deactivateTile(x, y, z, layerMask = 0, instant = false) {
         let tile = this.getTile(x, y, z);
         if (tile === undefined) {
             return;
@@ -146,7 +145,14 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // Clear only the specified layer bits using bitwise AND with NOT mask
             tile.tileLayers = tile.tileLayers & (~layerMask);
         }
-        this.setTileLayerMask(tile, tile.tileLayers);
+
+
+        if (instant) {
+            // defer updating the mesh mask.
+            // if all the children are loaded, then the parent will be updated automatically
+            // (this will be called again from the "first pass" code in subdivideTiles)
+            this.setTileLayerMask(tile, tile.tileLayers);
+        }
 
         // If tile is no longer active in any view, cancel any pending loads
         if (tile.tileLayers === 0) {
@@ -204,7 +210,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // Check if the tile needs its texture loaded (e.g., if it was aborted previously)
             if (tile.mesh?.material?.wireframe && 
                 tile.textureUrl() && !tile.isLoading && !tile.isCancelling) {
-                console.log(`Reactivated tile ${tile.key()} needs texture loading`);
+//                console.log(`Reactivated tile ${tile.key()} needs texture loading`);
                 const key = `${z}/${x}/${y}`;
                 const materialPromise = tile.applyMaterial().catch(error => {
                     // Don't log abort errors or cancellation errors - they're expected when tiles are cancelled

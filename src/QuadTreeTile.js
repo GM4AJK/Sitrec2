@@ -18,7 +18,15 @@ import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
 
-const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020"})
+//const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020", transparent: true, opacity: 0.5})
+
+// invisible material used when we don't want to see anything but still need a mesh
+const tileMaterial = new MeshStandardMaterial({
+    wireframe: true,
+    color: '#ffffff',
+    transparent: true,
+    opacity: 0.0
+});
 
 // Static cache for materials to avoid loading the same texture multiple times
 const materialCache = new Map();
@@ -1418,7 +1426,7 @@ export class QuadTreeTile {
             
             // Abort the texture loading using AbortController
             if (this.textureAbortController) {
-                console.log(`Aborting texture load for tile ${this.key()}`);
+//                console.log(`Aborting texture load for tile ${this.key()}`);
                 this.textureAbortController.abort();
                 this.textureAbortController = null;
                 cancelledCount++;
@@ -1449,7 +1457,7 @@ export class QuadTreeTile {
                 
                 // Remove the pending promise for this tile
                 if (textureLoadPromises.has(cacheKey)) {
-                    console.log(`Removing pending promise for key: ${cacheKey}`);
+//                    console.log(`Removing pending promise for key: ${cacheKey}`);
                     textureLoadPromises.delete(cacheKey);
                 }
             }
@@ -1466,7 +1474,7 @@ export class QuadTreeTile {
         }
         
         if (cancelledCount > 0) {
-            console.log(`Cancelled ${cancelledCount} pending load(s) for tile ${this.key()}`);
+//            console.log(`Cancelled ${cancelledCount} pending load(s) for tile ${this.key()}`);
             // Update debug geometry to reflect the cancelled loading state
             this.updateDebugGeometry();
         }
@@ -2293,7 +2301,7 @@ export class QuadTreeTile {
         // Build and create skirt mesh
         this.buildSkirtGeometry();
         // Create skirt mesh with the same material as the main tile initially
-        this.skirtMesh = new Mesh(this.skirtGeometry, tileMaterial);
+         this.skirtMesh = new Mesh(this.skirtGeometry, tileMaterial);
 //        console.log(`buildMesh: ${this.key()} - skirtMesh created with layers.mask=${this.skirtMesh.layers.mask.toString(2)} (${this.skirtMesh.layers.mask})`);
     }
 
