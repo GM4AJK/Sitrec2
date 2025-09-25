@@ -249,6 +249,36 @@ class MockCustomManager {
             };
         }
     }
+    
+    getHeuristicOrder(gui) {
+        const children = [];
+        
+        // Special handling for common folder names that should appear first
+        const priorityFolderNames = ['Material', 'Geometry', 'Transform', 'Animation'];
+        
+        // Add priority folders first
+        priorityFolderNames.forEach(priorityName => {
+            const folder = gui.folders.find(f => f._title === priorityName);
+            if (folder) {
+                children.push({ type: 'folder', element: folder });
+            }
+        });
+        
+        // Add controllers
+        gui.controllers.forEach(controller => {
+            children.push({ type: 'controller', element: controller });
+        });
+        
+        // Add remaining folders
+        gui.folders.forEach(folder => {
+            // Skip if already added as priority folder
+            if (!priorityFolderNames.includes(folder._title)) {
+                children.push({ type: 'folder', element: folder });
+            }
+        });
+        
+        return children;
+    }
 }
 
 // Mock dependencies
@@ -860,6 +890,117 @@ describe('Dynamic GUI Mirroring', () => {
             // Verify the original methods are stored for cleanup
             expect(typeof allHookedMethods[0].originalMethod).toBe('function');
             expect(typeof allHookedMethods[1].originalMethod).toBe('function');
+        });
+    });
+
+    describe('GUI element ordering', () => {
+        test('should maintain proper order when mirroring mixed controllers and folders', () => {
+            // Create a GUI structure similar to CNode3DObject:
+            // 1. Material folder (should appear first)
+            // 2. Model or Geometry controller
+            // 3. Model controller
+            // 4. Other controllers
+            
+            const materialFolder = {
+                _title: 'Material',
+                _closed: false,
+                _hidden: false,
+                controllers: [
+                    {
+                        _name: 'material',
+                        constructor: { name: 'OptionController' },
+                        object: { material: 'lambert' },
+                        property: 'material',
+                        _values: ['basic', 'lambert', 'phong'],
+                        _hidden: false
+                    }
+                ],
+                folders: []
+            };
+            
+            const modelOrGeometryController = {
+                _name: 'Model or Geometry',
+                constructor: { name: 'OptionController' },
+                object: { modelOrGeometry: 'geometry' },
+                property: 'modelOrGeometry',
+                _values: ['geometry', 'model'],
+                _hidden: false
+            };
+            
+            const modelController = {
+                _name: 'Model',
+                constructor: { name: 'OptionController' },
+                object: { selectModel: 'F/A-18F' },
+                property: 'selectModel',
+                _values: ['F/A-18F', 'F-15', 'A-10'],
+                _hidden: false
+            };
+            
+            const displayBoundingBoxController = {
+                _name: 'Display Bounding Box',
+                constructor: { name: 'BooleanController' },
+                object: { displayBoundingBox: false },
+                property: 'displayBoundingBox',
+                _hidden: false
+            };
+            
+            // Set up source GUI with the expected order
+            const sourceGUI = {
+                controllers: [modelOrGeometryController, modelController, displayBoundingBoxController],
+                folders: [materialFolder]
+            };
+            
+            // Mock the target GUI to track the order of additions
+            const additionOrder = [];
+            const mockTargetGUI = {
+                addFolder: jest.fn((name) => {
+                    additionOrder.push({ type: 'folder', name });
+                    return {
+                        add: jest.fn().mockReturnValue({ name: jest.fn().mockReturnThis() }),
+                        open: jest.fn(),
+                        show: jest.fn()
+                    };
+                }),
+                add: jest.fn((obj, prop, values) => {
+                    const controllerName = obj[prop] !== undefined ? 
+                        Object.keys(obj).find(key => obj[key] === obj[prop]) || prop : prop;
+                    additionOrder.push({ type: 'controller', name: controllerName });
+                    return { 
+                        name: jest.fn().mockReturnThis(),
+                        show: jest.fn()
+                    };
+                })
+            };
+            
+            // Use the heuristic ordering (which should put Material folder first)
+            const childrenInOrder = customManager.getHeuristicOrder(sourceGUI);
+            
+            // Verify that Material folder comes first
+            expect(childrenInOrder[0]).toEqual({ type: 'folder', element: materialFolder });
+            expect(childrenInOrder[1]).toEqual({ type: 'controller', element: modelOrGeometryController });
+            expect(childrenInOrder[2]).toEqual({ type: 'controller', element: modelController });
+            expect(childrenInOrder[3]).toEqual({ type: 'controller', element: displayBoundingBoxController });
+        });
+
+        test('should handle priority folder ordering correctly', () => {
+            // Create folders with different priority levels
+            const materialFolder = { _title: 'Material', controllers: [], folders: [] };
+            const geometryFolder = { _title: 'Geometry', controllers: [], folders: [] };
+            const animationFolder = { _title: 'Animation', controllers: [], folders: [] };
+            const customFolder = { _title: 'Custom Settings', controllers: [], folders: [] };
+            
+            const sourceGUI = {
+                controllers: [],
+                folders: [customFolder, animationFolder, materialFolder, geometryFolder] // Mixed order
+            };
+            
+            const childrenInOrder = customManager.getHeuristicOrder(sourceGUI);
+            
+            // Should prioritize Material, Geometry, Animation in that order, then others
+            expect(childrenInOrder[0]).toEqual({ type: 'folder', element: materialFolder });
+            expect(childrenInOrder[1]).toEqual({ type: 'folder', element: geometryFolder });
+            expect(childrenInOrder[2]).toEqual({ type: 'folder', element: animationFolder });
+            expect(childrenInOrder[3]).toEqual({ type: 'folder', element: customFolder });
         });
     });
 });

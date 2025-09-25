@@ -179,10 +179,54 @@ GUI.prototype.tooltip = function(tooltip) {
 Controller.prototype.moveToFirst = function() {
     const parentElement = this.domElement.parentElement;
     if (parentElement) {
-        parentElement.insertBefore(this.domElement, parentElement.firstChild);
+       parentElement.insertBefore(this.domElement, parentElement.firstChild);
+       
+       // Find the parent GUI and trigger a refresh of any mirrored GUIs
+       let parentGui = this.parent;
+       if (parentGui && parentGui._triggerMirrorRefresh) {
+           parentGui._triggerMirrorRefresh();
+       }
     }
     return this; // Return the controller to allow method chaining
 };
+
+// Move a controller to the end of its parent
+
+
+Controller.prototype.moveToEnd = function() {
+    const parentElement = this.domElement.parentElement;
+    if (parentElement) {
+        parentElement.appendChild(this.domElement);
+        
+        // Find the parent GUI and trigger a refresh of any mirrored GUIs
+        let parentGui = this.parent;
+        if (parentGui && parentGui._triggerMirrorRefresh) {
+            parentGui._triggerMirrorRefresh();
+        }
+    }
+    return this; // Return the controller to allow method chaining
+};
+
+
+GUI.prototype.moveToEnd = function() {
+    const parentElement = this.domElement.parentElement;
+    if (parentElement) {
+        parentElement.appendChild(this.domElement);
+        
+        // Trigger a refresh of any mirrored GUIs
+        this._triggerMirrorRefresh();
+    }
+    return this; // Return the controller to allow method chaining
+}
+
+// Helper method to trigger refresh of mirrored GUIs
+GUI.prototype._triggerMirrorRefresh = function() {
+    // Dispatch a custom event that mirroring systems can listen for
+    const event = new CustomEvent('gui-order-changed', {
+        detail: { gui: this }
+    });
+    document.dispatchEvent(event);
+}
 
 Controller.prototype.moveAfter = function(name) {
     const parentElement = this.domElement.parentElement;
@@ -192,6 +236,12 @@ Controller.prototype.moveAfter = function(name) {
         const child = children.find(c => c.querySelector('.name').innerText === name);
         if (child) {
             parentElement.insertBefore(this.domElement, child.nextSibling);
+            
+            // Find the parent GUI and trigger a refresh of any mirrored GUIs
+            let parentGui = this.parent;
+            if (parentGui && parentGui._triggerMirrorRefresh) {
+                parentGui._triggerMirrorRefresh();
+            }
         } else {
             console.warn("moveAfter: Could not find child with name " + name);
         }

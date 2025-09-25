@@ -51,8 +51,64 @@ import {configParams} from "./login";
 
 export class CCustomManager {
     constructor() {
+        // Listen for GUI order change events to refresh mirrors
+        document.addEventListener('gui-order-changed', (event) => {
+            this.handleGUIOrderChange(event.detail.gui);
+        });
     }
 
+    /**
+     * Handle GUI order change events by refreshing any mirrors that depend on the changed GUI
+     * @param {GUI} changedGui - The GUI that had its order changed
+     */
+    handleGUIOrderChange(changedGui) {
+        // Find all standalone menus that mirror this GUI or any of its ancestors
+        const allContainers = Array.from(document.querySelectorAll('[id^="menuBarDiv_"]'));
+        
+        allContainers.forEach((container) => {
+            const gui = container._gui;
+            if (gui && gui._standaloneContainer && gui._mirrorSource) {
+                // Check if this mirror depends on the changed GUI
+                if (this.isGUIRelated(gui._mirrorSource, changedGui)) {
+                    // Force an immediate update of this mirror
+                    setTimeout(() => this.updateMirror(gui), 0);
+                }
+            }
+        });
+    }
+
+    /**
+     * Check if a source GUI is related to (contains or is contained by) a changed GUI
+     * @param {GUI} sourceGui - The source GUI of a mirror
+     * @param {GUI} changedGui - The GUI that was changed
+     * @returns {boolean} True if they are related
+     */
+    isGUIRelated(sourceGui, changedGui) {
+        // Check if they are the same GUI
+        if (sourceGui === changedGui) {
+            return true;
+        }
+        
+        // Check if changedGui is a child of sourceGui
+        let current = changedGui.parent;
+        while (current) {
+            if (current === sourceGui) {
+                return true;
+            }
+            current = current.parent;
+        }
+        
+        // Check if sourceGui is a child of changedGui
+        current = sourceGui.parent;
+        while (current) {
+            if (current === changedGui) {
+                return true;
+            }
+            current = current.parent;
+        }
+        
+        return false;
+    }
 
     setup() {
 
@@ -747,82 +803,241 @@ export class CCustomManager {
      * @param {GUI} target - Target GUI folder
      */
     mirrorGUIControls(source, target) {
-        // Mirror all controllers
-        source.controllers.forEach(controller => {
-            try {
-                // Get the controller properties
-                const object = controller.object;
-                const property = controller.property;
-                const name = controller._name;
-                
-                // Create the mirrored controller based on type
-                let mirroredController;
-                
-                if (controller.constructor.name === 'ColorController') {
-                    mirroredController = target.addColor(object, property);
-                } else if (controller.constructor.name === 'OptionController') {
-                    // For dropdown/select controllers
-                    mirroredController = target.add(object, property, controller._values);
-                } else if (controller.constructor.name === 'NumberController') {
-                    // For numeric controllers with min/max
-                    if (controller._min !== undefined && controller._max !== undefined) {
-                        mirroredController = target.add(object, property, controller._min, controller._max, controller._step);
-                    } else {
-                        mirroredController = target.add(object, property);
-                    }
-                } else {
-                    // For boolean and other basic controllers
-                    mirroredController = target.add(object, property);
-                }
-                
-                // Copy controller properties
-                if (mirroredController) {
-                    mirroredController.name(name);
-                    
-                    // Copy tooltip if it exists
-                    if (controller._tooltip) {
-                        mirroredController.tooltip(controller._tooltip);
-                    }
-                    
-                    // Copy listen state
-                    if (controller._listening) {
-                        mirroredController.listen();
-                    }
-                    
-                    // Copy elastic properties for numeric controllers
-                    if (controller._elastic && mirroredController.elastic) {
-                        mirroredController.elastic(controller._elastic.max, controller._elastic.maxMax, controller._elastic.allowNegative);
-                    }
-                    
-                    // Copy onChange handler by referencing the original controller's onChange
-                    if (controller._onChange) {
-                        mirroredController.onChange(controller._onChange);
-                    }
-                    
-                    // Copy visibility state
-                    mirroredController.show(!controller._hidden);
-                }
-            } catch (error) {
-                console.warn(`Failed to mirror controller '${controller._name}':`, error);
+        // Get all child elements (controllers and folders) in DOM order
+        const childElements = this.getGUIChildrenInOrder(source);
+        
+        // Process each child element in the order they appear in the DOM
+        childElements.forEach(child => {
+            if (child.type === 'controller') {
+                this.mirrorController(child.element, target);
+            } else if (child.type === 'folder') {
+                this.mirrorFolder(child.element, target);
+            }
+        });
+    }
+
+    /**
+     * Get all GUI children (controllers and folders) in their creation order
+     * This uses a heuristic approach to maintain the visual order as much as possible
+     * @param {GUI} gui - The GUI to get children from
+     * @returns {Array} Array of objects with {type: 'controller'|'folder', element: controller|folder}
+     */
+    getGUIChildrenInOrder(gui) {
+        const children = [];
+        
+        try {
+            // Try to use DOM order first
+            const domBasedOrder = this.getDOMBasedOrder(gui);
+            if (domBasedOrder.length === gui.controllers.length + gui.folders.length) {
+                return domBasedOrder;
+            }
+            
+            // Fallback: Use a heuristic that puts folders first if they have specific names
+            // This handles the common case where Material folder should appear first
+            return this.getHeuristicOrder(gui);
+            
+        } catch (error) {
+            console.warn('Error in ordering, using fallback:', error);
+            return this.getFallbackChildrenOrder(gui);
+        }
+    }
+
+    /**
+     * Try to get children in DOM order
+     * @param {GUI} gui - The GUI to get children from
+     * @returns {Array} Array of objects with {type: 'controller'|'folder', element: controller|folder}
+     */
+    getDOMBasedOrder(gui) {
+        const children = [];
+        
+        // Get the DOM element of the GUI
+        const domElement = gui.domElement;
+        if (!domElement) {
+            return [];
+        }
+        
+        // In lil-gui, the actual children are in the $children container
+        // Try to find the children container
+        let childrenContainer = gui.$children;
+        if (!childrenContainer) {
+            // Fallback: look for the children container in the DOM
+            childrenContainer = domElement.querySelector('.children');
+            if (!childrenContainer) {
+                // Last resort: use the domElement itself
+                childrenContainer = domElement;
+            }
+        }
+        
+        // Get all child elements in DOM order from the children container
+        const childNodes = Array.from(childrenContainer.children);
+        
+        childNodes.forEach(childNode => {
+            // Check if this DOM element corresponds to a controller
+            const controller = gui.controllers.find(ctrl => {
+                return ctrl.domElement === childNode || 
+                       (ctrl.domElement && ctrl.domElement.parentElement === childNode) ||
+                       (ctrl.domElement && childNode.contains && childNode.contains(ctrl.domElement));
+            });
+            
+            if (controller) {
+                children.push({ type: 'controller', element: controller });
+                return;
+            }
+            
+            // Check if this DOM element corresponds to a folder
+            const folder = gui.folders.find(fld => {
+                return fld.domElement === childNode || 
+                       (fld.domElement && fld.domElement.parentElement === childNode) ||
+                       (fld.domElement && childNode.contains && childNode.contains(fld.domElement));
+            });
+            
+            if (folder) {
+                children.push({ type: 'folder', element: folder });
             }
         });
         
-        // Mirror all folders recursively
-        source.folders.forEach(folder => {
-            const folderName = folder._title;
-            const mirroredFolder = target.addFolder(folderName);
+        return children;
+    }
+
+    /**
+     * Use heuristics to determine a reasonable order
+     * @param {GUI} gui - The GUI to get children from
+     * @returns {Array} Array of objects with {type: 'controller'|'folder', element: controller|folder}
+     */
+    getHeuristicOrder(gui) {
+        const children = [];
+        
+        // Special handling for common folder names that should appear first
+        const priorityFolderNames = ['Material', 'Geometry', 'Transform', 'Animation'];
+        
+        // Add priority folders first
+        priorityFolderNames.forEach(priorityName => {
+            const folder = gui.folders.find(f => f._title === priorityName);
+            if (folder) {
+                children.push({ type: 'folder', element: folder });
+            }
+        });
+        
+        // Add controllers
+        gui.controllers.forEach(controller => {
+            children.push({ type: 'controller', element: controller });
+        });
+        
+        // Add remaining folders
+        gui.folders.forEach(folder => {
+            // Skip if already added as priority folder
+            if (!priorityFolderNames.includes(folder._title)) {
+                children.push({ type: 'folder', element: folder });
+            }
+        });
+        
+        return children;
+    }
+
+    /**
+     * Fallback method to get children in the original order (controllers first, then folders)
+     * @param {GUI} gui - The GUI to get children from
+     * @returns {Array} Array of objects with {type: 'controller'|'folder', element: controller|folder}
+     */
+    getFallbackChildrenOrder(gui) {
+        const children = [];
+        
+        // Add all controllers first
+        gui.controllers.forEach(controller => {
+            children.push({ type: 'controller', element: controller });
+        });
+        
+        // Add all folders after
+        gui.folders.forEach(folder => {
+            children.push({ type: 'folder', element: folder });
+        });
+        
+        return children;
+    }
+
+    /**
+     * Mirror a single controller
+     * @param {Controller} controller - The controller to mirror
+     * @param {GUI} target - The target GUI to add the mirrored controller to
+     */
+    mirrorController(controller, target) {
+        try {
+            // Get the controller properties
+            const object = controller.object;
+            const property = controller.property;
+            const name = controller._name;
             
-            // Recursively mirror the folder contents
-            this.mirrorGUIControls(folder, mirroredFolder);
+            // Create the mirrored controller based on type
+            let mirroredController;
             
-            // Copy folder open/closed state
-            if (!folder._closed) {
-                mirroredFolder.open();
+            if (controller.constructor.name === 'ColorController') {
+                mirroredController = target.addColor(object, property);
+            } else if (controller.constructor.name === 'OptionController') {
+                // For dropdown/select controllers
+                mirroredController = target.add(object, property, controller._values);
+            } else if (controller.constructor.name === 'NumberController') {
+                // For numeric controllers with min/max
+                if (controller._min !== undefined && controller._max !== undefined) {
+                    mirroredController = target.add(object, property, controller._min, controller._max, controller._step);
+                } else {
+                    mirroredController = target.add(object, property);
+                }
+            } else {
+                // For boolean and other basic controllers
+                mirroredController = target.add(object, property);
             }
             
-            // Copy folder visibility state
-            mirroredFolder.show(!folder._hidden);
-        });
+            // Copy controller properties
+            if (mirroredController) {
+                mirroredController.name(name);
+                
+                // Copy tooltip if it exists
+                if (controller._tooltip) {
+                    mirroredController.tooltip(controller._tooltip);
+                }
+                
+                // Copy listen state
+                if (controller._listening) {
+                    mirroredController.listen();
+                }
+                
+                // Copy elastic properties for numeric controllers
+                if (controller._elastic && mirroredController.elastic) {
+                    mirroredController.elastic(controller._elastic.max, controller._elastic.maxMax, controller._elastic.allowNegative);
+                }
+                
+                // Copy onChange handler by referencing the original controller's onChange
+                if (controller._onChange) {
+                    mirroredController.onChange(controller._onChange);
+                }
+                
+                // Copy visibility state
+                mirroredController.show(!controller._hidden);
+            }
+        } catch (error) {
+            console.warn(`Failed to mirror controller '${controller._name}':`, error);
+        }
+    }
+
+    /**
+     * Mirror a single folder
+     * @param {GUI} folder - The folder to mirror
+     * @param {GUI} target - The target GUI to add the mirrored folder to
+     */
+    mirrorFolder(folder, target) {
+        const folderName = folder._title;
+        const mirroredFolder = target.addFolder(folderName);
+        
+        // Recursively mirror the folder contents
+        this.mirrorGUIControls(folder, mirroredFolder);
+        
+        // Copy folder open/closed state
+        if (!folder._closed) {
+            mirroredFolder.open();
+        }
+        
+        // Copy folder visibility state
+        mirroredFolder.show(!folder._hidden);
     }
 
     /**

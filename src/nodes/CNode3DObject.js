@@ -517,7 +517,6 @@ export class CNode3DObject extends CNode3DGroup {
         this.materialFolder = this.gui.addFolder("Material").open();
         this.materialFolder.isCommon = true; //temp patch - not needed?  not a controller???
         this.addParams(commonMaterialParams, this.common, this.materialFolder, true);
-
         this.rebuildMaterial();
 
         this.modelOrGeometry = v.modelOrGeometry;
@@ -570,6 +569,8 @@ export class CNode3DObject extends CNode3DGroup {
 
         this.rebuild();
 
+        // move the material folder to the end
+        this.materialFolder.moveToEnd();
 
         if (v.label !== undefined) {
             this.addLabel(v.label)
