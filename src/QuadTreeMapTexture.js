@@ -202,7 +202,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
             }
             
             // Check if the tile needs its texture loaded (e.g., if it was aborted previously)
-            if (tile.mesh && tile.mesh.material && tile.mesh.material.wireframe && 
+            if (tile.mesh?.material?.wireframe && 
                 tile.textureUrl() && !tile.isLoading && !tile.isCancelling) {
                 console.log(`Reactivated tile ${tile.key()} needs texture loading`);
                 const key = `${z}/${x}/${y}`;

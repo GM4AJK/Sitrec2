@@ -394,7 +394,7 @@ export class QuadTreeMap {
                 }
 
 
-               // return; // just doing one tile at a time, might want to change this later
+                return; // just doing one tile group (four tiles) at a time, might want to change this later
             }
 
             // Check if we should merge - this view doesn't need subdivision
