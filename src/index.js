@@ -1274,6 +1274,14 @@ function renderMain(elapsed) {
             }
             updateLockTrack(view, par.frame)
             view.renderCanvas(par.frame)
+
+
+            NodeMan.iterate((id, node) => {
+                if (node.postRender !== undefined) {
+                    node.postRender(view)
+                }
+            })
+
         }
     })
 
