@@ -480,10 +480,10 @@ const commonParams = {
         "torus", 
         "torusknot", 
         "superegg"], "Type of Generated Geometry"],
-    applyMaterial: [false, "Apply Material to the 3D model, overriding the loaded materials"],
     rotateX: [[0, -180, 180, 1], "Rotation about the X-axis"],
     rotateY: [[0, -180, 180, 1], "Rotation about the Y-axis"],
     rotateZ: [[0, -180, 180, 1], "Rotation about the Z-axis"],
+    applyMaterial: [false, "Apply Material to the 3D model, overriding the loaded materials"],
    // color: "white",
 }
 
@@ -562,7 +562,7 @@ export class CNode3DObject extends CNode3DGroup {
             .isCommon = true;
 
         // Add export to KML button
-        this.gui.add(this, "exportToKML").name("Export to KML")
+       this.gui.add(this, "exportToKML").name("Export to KML")
             .tooltip("Export this 3D object as a KML file for Google Earth")
             .isCommon = true;
 
@@ -1327,50 +1327,45 @@ export class CNode3DObject extends CNode3DGroup {
 
             controller.isCommon = isCommon;
 
-            // Store reference to controllers for visibility control
-            if (key === "applyMaterial") {
-                this.applyMaterialController = controller;
-            } else if (key === "geometry") {
-                this.geometryController = controller;
-            }
-
         }
     }
 
     updateControlVisibility() {
-        // Hide/show material folder based on mode and applyMaterial setting
+        // Define controller visibility rules
+        // Each entry: [controllerProperty, showInModelMode, customLogic]
+        const controllerVisibilityRules = [
+            ['applyMaterial', true, null], // Show in model mode, hide in geometry mode
+            ['selectModel', true, null], // Show in model mode, hide in geometry mode
+            ['geometry', false, null], // Hide in model mode, show in geometry mode
+            ['exportToKML', false, null], // Hide in model mode, show in geometry mode
+        ];
+
+        // Apply visibility rules for standard controllers
+        controllerVisibilityRules.forEach(([controllerProperty, showInModelMode]) => {
+
+            //  find the controller in this.gui.children
+            // then show/hide it depending on the rule
+            const controller = this.gui.children.find(c => c.property === controllerProperty);
+
+            const isModelMode = this.modelOrGeometry === "model";
+
+            if (controller) {
+                if ((isModelMode && showInModelMode) || (!isModelMode && !showInModelMode)) {
+                    controller.show();
+                } else {
+                    controller.hide();
+                }
+            } else {
+                console.error(`Controller property '${controllerProperty}' not found in this.gui in updateControlVisibility`)
+            }
+        });
+
+        // Handle material folder with custom logic (depends on both mode and applyMaterial setting)
         if (this.materialFolder) {
             if (this.modelOrGeometry === "model" && !this.common.applyMaterial) {
                 this.materialFolder.hide();
             } else {
                 this.materialFolder.show();
-            }
-        }
-
-        // Hide/show applyMaterial control based on mode
-        if (this.applyMaterialController) {
-            if (this.modelOrGeometry === "geometry") {
-                this.applyMaterialController.hide();
-            } else {
-                this.applyMaterialController.show();
-            }
-        }
-
-        // Hide/show model dropdown in geometry mode
-        if (this.modelMenu) {
-            if (this.modelOrGeometry === "geometry") {
-                this.modelMenu.hide();
-            } else {
-                this.modelMenu.show();
-            }
-        }
-
-        // Hide/show geometry dropdown in model mode
-        if (this.geometryController) {
-            if (this.modelOrGeometry === "model") {
-                this.geometryController.hide();
-            } else {
-                this.geometryController.show();
             }
         }
     }
@@ -1404,9 +1399,12 @@ export class CNode3DObject extends CNode3DGroup {
 
 
         if (this.modelOrGeometry === "model") {
-            //this.destroyNonCommonUI(this.gui);
+            // Remove geometry parameters from UI when switching to model mode
+            if (newType) {
+                this.destroyNonCommonUI(this.gui);
+            }
 
-            // load the model if different, this will be async
+            // load the model if differ  ent, this will be async
             // here this.selectModel is the NAME of the model (id or drag and drop filename
             // and this.currentModel points to a model def object (which currently just just a file)
             // so this.currentModel.file is the filename of the last loaded file
@@ -1506,14 +1504,17 @@ export class CNode3DObject extends CNode3DGroup {
 
 
 
-        // if the geometry or material type has changed, then delete all the geometry-specific parameters
-        // and re-create them
-        if (this.lastGeometry !== common.geometry) {
+        // if the geometry or material type has changed, or if we're switching from model to geometry mode
+        // then delete all the geometry-specific parameters and re-create them
+        if (this.lastGeometry !== common.geometry || newType) {
             this.destroyNonCommonUI(this.gui);
 
             // and re-create them
             this.geometryParams = {}
             this.addParams(geometryParams, this.geometryParams, this.gui);
+
+            // move the material folder to the end after adding geometry parameters
+            this.materialFolder.moveToEnd();
 
             this.lastGeometry = common.geometry;
         }
