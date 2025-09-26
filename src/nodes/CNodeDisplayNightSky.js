@@ -158,15 +158,19 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         satGUI.add(this,"updateLEOSats").name("Load LEO Satellites For Date")
             .onChange(function (x) {this.parent.close()})
-            .tooltip("Get the latest LEO Satellite TLE data for the current simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky.")
+            .tooltip("Get the latest LEO Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky.")
+
+        satGUI.add(this,"updateStarlink").name("Load CURRENT Starlink")
+            .onChange(function (x) {this.parent.close()})
+            .tooltip("Get the CURRENT (not historical, now, real time) Starlink satellite positions. This will download the data from the internet, so it may take a few seconds.\n")
 
         satGUI.add(this,"updateSLOWSats").name("(Experimental) Load SLOW Satellites")
             .onChange(function (x) {this.parent.close()})
-            .tooltip("Get the latest SLOW Satellite TLE data for the current simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
+            .tooltip("Get the latest SLOW Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
 
         satGUI.add(this,"updateALLSats").name("(Experimental) Load ALL Satellites")
             .onChange(function (x) {this.parent.close()})
-            .tooltip("Get the latest Satellite TLE data for ALL the satellites for the current simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
+            .tooltip("Get the latest Satellite TLE data for ALL the satellites for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
 
 
         this.flareAngle = 5
@@ -1282,6 +1286,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
 
+    updateStarlink() {
+        const url=SITREC_SERVER+"proxy.php?request=CURRENT_STARLINK";
+        console.log("Getting starlink from "+url)
+        const id = "starLink_current.tle";
+        this.loadSatellites(url, id);
+    }
+
     updateLEOSats() {
         this.updateSats("LEO");
     }
@@ -1319,10 +1330,15 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // TODO: remove the old starlink from the file manager.
 
-        console.log("Getting starlink from "+url)
+        console.log("Getting satellites from "+url)
         const id = "starLink_"+dateStr+".tle";
-        FileManager.loadAsset(url, id).then( (data)=>{
-           // this.replaceTLE(data)
+        this.loadSatellites(url, id);
+
+    }
+
+    loadSatellites(url, id) {
+        FileManager.loadAsset(url, id).then((data) => {
+            // this.replaceTLE(data)
 
             const fileInfo = FileManager.list[id];
 
@@ -1337,7 +1353,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
             DragDropHandler.handleParsedFile(id, fileInfo.data)
         });
-
     }
 
     updateVis() {
