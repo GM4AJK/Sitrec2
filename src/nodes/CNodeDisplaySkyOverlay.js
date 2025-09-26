@@ -23,6 +23,9 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
         const gui = v.gui ?? guiShowHide;
 
+        if (this.overlayView.id === "lookView") {
+            this.syncVideoZoom = true;
+        }
 
         //    guiShowHide.add(this,"showSatelliteNames" ).onChange(()=>{setRenderOne(true);}).name(this.overlayView.id+" Sat names")
         gui.add(this, "showStarNames").onChange(() => {
@@ -67,8 +70,12 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
                 pos.project(camera) // project using the EUS camera
 
                 if (pos.z > -1 && pos.z < 1 && pos.x >= -1 && pos.x <= 1 && pos.y >= -1 && pos.y <= 1) {
-                    var x = (pos.x + 1) * this.widthPx / 2
-                    var y = (-pos.y + 1) * this.heightPx / 2
+                    // Apply videoZoom to the projected coordinates
+                    var zoomedX = pos.x * this.zoom;
+                    var zoomedY = pos.y * this.zoom;
+                    
+                    var x = (zoomedX + 1) * this.widthPx / 2
+                    var y = (-zoomedY + 1) * this.heightPx / 2
                     x += 5
                     y -= 5
                     this.ctx.fillText(this.nightSky.commonNames[HR], x, y)
@@ -86,8 +93,12 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             //       pos1.project(camera) // project using the EUS camera
             //
             //       if (pos1.z > -1 && pos1.z < 1 && pos1.x >= -1 && pos1.x <= 1 && pos1.y >= -1 && pos1.y <= 1) {
-            //           var x = (pos1.x + 1) * this.widthPx / 2
-            //           var y = (-pos1.y + 1) * this.heightPx / 2
+            //           // Apply videoZoom to the projected coordinates
+            //           var zoomedX = pos1.x * this.zoom;
+            //           var zoomedY = pos1.y * this.zoom;
+            //           
+            //           var x = (zoomedX + 1) * this.widthPx / 2
+            //           var y = (-zoomedY + 1) * this.heightPx / 2
             //           x += 5
             //           y -= 5
             //           this.ctx.fillText(n, x, y)
@@ -107,8 +118,12 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
                 this.ctx.fillStyle = planet.color;
 
                 if (pos.z > -1 && pos.z < 1 && pos.x >= -1 && pos.x <= 1 && pos.y >= -1 && pos.y <= 1) {
-                    var x = (pos.x + 1) * this.widthPx / 2
-                    var y = (-pos.y + 1) * this.heightPx / 2
+                    // Apply videoZoom to the projected coordinates
+                    var zoomedX = pos.x * this.zoom;
+                    var zoomedY = pos.y * this.zoom;
+                    
+                    var x = (zoomedX + 1) * this.widthPx / 2
+                    var y = (-zoomedY + 1) * this.heightPx / 2
                     x += 5
                     y -= 5
                     this.ctx.fillText(name, x, y)
@@ -147,8 +162,12 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
 
                     if (pos.z > -1 && pos.z < 1 && pos.x >= -1 && pos.x <= 1 && pos.y >= -1 && pos.y <= 1) {
-                        var x = (pos.x + 1) * this.widthPx / 2
-                        var y = (-pos.y + 1) * this.heightPx / 2
+                        // Apply videoZoom to the projected coordinates
+                        var zoomedX = pos.x * this.zoom;
+                        var zoomedY = pos.y * this.zoom;
+                        
+                        var x = (zoomedX + 1) * this.widthPx / 2
+                        var y = (-zoomedY + 1) * this.heightPx / 2
                         x += 5
                         y -= 5
                         this.ctx.fillText(satData.name, x, y)
