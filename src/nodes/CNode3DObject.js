@@ -1400,7 +1400,6 @@ export class CNode3DObject extends CNode3DGroup {
 
         const common = this.common;
 
-        this.destroyLights();
         this.rebuildMaterial();
 
 
@@ -1448,6 +1447,7 @@ export class CNode3DObject extends CNode3DGroup {
                         // otherwise we might start loading a new object before the last one had finished loading
                         // so the first one will still get added
                         this.destroyObject();
+                        this.destroyLights();
 
                         this.model = gltf.scene;
 
@@ -1491,6 +1491,7 @@ export class CNode3DObject extends CNode3DGroup {
 
 
         this.destroyObject();
+        this.destroyLights();
 
         // set up inputs based on the geometry type
         // add the defaults if a parameter is missing
