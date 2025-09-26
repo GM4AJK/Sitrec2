@@ -4,7 +4,7 @@ import {trackAcceleration, trackDirection, trackVelocity} from "../trackUtils";
 import {V3} from "../threeUtils";
 import {Matrix4} from "three";
 import {radians} from "../utils";
-import {getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
+import {getLocalUpVector} from "../SphericalMath";
 import {CNodeSmoothedPositionTrack} from "./CNodeSmoothedPositionTrack";
 import {getGlareAngleFromFrame} from "../JetUtils";
 
@@ -48,6 +48,7 @@ export class CNodeControllerObjectTilt extends CNodeController {
         if (this.tiltType !== "banking" && !v.noMenu) {
             guiMenus.physics.add(this,"tiltType",{
                 banking:"banking",
+                none:"none", // we need a none if we are going to use it to init things
                 frontPointing:"frontPointing",
                 frontPointingAir:"frontPointingAir",
                 axialPush:"axialPush",
@@ -98,7 +99,8 @@ export class CNodeControllerObjectTilt extends CNodeController {
 
                 // if we have a wind vector then subtract that to get the nose heading
                 if (this.in.wind !== undefined) {
-                    next.sub(this.in.wind.v(f))
+                    const windVector = this.in.wind.v(f)
+                    next.sub(windVector)
                 }
 
                 object.up = objectNode.getUpVector(object.position)
