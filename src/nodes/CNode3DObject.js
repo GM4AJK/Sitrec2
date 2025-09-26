@@ -1524,18 +1524,15 @@ export class CNode3DObject extends CNode3DGroup {
 
         this.geometry = new geometryDef.g(...params);
 
-        const rotateX  = common.rotateX + ((common.geometry === "capsule" || common.geometry === "tictac") ? 90 : 0);
-
-        if (rotateX) {
-            this.geometry.rotateX(rotateX * Math.PI / 180);
-        }
-        if (common.rotateY) {
-            this.geometry.rotateY(common.rotateY * Math.PI / 180);
+        // Apply special geometry-specific rotation adjustments to the geometry itself
+        // These are baked-in rotations that are specific to certain geometry types
+        const geometryRotateX = ((common.geometry === "capsule" || common.geometry === "tictac") ? 90 : 0);
+        if (geometryRotateX) {
+            this.geometry.rotateX(geometryRotateX * Math.PI / 180);
         }
 
-        if (common.rotateZ) {
-            this.geometry.rotateZ(common.rotateZ * Math.PI / 180);
-        }
+        // Note: User-defined rotations (rotateX, rotateY, rotateZ) are now applied 
+        // as transforms in preRender() instead of being baked into the geometry
 
         if (common.wireframe) {
             this.wireframe = new WireframeGeometry(this.geometry);
@@ -1854,6 +1851,59 @@ export class CNode3DObject extends CNode3DGroup {
             }
         }
         this.lights = [];
+    }
+
+    preRender(view) {
+        // Apply user-defined rotations as transforms to the group
+        // This works for both geometries and models, providing consistent behavior
+        const common = this.common;
+        if (!common) return; // Safety check
+        
+        const target = this.group;
+        if (target && (common.rotateX || common.rotateY || common.rotateZ)) {
+            this.needsUndo = true;
+            
+            // Store the original position and quaternion
+            this.origPosition = target.position.clone();
+            this.origQuaternion = target.quaternion.clone();
+            this.origScale = target.scale.clone();
+            
+            // Apply user-defined rotations by multiplying rotation matrices
+
+            // Y first, it's the heading/yaw
+            if (common.rotateY) {
+                target.rotateY(common.rotateY * Math.PI / 180);
+            }
+
+            // X next, it's the pitch
+            if (common.rotateX) {
+                target.rotateX(common.rotateX * Math.PI / 180);
+            }
+
+            // Z last, it's the roll/bank
+            if (common.rotateZ) {
+                target.rotateZ(common.rotateZ * Math.PI / 180);
+            }
+            
+            // Update matrices after rotation changes
+            target.updateMatrix();
+            target.updateMatrixWorld();
+        }
+    }
+    
+    postRender(view) {
+        // Restore the original transformation state
+        if (this.needsUndo && this.group && this.origQuaternion) {
+            // Restore the original position, quaternion, and scale
+            this.group.position.copy(this.origPosition);
+            this.group.quaternion.copy(this.origQuaternion);
+            this.group.scale.copy(this.origScale);
+            
+            // Update matrices after restoring state
+            this.group.updateMatrix();
+            this.group.updateMatrixWorld();
+            this.needsUndo = false;
+        }
     }
 
     dispose() {
