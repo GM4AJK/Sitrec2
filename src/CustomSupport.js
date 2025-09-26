@@ -1386,9 +1386,6 @@ export class CCustomManager {
         let out = {
             stringified: true,
             isASitchFile: true,
-            exportVersion: process.env.BUILD_VERSION_STRING,
-            exportTag: process.env.VERSION,
-            exportTagNumber: versionNumber, // this is an integer like 1000000 for 1.0.0
         }
 
         // merge in the current Sit object
@@ -1606,6 +1603,12 @@ export class CCustomManager {
         out.modUnits = Units.modSerialize()
 
         out.guiMenus = Globals.menuBar.modSerialize()
+
+
+        // do the export version tracking last, so none of the combining sitches overwrites it
+        out.exportVersion = process.env.BUILD_VERSION_STRING
+        out.exportTag = process.env.VERSION;
+        out.exportTagNumber = versionNumber; // this is an integer like 1000000 for 1.0.0
 
 
         // convert to a string
