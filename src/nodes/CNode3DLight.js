@@ -1,14 +1,6 @@
 import {CNode3D} from "./CNode3D";
 import {assert} from "../assert";
-import {
-    SphereGeometry,
-    MeshBasicMaterial,
-    PlaneGeometry,
-    ShaderMaterial,
-    Mesh,
-    AdditiveBlending,
-    Color, Vector3
-} from 'three';
+import {AdditiveBlending, Mesh, PlaneGeometry, ShaderMaterial, Vector3} from 'three';
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {NodeMan} from "../Globals";
 
@@ -31,8 +23,8 @@ export class CNode3DLight extends CNode3D {
         const material = new ShaderMaterial({
             uniforms: {
                 ...sharedUniforms, // shared uniforms for near/far planes
-                uColor: { value: new Color(1.0, 1.0, 1.0) },
-                uIntensity: { value: 5.0 }, // HDR "strength"
+                uColor: { value: [this.light.color.r, this.light.color.g, this.light.color.b] },
+                uIntensity: { value: this.light.intensity }, // HDR "strength"
                 uRadius: { value: 0.3 },     // core radius (hard center)
 
             },
@@ -76,7 +68,11 @@ export class CNode3DLight extends CNode3D {
             float z = (log2(max(nearPlane, 1.0 + vDepth)) / log2(1.0 + farPlane)) * 2.0 - 1.0;
             gl_FragDepthEXT = z * 0.5 + 0.5;
 
-            gl_FragColor = vec4(uColor * uIntensity, alpha);
+            // uIntensity should not be used here because it's already applied in the shader
+            // but we can still used for color
+            // if it's large, then somethng like [1,0,0.01] will come out as magenta
+            gl_FragColor = vec4(uColor, alpha);
+        
         }
     `,
             transparent: true,
