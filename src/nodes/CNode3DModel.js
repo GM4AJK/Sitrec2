@@ -3,13 +3,31 @@
 import {CNode3DGroup} from "./CNode3DGroup";
 import {FileManager} from "../Globals";
 import {GLTFLoader} from "three/addons/loaders/GLTFLoader.js";
+import {DRACOLoader} from "three/addons/loaders/DRACOLoader.js";
 import {disposeScene} from "../threeExt";
 import {NoColorSpace} from "three";
+
+// Create and configure a DRACO loader
+function createDRACOLoader() {
+    const dracoLoader = new DRACOLoader();
+    // Set the path to the DRACO decoder files
+    // These are typically served from a CDN or local path
+    dracoLoader.setDecoderPath('https://www.gstatic.com/draco/versioned/decoders/1.5.6/');
+    return dracoLoader;
+}
+
+// Create and configure a GLTF loader with DRACO support
+function createGLTFLoader() {
+    const loader = new GLTFLoader();
+    const dracoLoader = createDRACOLoader();
+    loader.setDRACOLoader(dracoLoader);
+    return loader;
+}
 
 export function loadGLTFModel(file, callback) {
 
     FileManager.loadAsset(file, file).then( (asset) => {
-        const loader = new GLTFLoader()
+        const loader = createGLTFLoader()
         loader.parse(asset.parsed, "", gltf => {
             gltf.scene.traverse((child) => {
                 if (child.isMesh) {
@@ -28,7 +46,7 @@ export class CNode3DModel extends CNode3DGroup {
 
         const data = FileManager.get(v.TargetObjectFile ?? "TargetObjectFile")
 
-        const loader = new GLTFLoader()
+        const loader = createGLTFLoader()
         loader.parse(data, "", (gltf2) => {
             this.model = gltf2.scene //.getObjectByName('FA-18F')
             this.model.scale.setScalar(1);
