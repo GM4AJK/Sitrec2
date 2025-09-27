@@ -1,13 +1,14 @@
 //
-import {guiMenus, guiShowHide, NodeMan, Sit} from "../Globals";
+import {Globals, guiMenus, NodeMan, Sit} from "../Globals";
 import {dispose} from "../threeExt";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {LineMaterial} from "three/addons/lines/LineMaterial.js";
 
 import {Line2} from "three/addons/lines/Line2.js";
 import {CNode3DGroup} from "./CNode3DGroup";
-import {wgs84} from "../LLA-ECEF-ENU";
-import {altitudeAboveSphere, drop, getLocalSouthVector, getLocalUpVector, pointOnSphereBelow} from "../SphericalMath";
+import {pointOnSphereBelow} from "../SphericalMath";
+// just import THREE from three
+import * as THREE from "three";
 import {AlwaysDepth, Color, LessDepth} from "three";
 import {CNodeDisplayTargetSphere} from "./CNodeDisplayTargetSphere";
 import * as LAYER from "../LayerMasks";
@@ -16,9 +17,6 @@ import {convertColorInput} from "../ConvertColorInputs";
 import {par} from "../par";
 import {hexColor, V3} from "../threeUtils";
 import {CNodeGUIValue} from "./CNodeGUIValue";
-
-// just import THREE from three
-import * as THREE from "three";
 
 export class CNodeDisplayTrack extends CNode3DGroup {
     constructor(v) {
@@ -31,7 +29,7 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         convertColorInput(v,"secondColor",this.id)
         convertColorInput(v,"dropColor",this.id)
 
-        // newer method - allow input nodes to be declared outside the inputs object
+        // newer method - allow input nod to be declared outside the inputs object
         // and automatically convert constant inputs to CConstantNodes
         this.input("track") // track contains position, and optionally color
         this.input("dataTrackDisplay", true); // optional data track for reference
@@ -101,7 +99,8 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         }
 
 
-        this.displayColor = this.in.color.v0
+        this.lineColor = this.in.color.v0
+        this.polyColor = this.in.dropColor?.v0 ?? new Color(this.in.color.v0.r * 0.75, this.in.color.v0.g * 0.75, this.in.color.v0.b * 0.75)
         this.visible = true
 
         if (!v.skipGUI) {
@@ -117,6 +116,8 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                 this.guiFolder = guiMenus[this.gui].addFolder(this.id).close();
             }
             assert(this.guiFolder !== undefined, "CNodeDisplayTrack: guiFolder is undefined for track "+this.id);
+
+            this.guiFolder.close();
 
             this.minGUIColor = 0.6;
 
@@ -150,17 +151,31 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                 this.recalculate()
             })
 
-            // color picker for the track color, with optional linked data track
-
-            this.guiColor = this.guiFolder.addColor(this, "displayColor").onChange(() => {
+            // color picker for the line color, with optional linked data track
+            this.guiLineColor = this.guiFolder.addColor(this, "lineColor").name("Line Color").onChange(() => {
 
                 this.guiFolder.setLabelColor(this.in.color.v0, this.minGUIColor);
 
-                this.in.color.value = this.displayColor
+                this.in.color.value = this.lineColor
                 this.recalculate()
                 if (this.in.dataTrackDisplay !== undefined) {
-                    this.in.dataTrackDisplay.displayColor = this.displayColor
-                    this.in.dataTrackDisplay.in.color.value = this.displayColor
+                    this.in.dataTrackDisplay.lineColor = this.lineColor
+                    this.in.dataTrackDisplay.in.color.value = this.lineColor
+                    this.in.dataTrackDisplay.recalculate()
+                }
+            })
+
+            // color picker for the polygon/drop color
+            this.guiPolyColor = this.guiFolder.addColor(this, "polyColor").name("Poly Color").onChange(() => {
+                if (this.in.dropColor !== undefined) {
+                    this.in.dropColor.value = this.polyColor
+                }
+                this.recalculate()
+                if (this.in.dataTrackDisplay !== undefined) {
+                    this.in.dataTrackDisplay.polyColor = this.polyColor
+                    if (this.in.dataTrackDisplay.in.dropColor !== undefined) {
+                        this.in.dataTrackDisplay.in.dropColor.value = this.polyColor
+                    }
                     this.in.dataTrackDisplay.recalculate()
                 }
             })
@@ -247,7 +262,8 @@ export class CNodeDisplayTrack extends CNode3DGroup {
 
         return {
             ...super.modSerialize(),
-            displayColor: hexColor(this.displayColor),
+            lineColor: hexColor(this.lineColor),
+            polyColor: hexColor(this.polyColor),
             visible: this.visible,
 
         }
@@ -255,16 +271,42 @@ export class CNodeDisplayTrack extends CNode3DGroup {
 
     modDeserialize(v) {
         super.modDeserialize(v);
-        this.displayColor = new Color(v.displayColor);
-        this.in.color.value = this.displayColor;
-        if (this.guiFolder !== undefined) {
-            this.guiFolder.setLabelColor(this.in.color.v0, this.minGUIColor);
+
+
+        // before 2.5.5 we did not save colors correct, so initially we will just let the KML file dictate the colors
+        if (Globals.exportTagNumber < 2005005) {
+            console.log("Old displayColor detected, ignoring")
+        } else {
+
+            // Handle backward compatibility with old displayColor
+            if (v.displayColor && !v.lineColor) {
+                this.lineColor = new Color(v.displayColor);
+                this.polyColor = new Color(v.displayColor).multiplyScalar(0.75);
+            } else {
+                this.lineColor = new Color(v.lineColor);
+                this.polyColor = new Color(v.polyColor);
+            }
+
+            this.in.color.value = this.lineColor;
+            if (this.in.dropColor !== undefined) {
+                this.in.dropColor.value = this.polyColor;
+            }
+
+            if (this.guiFolder !== undefined) {
+                this.guiFolder.setLabelColor(this.in.color.v0, this.minGUIColor);
+            }
+
+            if (this.guiLineColor !== undefined) {
+                // also set the color in the GUI Picker by updating the display from the value
+                this.guiLineColor.updateDisplay();
+            }
+
+            if (this.guiPolyColor !== undefined) {
+                this.guiPolyColor.updateDisplay();
+            }
+            console.log("Loaded colors:" + this.lineColor + ", " + this.polyColor)
         }
 
-        if (this.guiColor !== undefined) {
-            // also set the color in the GUI Picker by updateing the display from the value
-            this.guiColor.updateDisplay();
-        }
 
         this.visible = v.visible;
         this.show(this.visible);
@@ -357,7 +399,7 @@ export class CNodeDisplayTrack extends CNode3DGroup {
                 color = new Color(color)
 
                 line_colors.push(color.r, color.g, color.b)
-                var dropColor;
+                let dropColor;
                 if (this.in.dropColor === undefined) {
                     // if no color give, then use the main color * 0.75
                     dropColor = {r: color.r * 0.75, g: color.g * 0.75, b: color.b * 0.75}
@@ -435,6 +477,14 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         // check if this.in.track is a CNodeMISBDataTrack
         // if so, then we need to update the track mesh
 
+
+        let dropColor;
+        if (this.in.dropColor === undefined) {
+            // if no color give, then use the main color * 0.75
+            dropColor = new Color(color.r * 0.75, color.g * 0.75, color.b * 0.75);
+        } else {
+            dropColor = this.in.dropColor.v(f)
+        }
 
         // we don't display track walls for track that have a data track,
         // as the data track will have the walls (spaced per track frame, like a KML track, so wide)
