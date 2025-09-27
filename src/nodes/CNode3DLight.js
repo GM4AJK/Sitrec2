@@ -14,7 +14,9 @@ export class CNode3DLight extends CNode3D {
 
         console.log("CNode3DLight created for light: " + this.light.name);
 
-        const size = v.size || 4; // default size if not specified
+        //const size = v.size || 4; // default size if not specified
+
+        const size = this.light.intensity / 100;
 
 // Create plane geometry
         const geometry = new PlaneGeometry(size, size); // adjust size as needed
@@ -25,7 +27,7 @@ export class CNode3DLight extends CNode3D {
                 ...sharedUniforms, // shared uniforms for near/far planes
                 uColor: { value: [this.light.color.r, this.light.color.g, this.light.color.b] },
                 uIntensity: { value: this.light.intensity }, // HDR "strength"
-                uRadius: { value: 0.3 },     // core radius (hard center)
+                uRadius: { value: 0.3 },     // proportion of core radius (hard center)
 
             },
             vertexShader: `
