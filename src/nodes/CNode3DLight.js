@@ -82,6 +82,13 @@ export class CNode3DLight extends CNode3D {
             blending: AdditiveBlending
         });
 
+        // check for strobes
+        if (this.light.userData !== undefined && this.light.userData.strobeEvery) {
+            this.strobeEvery = this.light.userData.strobeEvery
+            this.strobeLength = this.light.userData.strobeLength || 0.1;
+        }
+
+
 // Create mesh
         const billboard = new Mesh(geometry, material);
         billboard.name = "LightBillboard";
@@ -116,6 +123,16 @@ export class CNode3DLight extends CNode3D {
         // make the billboard face the camera
         if (this._object) {
             this._object.lookAt(camera.position);
+        }
+
+        // // turn on and off based on strobeEvery and strobeLength
+        if (this.strobeEvery && this.strobeLength) {
+            const time = par.time;
+            if (time % this.strobeEvery < this.strobeLength) {
+                this._object.visible = true;
+            } else {
+                this._object.visible = false;
+            }
         }
 
 
