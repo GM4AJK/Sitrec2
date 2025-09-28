@@ -3,6 +3,7 @@ import {assert} from "../assert";
 import {AdditiveBlending, Mesh, PlaneGeometry, ShaderMaterial, Vector3} from 'three';
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {NodeMan} from "../Globals";
+import {CNodeGUIValue} from "./CNodeGUIValue";
 
 export class CNode3DLight extends CNode3D {
     constructor(v) {
@@ -13,6 +14,9 @@ export class CNode3DLight extends CNode3D {
         assert(this.light, "CNode3DLight requires a light object");
 
         console.log("CNode3DLight created for light: " + this.light.name);
+
+        // Store the GUI folder if provided
+        this.gui = v.gui;
 
         //const size = v.size || 4; // default size if not specified
 
@@ -102,12 +106,114 @@ export class CNode3DLight extends CNode3D {
 
         this.scene = v.scene; // save the scene for later use
 
-
-
+        // Create GUI controls if GUI folder is provided
+        if (this.gui) {
+            this.createGUIControls();
+        }
 
     }
 
+    createGUIControls() {
+        // Visible control
+        this.visibleControl = new CNodeGUIValue({
+            id: this.id + "_visible",
+            desc: "Visible",
+            value: this.light.visible ? 1 : 0,
+            start: 0,
+            end: 1,
+            step: 1,
+            onChange: (value) => {
+                this.light.visible = value === 1;
+                this._object.visible = value === 1;
+            }
+        }, this.gui);
+
+        // Intensity control
+        this.intensityControl = new CNodeGUIValue({
+            id: this.id + "_intensity",
+            desc: "Intensity",
+            value: this.light.intensity,
+            start: 0,
+            end: 1000,
+            step: 1,
+            onChange: (value) => {
+                this.light.intensity = value;
+                this._object.material.uniforms.uIntensity.value = value;
+                // Update size based on intensity
+                const newSize = value / 100;
+                this._object.geometry.dispose();
+                this._object.geometry = new PlaneGeometry(newSize, newSize);
+            }
+        }, this.gui);
+
+        // Color control - create a color object for the GUI
+        this.colorObject = {
+            color: '#' + this.light.color.getHexString()
+        };
+        this.colorControl = this.gui.addColor(this.colorObject, 'color').name('Color').onChange((value) => {
+            this.light.color.setHex(value.replace('#', '0x'));
+            this._object.material.uniforms.uColor.value = [this.light.color.r, this.light.color.g, this.light.color.b];
+        });
+
+        // Radius control
+        this.radiusControl = new CNodeGUIValue({
+            id: this.id + "_radius",
+            desc: "Radius",
+            value: this._object.material.uniforms.uRadius.value,
+            start: 0.1,
+            end: 1.0,
+            step: 0.01,
+            onChange: (value) => {
+                this._object.material.uniforms.uRadius.value = value;
+            }
+        }, this.gui);
+
+        // Strobe controls if strobe data exists
+        if (this.strobeEvery !== undefined) {
+            this.strobeEveryControl = new CNodeGUIValue({
+                id: this.id + "_strobeEvery",
+                desc: "Strobe Every (s)",
+                value: this.strobeEvery,
+                start: 0.1,
+                end: 10.0,
+                step: 0.1,
+                onChange: (value) => {
+                    this.strobeEvery = value;
+                }
+            }, this.gui);
+
+            this.strobeLengthControl = new CNodeGUIValue({
+                id: this.id + "_strobeLength",
+                desc: "Strobe Length (s)",
+                value: this.strobeLength,
+                start: 0.01,
+                end: 1.0,
+                step: 0.01,
+                onChange: (value) => {
+                    this.strobeLength = value;
+                }
+            }, this.gui);
+        }
+    }
+
     dispose() {
+        // Clean up GUI controls
+        if (this.visibleControl) {
+            this.visibleControl.dispose();
+        }
+        if (this.intensityControl) {
+            this.intensityControl.dispose();
+        }
+        if (this.radiusControl) {
+            this.radiusControl.dispose();
+        }
+        if (this.strobeEveryControl) {
+            this.strobeEveryControl.dispose();
+        }
+        if (this.strobeLengthControl) {
+            this.strobeLengthControl.dispose();
+        }
+
         if (this._object) {
             this.scene.remove(this._object);
             this._object.geometry.dispose();

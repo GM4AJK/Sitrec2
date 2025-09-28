@@ -511,6 +511,7 @@ export class CNode3DObject extends CNode3DGroup {
         this.common = {}
         this.geometryParams = {};
         this.materialParams = {};
+        this.lights = []; // Initialize lights array
 
         this.common.material = v.material ?? "lambert";
         this.materialFolder = this.gui.addFolder("Material").open();
@@ -1581,6 +1582,9 @@ export class CNode3DObject extends CNode3DGroup {
     // we detect them and turn them off
     extractLightsFromModel(model) {
         this.destroyLights();
+        
+        // First pass: collect all lights that are not ignored
+        const validLights = [];
         model.traverse((child) => {
             if (child.isLight) {
                 // turn off the light
@@ -1591,7 +1595,17 @@ export class CNode3DObject extends CNode3DGroup {
                     // if it is, then just skip it
                     return;
                 }
-
+                
+                validLights.push(child);
+            }
+        });
+        
+        // If we have valid lights, create the Lights folder
+        if (validLights.length > 0) {
+            this.lightsFolder = this.gui.addFolder("Lights").close();
+            
+            // Create individual light folders and CNode3DLight instances
+            for (const child of validLights) {
                 //check if it's a point light
                 if (child.isPointLight) {
                     // if it's a point light, we can use it as a CNode3DLight
@@ -1601,17 +1615,19 @@ export class CNode3DObject extends CNode3DGroup {
                     // and also to turn it on/off
                 }
 
+                // Create a folder for this specific light
+                const lightFolder = this.lightsFolder.addFolder(child.name).close();
+
                 const light = new CNode3DLight({
                     id: this.id + "_" + child.name,
                     light: child,
                     scene: this.group,
+                    gui: lightFolder,
                 })
 
                 this.lights.push(light);
-
             }
-        });
-
+        }
     }
 
 
@@ -1853,6 +1869,12 @@ export class CNode3DObject extends CNode3DGroup {
             }
         }
         this.lights = [];
+        
+        // Clean up the lights folder if it exists
+        if (this.lightsFolder) {
+            this.lightsFolder.destroy();
+            this.lightsFolder = null;
+        }
     }
 
     preRender(view) {
