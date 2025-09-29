@@ -1745,89 +1745,124 @@ export class CCustomManager {
             console.log("Promised files loaded in Custom Manager deserialize")
             if (sitchData.mods) {
                 // apply the mods
-                for (let id in sitchData.mods) {
-
-                    if (!NodeMan.exists(id)) {
-                        console.warn("Node "+id+" does not exist in the current sitch (deprecated?), so cannot apply mod")
-                        continue;
-                    }
-
-                    const node = NodeMan.get(id)
-                    if (node.modDeserialize !== undefined) {
-                        console.log("Applying mod to node:" + id+ " with data:"+sitchData.mods[id]  )
-
-                        // bit of a patch, don't deserialise the dateTimeStart node
-                        // if we've overridden the time in the URL
-                        // see the check for urlParams.get("datetime") in index.js
-                        if (id !== "dateTimeStart" || !Globals.timeOverride) {
-                            node.modDeserialize(Sit.mods[id]);
-                        //
-                        // if this has triggred an async action, need to wait for it to finish
-                        //         .e.g. Like the CNode3DModel.loadGLTFModel method
-                        //     which won't need to load the file, but the parsing is async' +
-                        //     ''
-
-                        console.log("Actions pending = " + Globals.pendingActions)
-
-
-
-
-                        }
-                    }
-                }
-
-                setSitchEstablished(true); // flag that we've done some editing, so any future drag-and-drop will not mess with the sitch
-
+                this.deserializeMods(sitchData.mods).then(() => {
+                    setSitchEstablished(true); // flag that we've done some editing, so any future drag-and-drop will not mess with the sitch
+                    this.finishDeserialization(sitchData);
+                });
+                return; // Exit early, finishDeserialization will continue the process
+            } else {
+                this.finishDeserialization(sitchData);
             }
-
-            // apply the pars
-            if (sitchData.pars) {
-                for (let key in sitchData.pars) {
-                    par[key] = sitchData.pars[key]
-                }
-            }
-
-            // and the globals
-            if (sitchData.globals) {
-                for (let key in sitchData.globals) {
-//                    console.warn("Applying global "+key+" with value "+sitchData.globals[key])
-                    Globals[key] = sitchData.globals[key]
-                }
-            }
-
-            // and Sit
-            if (sitchData.Sit) {
-                for (let key in sitchData.Sit) {
-//                    console.log("Applying Sit "+key+" with value "+sitchData.Sit[key])
-                    Sit[key] = sitchData.Sit[key]
-                }
-            }
-
-            refreshLabelsAfterLoading();
-            this.refreshLookViewTracks();
-
-
-            if (sitchData.guiMenus) {
-                Globals.menuBar.modDeserialize(sitchData.guiMenus)
-            }
-
-
-            Globals.dontRecalculate = false;
-
-            // recalculate everything after the mods
-            // in case there's some missing dependency
-            // like the CSwitches turning off if they are not used
-            // which they don't know immediately
-            NodeMan.recalculateAllRootFirst()
-
-            // and we do it twice as sometimes there's initialization ordering issues
-            // like the Tracking overlay depending on the FOV, but coming before the lookCamera
-            NodeMan.recalculateAllRootFirst()
-            setRenderOne(3);
 
         })
 
 
+    }
+
+    /**
+     * Asynchronously deserialize mods, waiting for any pending actions to complete
+     * @param {Object} mods - The mods object from sitchData
+     * @returns {Promise} - Promise that resolves when all mods are applied and pending actions are complete
+     */
+    async deserializeMods(mods) {
+        const modIds = Object.keys(mods);
+        
+        for (let i = 0; i < modIds.length; i++) {
+            const id = modIds[i];
+            
+            if (!NodeMan.exists(id)) {
+                console.warn("Node " + id + " does not exist in the current sitch (deprecated?), so cannot apply mod");
+                continue;
+            }
+
+            const node = NodeMan.get(id);
+            if (node.modDeserialize !== undefined) {
+//                console.log("Applying mod to node:" + id + " with data:" + mods[id]);
+
+                // bit of a patch, don't deserialise the dateTimeStart node
+                // if we've overridden the time in the URL
+                // see the check for urlParams.get("datetime") in index.js
+                if (id !== "dateTimeStart" || !Globals.timeOverride) {
+                    node.modDeserialize(Sit.mods[id]);
+                    
+                    // if this has triggered an async action, wait for it to finish
+                    // e.g. Like the CNode3DModel.loadGLTFModel method
+                    // which won't need to load the file, but the parsing is async
+                    if (Globals.pendingActions > 0) {
+                        console.log("Actions pending = " + Globals.pendingActions + ", waiting...");
+                        await this.waitForPendingActions();
+                        console.log("Pending actions completed, continuing deserialization");
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Wait for all pending actions to complete
+     * @returns {Promise} - Promise that resolves when Globals.pendingActions === 0
+     */
+    waitForPendingActions() {
+        return new Promise((resolve) => {
+            const checkPending = () => {
+                if (Globals.pendingActions === 0) {
+                    resolve();
+                } else {
+                    // Check again in the next frame
+                    requestAnimationFrame(checkPending);
+                }
+            };
+            checkPending();
+        });
+    }
+
+    /**
+     * Complete the deserialization process after mods have been applied
+     * @param {Object} sitchData - The complete sitch data
+     */
+    finishDeserialization(sitchData) {
+        // apply the pars
+        if (sitchData.pars) {
+            for (let key in sitchData.pars) {
+                par[key] = sitchData.pars[key];
+            }
+        }
+
+        // and the globals
+        if (sitchData.globals) {
+            for (let key in sitchData.globals) {
+                //console.warn("Applying global "+key+" with value "+sitchData.globals[key])
+                Globals[key] = sitchData.globals[key];
+            }
+        }
+
+        // and Sit
+        if (sitchData.Sit) {
+            for (let key in sitchData.Sit) {
+                //console.log("Applying Sit "+key+" with value "+sitchData.Sit[key])
+                Sit[key] = sitchData.Sit[key];
+            }
+        }
+
+        refreshLabelsAfterLoading();
+        this.refreshLookViewTracks();
+
+        if (sitchData.guiMenus) {
+            Globals.menuBar.modDeserialize(sitchData.guiMenus);
+        }
+
+        Globals.dontRecalculate = false;
+
+        // recalculate everything after the mods
+        // in case there's some missing dependency
+        // like the CSwitches turning off if they are not used
+        // which they don't know immediately
+        NodeMan.recalculateAllRootFirst();
+
+        // and we do it twice as sometimes there's initialization ordering issues
+        // like the Tracking overlay depending on the FOV, but coming before the lookCamera
+        NodeMan.recalculateAllRootFirst();
+        setRenderOne(3);
     }
 
 

@@ -235,10 +235,14 @@ export class CNode3DLight extends CNode3D {
         NodeMan.disposeRemove(this.strobeLengthControl, true);
 
 
-        if (this.colorControl) {
-            this.colorControl.destroy();
-            this.colorControl = null;
-        }
+        // currently UI is destroyed when changing levels, but this reference is still there
+        // an now has no parent.
+        // if we want to remove things individually, we might want to improve this
+        // but for now it's a possible minor temporary memory leak.
+        // if (this.colorControl) {
+        //     this.colorControl.destroy();
+        //     this.colorControl = null;
+        // }
 
 
         if (this._object) {
