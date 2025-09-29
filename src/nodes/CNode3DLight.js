@@ -4,6 +4,7 @@ import {AdditiveBlending, Mesh, PlaneGeometry, ShaderMaterial, Vector3} from 'th
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {NodeMan} from "../Globals";
 import {CNodeGUIValue} from "./CNodeGUIValue";
+import {par} from "../par";
 
 export class CNode3DLight extends CNode3D {
     constructor(v) {
@@ -17,6 +18,10 @@ export class CNode3DLight extends CNode3D {
 
         // Store the GUI folder if provided
         this.gui = v.gui;
+
+        // Initialize visibility control variables
+        this.lightVisible = true;
+        this.lightIlluminates = false;
 
         //const size = v.size || 4; // default size if not specified
 
@@ -114,17 +119,31 @@ export class CNode3DLight extends CNode3D {
     }
 
     createGUIControls() {
-        // Visible control
-        this.visibleControl = new CNodeGUIValue({
-            id: this.id + "_visible",
-            desc: "Visible",
-            value: this.light.visible ? 1 : 0,
+        // Light Visible control (controls both light and billboard visibility)
+        this.lightVisibleControl = new CNodeGUIValue({
+            id: this.id + "_lightVisible",
+            desc: "Light Visible",
+            value: this.lightVisible ? 1 : 0,
             start: 0,
             end: 1,
             step: 1,
             onChange: (value) => {
-                this.light.visible = value === 1;
-                this._object.visible = value === 1;
+                this.lightVisible = value === 1;
+                this.updateVisibility();
+            }
+        }, this.gui);
+
+        // Light Illuminates control (controls only light illumination)
+        this.lightIlluminatesControl = new CNodeGUIValue({
+            id: this.id + "_lightIlluminates",
+            desc: "Light Illuminates",
+            value: this.lightIlluminates ? 1 : 0,
+            start: 0,
+            end: 1,
+            step: 1,
+            onChange: (value) => {
+                this.lightIlluminates = value === 1;
+                this.updateVisibility();
             }
         }, this.gui);
 
@@ -134,7 +153,7 @@ export class CNode3DLight extends CNode3D {
             desc: "Intensity",
             value: this.light.intensity,
             start: 0,
-            end: 1000,
+            end: 10000,
             step: 1,
             onChange: (value) => {
                 this.light.intensity = value;
@@ -174,9 +193,9 @@ export class CNode3DLight extends CNode3D {
                 id: this.id + "_strobeEvery",
                 desc: "Strobe Every (s)",
                 value: this.strobeEvery,
-                start: 0.1,
-                end: 10.0,
-                step: 0.1,
+                start: 0,
+                end: 20.0,
+                step: 0.01,
                 onChange: (value) => {
                     this.strobeEvery = value;
                 }
@@ -196,23 +215,31 @@ export class CNode3DLight extends CNode3D {
         }
     }
 
+    // Method to update visibility based on control variables and strobe state
+    updateVisibility() {
+        // Billboard visibility is controlled by lightVisible
+        if (this._object) {
+            this._object.visible = this.lightVisible;
+        }
+        
+        // Light illumination is controlled by both lightVisible and lightIlluminates
+        this.light.visible = this.lightVisible && this.lightIlluminates;
+    }
+
     dispose() {
-        // Clean up GUI controls
-        if (this.visibleControl) {
-            this.visibleControl.dispose();
+        NodeMan.disposeRemove(this.lightVisibleControl, true);
+        NodeMan.disposeRemove(this.lightIlluminatesControl, true);
+        NodeMan.disposeRemove(this.intensityControl, true);
+        NodeMan.disposeRemove(this.radiusControl, true);
+        NodeMan.disposeRemove(this.strobeEveryControl, true);
+        NodeMan.disposeRemove(this.strobeLengthControl, true);
+
+
+        if (this.colorControl) {
+            this.colorControl.destroy();
+            this.colorControl = null;
         }
-        if (this.intensityControl) {
-            this.intensityControl.dispose();
-        }
-        if (this.radiusControl) {
-            this.radiusControl.dispose();
-        }
-        if (this.strobeEveryControl) {
-            this.strobeEveryControl.dispose();
-        }
-        if (this.strobeLengthControl) {
-            this.strobeLengthControl.dispose();
-        }
+
 
         if (this._object) {
             this.scene.remove(this._object);
@@ -231,14 +258,19 @@ export class CNode3DLight extends CNode3D {
             this._object.lookAt(camera.position);
         }
 
-        // // turn on and off based on strobeEvery and strobeLength
+        // Handle strobe effect - modifies the base visibility settings
         if (this.strobeEvery && this.strobeLength) {
             const time = par.time;
-            if (time % this.strobeEvery < this.strobeLength) {
-                this._object.visible = true;
-            } else {
-                this._object.visible = false;
+            const strobeOn = time % this.strobeEvery < this.strobeLength;
+            
+            // Apply strobe to both billboard and light visibility
+            if (this._object) {
+                this._object.visible = this.lightVisible && strobeOn;
             }
+            this.light.visible = this.lightVisible && this.lightIlluminates && strobeOn;
+        } else {
+            // No strobe - use normal visibility settings
+            this.updateVisibility();
         }
 
 

@@ -154,6 +154,34 @@ class CNode {
         // this.show(this.visible)
     }
 
+    /**
+     * Defer the deserialization process by storing the provided data.
+     *
+     * This method saves the provided data object for later deserialization.
+     * It is useful when the deserialization process needs to be postponed
+     * until certain conditions are met or other initializations are completed.
+     * Such as loading a model file asyc for 3D object
+     *
+     * @param {Object} v - The data object to be deferred for later deserialization.
+     */
+    deferDeserialize(v) {
+        this.deferedSerialized = {...v};
+        this.deferedDeserialize = true;
+    }
+
+    /**
+     * Execute the deferred deserialization process.
+     *
+     * This method checks if there is any deferred serialized data stored.
+     * If such data exists, it deserializes the data and then clears the deferred data.
+     */
+    runDeferredDeserialization() {
+        if (this.deferedSerialized) {
+            this.modDeserialize(this.deferedSerialized);
+            this.deferedSerialized = null;
+        }
+    }
+
     addSimpleSerial(serial) {
         if (this.simpleSerials === undefined) {
             this.simpleSerials = [];

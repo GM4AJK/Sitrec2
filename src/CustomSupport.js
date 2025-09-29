@@ -1754,13 +1754,24 @@ export class CCustomManager {
 
                     const node = NodeMan.get(id)
                     if (node.modDeserialize !== undefined) {
-                        //console.log("Applying mod to node:" + id+ " with data:"+sitchData.mods[id]  )
+                        console.log("Applying mod to node:" + id+ " with data:"+sitchData.mods[id]  )
 
                         // bit of a patch, don't deserialise the dateTimeStart node
                         // if we've overridden the time in the URL
                         // see the check for urlParams.get("datetime") in index.js
                         if (id !== "dateTimeStart" || !Globals.timeOverride) {
                             node.modDeserialize(Sit.mods[id]);
+                        //
+                        // if this has triggred an async action, need to wait for it to finish
+                        //         .e.g. Like the CNode3DModel.loadGLTFModel method
+                        //     which won't need to load the file, but the parsing is async' +
+                        //     ''
+
+                        console.log("Actions pending = " + Globals.pendingActions)
+
+
+
+
                         }
                     }
                 }

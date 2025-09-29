@@ -26,9 +26,11 @@ function createGLTFLoader() {
 
 export function loadGLTFModel(file, callback) {
 
+    console.log("Async Loading asset for", file);
     FileManager.loadAsset(file, file).then( (asset) => {
         const loader = createGLTFLoader()
         loader.parse(asset.parsed, "", gltf => {
+            console.log("(after async) Parsed asset for", file, " now traversing...");
             gltf.scene.traverse((child) => {
                 if (child.isMesh) {
                     if (child.material.map) child.material.map.colorSpace = NoColorSpace;
