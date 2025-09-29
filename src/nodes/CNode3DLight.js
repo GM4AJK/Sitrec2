@@ -254,6 +254,52 @@ export class CNode3DLight extends CNode3D {
         super.dispose();
     }
 
+    // we do the strobing in update(), not preRender(view)
+    // as it's only once per frame, not once per view render call
+    update(f) {
+        super.update(f);
+        const time = par.time;
+
+        let strobeOn = false;
+
+        // only need to check if both are non-zero
+        if (this.strobeEvery && this.strobeLength) {
+            strobeOn = time % this.strobeEvery < this.strobeLength;
+
+
+
+            // if we've gone past the time to strobe then do it regardless of if it's in the flash window
+            // this ensures we don't miss any very short flashes
+            // (e.g. strobe every 1.01 seconds, but strobe length is 0.01 seconds)
+            // since 0.01 is less than a frame, it would not always fall in the window
+            if (this.lastStrobeTime !== undefined
+                && (time - this.lastStrobeTime) > this.strobeEvery) {
+                strobeOn = true;
+
+            }
+
+
+            if (strobeOn) {
+                // reset time to last time we SHOULD have strobed
+                // not the time we actually strobed
+                // this maintains more consistent timing
+                this.lastStrobeTime = time - time % this.strobeEvery
+            }
+
+
+            // Apply strobe to both billboard and light visibility
+            if (this._object) {
+                this._object.visible = this.lightVisible && strobeOn;
+            }
+            this.light.visible = this.lightVisible && this.lightIlluminates && strobeOn;
+
+        }
+        else {
+            // No strobe controls - use normal visibility settings
+            this.updateVisibility();
+        }
+    }
+
     preRender(view) {
         const camera = view.camera;
 
@@ -262,20 +308,6 @@ export class CNode3DLight extends CNode3D {
             this._object.lookAt(camera.position);
         }
 
-        // Handle strobe effect - modifies the base visibility settings
-        if (this.strobeEvery && this.strobeLength) {
-            const time = par.time;
-            const strobeOn = time % this.strobeEvery < this.strobeLength;
-            
-            // Apply strobe to both billboard and light visibility
-            if (this._object) {
-                this._object.visible = this.lightVisible && strobeOn;
-            }
-            this.light.visible = this.lightVisible && this.lightIlluminates && strobeOn;
-        } else {
-            // No strobe - use normal visibility settings
-            this.updateVisibility();
-        }
 
 
         // const distance = this._object.position.distanceTo(view.camera.position);
@@ -322,7 +354,4 @@ export class CNode3DLight extends CNode3D {
 
     }
 
-
-    update() {
-    }
 }
