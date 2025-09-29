@@ -1,3 +1,4 @@
+import {showError} from "./showError";
 
 /**
  * Transport Stream (TS) Parser
@@ -32,6 +33,7 @@ export class TSParser {
 
         } catch (error) {
             console.error('Error parsing TS file:', error);
+            showError('Error parsing TS file', error.toString(), error);
             return Promise.reject(error);
         }
     }
