@@ -14,8 +14,6 @@ export class CNode3DLight extends CNode3D {
         this.light = v.light; // the light objectm required for this node
         assert(this.light, "CNode3DLight requires a light object");
 
-        console.log("CNode3DLight created for light: " + this.light.name);
-
         // Store the GUI folder if provided
         this.gui = v.gui;
 
