@@ -5,6 +5,13 @@
  */
 export function showError(message, error=null) {
 
+    // if message is an error object, extract its message,
+    // otherwise use it as-is
+    if (typeof message === 'object' && message !== null) {
+        error = message;
+        message = message.message || JSON.stringify(message);
+    }
+
     const title = "Error"
 
     message += '\n\n';

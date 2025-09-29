@@ -339,6 +339,7 @@ import * as st0903 from './js/misb.js-main/src/st0903.mjs'
 import * as st0104 from './js/misb.js-main/src/st0104.mjs'
 import * as st0806 from './js/misb.js-main/src/st0806.mjs'
 import * as klv from './js/misb.js-main/src/klv.mjs'
+import {showError} from "./showError";
 
 const standards = [st0601, st0903, st0806, st0104]
 const packets = {}
@@ -358,7 +359,13 @@ for(const standard of standards) {
 
 export function parseKLVFile(data) {
 //    const result = klv.decode(data, standards, null, {debug: false})
-    const result = klv.decode(data, st0601, null, {debug: false})
+    let result;
+    try {
+        result = klv.decode(data, st0601, null, {debug: false});
+    } catch (error) {
+        showError(error);
+        return;
+    }
     // for (const standard of standards) {
     //     for (const packet of result[standard.name]) {
     //         packets[standard.name].push(packet)
