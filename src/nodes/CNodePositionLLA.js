@@ -17,6 +17,7 @@ import {EventManager} from "../CEventManager";
 import {guiMenus, NodeMan, setSitchEstablished, Sit} from "../Globals";
 import {getApproximateLocationFromIP} from "../GeoLocation";
 import {customAltitudeFunction, customLocationFunction} from "../../config/config";
+import {showError} from "../showError";
 
 export class CNodePositionLLA extends CNode {
     constructor(v) {
@@ -171,7 +172,7 @@ export class CNodePositionLLA extends CNode {
                                     alert("No results found for " + this.lookupString);
                                 }
                             } catch (error) {
-                                console.error("Error during lookup: ", error);
+                                showError("Error during lookup: ", error);
                                 alert("Error during lookup: " + error.message);
                             }
                         }
@@ -264,7 +265,7 @@ export class CNodePositionLLA extends CNode {
         getApproximateLocationFromIP().then( (result) => {
 
             if(!result) {
-                console.error("Geolocation failed or was cancelled.");
+                showError("Geolocation failed or was cancelled.");
                 return;
             }
 

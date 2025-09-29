@@ -1,5 +1,6 @@
 import {assert} from "./assert.js";
 import {SITREC_SERVER} from "./configUtils";
+import {showError} from "./showError";
 
 
 export class CRehoster {
@@ -62,9 +63,7 @@ export class CRehoster {
 
             return resultUrl
         } catch (error) {
-            console.error('Error uploading file:', error);
-            // display an error message to the as a single button popup
-            alert("Error uploading file: " + error.message);
+            showError('Error uploading file:', error);
 
             throw new Error("Upload problem, maybe not logged in?");
         }
@@ -118,7 +117,7 @@ export class CRehoster {
             this.rehostPromises = [];
             // Perform any action after all files are uploaded
         }).catch(error => {
-            console.error("An error occurred during file upload for rehost: ", error);
+            showError("An error occurred during file upload for rehost: ", error);
             // Handle errors here
         });
     }

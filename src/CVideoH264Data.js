@@ -5,6 +5,7 @@ import {CVideoWebCodecBase} from "./CVideoWebCodecBase";
 import {H264Decoder} from "./H264Decoder";
 import {updateSitFrames} from "./UpdateSitFrames";
 import {EventManager} from "./CEventManager";
+import {showError} from "./showError";
 
 /**
  * Video data handler for raw H.264 elementary streams with frame caching
@@ -88,7 +89,7 @@ export class CVideoH264Data extends CVideoWebCodecBase {
                     this.processDecodedFrame(frameNumber, videoFrame, group);
                     
                 } catch (error) {
-                    console.error("Error in decoder output callback:", error);
+                    showError("Error in decoder output callback:", error);
                     videoFrame.close();
                 }
             },
@@ -124,7 +125,7 @@ export class CVideoH264Data extends CVideoWebCodecBase {
         // Only mark as unusable for fatal errors, not decode errors
         if (e.name === 'NotSupportedError' || e.name === 'InvalidStateError') {
             this.decoderError = true;
-            console.error("Fatal H.264 decoder error:", e.message);
+            showError("Fatal H.264 decoder error:", e.message);
         } else if (e.name === 'EncodingError') {
             // Prevent infinite recreation loops
             if (!this.recreationAttempts) this.recreationAttempts = 0;
@@ -358,13 +359,13 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             console.log(`   SPS count: ${avccData[5] & 0x1F} (should be 1)`);
 
             if (avccData[0] !== 1) {
-                console.error("   ❌ Invalid AVCC version");
+                showError("   ❌ Invalid AVCC version");
             }
             if (avccData[1] !== profile) {
-                console.error(`   ❌ AVCC profile mismatch: config=0x${avccData[1].toString(16)}, SPS=0x${profile.toString(16)}`);
+                showError(`   ❌ AVCC profile mismatch: config=0x${avccData[1].toString(16)}, SPS=0x${profile.toString(16)}`);
             }
             if (avccData[3] !== level) {
-                console.error(`   ❌ AVCC level mismatch: config=0x${avccData[3].toString(16)}, SPS=0x${level.toString(16)}`);
+                showError(`   ❌ AVCC level mismatch: config=0x${avccData[3].toString(16)}, SPS=0x${level.toString(16)}`);
             }
 
             this.config = config;
@@ -385,7 +386,7 @@ export class CVideoH264Data extends CVideoWebCodecBase {
 
 
             } catch (configError) {
-                console.error("Decoder configuration failed:", configError);
+                showError("Decoder configuration failed:", configError);
                 throw new Error(`Failed to configure VideoDecoder: ${configError.message}`);
             }
 
@@ -410,7 +411,7 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             });
 
         } catch (error) {
-            console.error("Failed to initialize H.264 caching:", error);
+            showError("Failed to initialize H.264 caching:", error);
             console.warn("Falling back to error state");
 
             this.errorImage = null;
@@ -663,7 +664,7 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             
             console.log(`✓ FPS updated to ${newFps}`);
         } else {
-            console.error(`Invalid FPS value: ${newFps}. Must be between 0 and 240.`);
+            showError(`Invalid FPS value: ${newFps}. Must be between 0 and 240.`);
         }
     }
 

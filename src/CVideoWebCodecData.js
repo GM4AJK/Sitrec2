@@ -6,6 +6,7 @@ import {par} from "./par";
 import {isLocal} from "./configUtils";
 import {CVideoData} from "./CVideoData";
 import {updateSitFrames} from "./UpdateSitFrames";
+import {showError} from "./showError";
 
 export class CVideoWebCodecData extends CVideoData {
 
@@ -277,7 +278,7 @@ export class CVideoWebCodecData extends CVideoData {
                     );
                 }
             },
-            error: e => console.error(e),
+            error: e => showError(e),
         });
 
         this.demuxFrame = 0;

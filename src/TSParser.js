@@ -32,8 +32,7 @@ export class TSParser {
             return Promise.all(streamPromises);
 
         } catch (error) {
-            console.error('Error parsing TS file:', error);
-            showError('Error parsing TS file', error.toString(), error);
+            showError('Error parsing TS file:', error);
             return Promise.reject(error);
         }
     }
@@ -210,7 +209,7 @@ export class TSParser {
             return streams;
 
         } catch (error) {
-            console.error('extractTSStreams: Error extracting streams:', error);
+            showError('extractTSStreams: Error extracting streams:', error);
             return [];
         }
     }

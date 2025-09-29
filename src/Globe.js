@@ -1,4 +1,4 @@
-import {Color, Group, Mesh, MeshPhongMaterial, ShaderMaterial, SphereGeometry, TextureLoader, Vector3, FrontSide} from "three";
+import {Color, Group, Mesh, MeshPhongMaterial, ShaderMaterial, SphereGeometry, TextureLoader, Vector3} from "three";
 import {GlobalScene} from "./LocalFrame";
 import {wgs84} from "./LLA-ECEF-ENU";
 import {radians} from "./utils";
@@ -7,6 +7,7 @@ import {Globals, NodeMan, setRenderOne, Sit} from "./Globals";
 import {SITREC_APP} from "./configUtils";
 import {Texture} from "three/src/textures/Texture";
 import {sharedUniforms} from "./js/map33/material/SharedUniforms";
+import {showError} from "./showError";
 
 export function createSphere(radius, radius1, segments) {
     const sphere = new Mesh(
@@ -82,7 +83,7 @@ export function updateNightTexture(noNightLights) {
             setRenderOne(true);
         })
         .catch((err) => {
-            console.error('Failed to load texture:', err);
+            showError('Failed to load texture:', err);
         })
         .finally(()=> {
             Globals.pendingActions--;

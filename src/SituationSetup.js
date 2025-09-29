@@ -39,6 +39,7 @@ import {Frame2Az} from "./JetUtils";
 import {isConsole} from "./configUtils";
 import {CNodeMirrorVideoView} from "./nodes/CNodeMirrorVideoView";
 import {CNodeTerrainUI} from "./nodes/CNodeTerrainUI";
+import {showError} from "./showError";
 
 export async function SituationSetup(runDeferred = false) {
     console.log("++++++ SituationSetup")
@@ -1390,7 +1391,7 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
                     node = NodeFactory.create("Controller"+key, data);
                     objectNode.addControllerNode(node);
                 } else {
-                    console.error("SituationSetup: controller " + key + " needs an object/camera")
+                    showError("SituationSetup: controller " + key + " needs an object/camera")
                 }
             } else {
                 // check to see if the "kind" is a node type

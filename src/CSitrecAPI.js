@@ -1,6 +1,7 @@
 // Client-side Sitrec API with callable functions and documentation
-import {GlobalDateTimeNode, NodeMan, Sit} from "./Globals";
+import {GlobalDateTimeNode, NodeMan} from "./Globals";
 import {isLocal} from "./configUtils";
+import {showError} from "./showError";
 
 class CSitrecAPI {
     constructor() {
@@ -34,7 +35,7 @@ class CSitrecAPI {
                 fn: (v) => {
                     const dateTime = new Date(v.dateTime);
                     if (isNaN(dateTime.getTime())) {
-                        console.error("Invalid date-time format:", v.dateTime);
+                        showError("Invalid date-time format:", v.dateTime);
                         return;
                     }
                     GlobalDateTimeNode.setStartDateTime(v.dateTime);

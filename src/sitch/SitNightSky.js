@@ -1,8 +1,8 @@
-import { Vector3} from "three";
-import {NodeMan, Sit, GlobalDateTimeNode, Globals, FileManager, guiMenus, setRenderOne} from "../Globals";
+import {Vector3} from "three";
+import {FileManager, GlobalDateTimeNode, Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Globals";
 import {par} from "../par";
 import {CNodeViewUI} from "../nodes/CNodeViewUI";
-import {AddTimeDisplayToUI, AddTimeDisplayToUIOld} from "../UIHelpers";
+import {AddTimeDisplayToUIOld} from "../UIHelpers";
 import {DragDropHandler} from "../DragDropHandler";
 import JSURL from "../js/jsurl"
 import {isLocal, SITREC_SERVER} from "../configUtils.js";
@@ -13,7 +13,6 @@ import {MV3} from "../threeUtils";
 import {getPTZController} from "../js/CameraControls";
 
 import {waitForParsingToComplete} from "../CFileManager";
-import {ViewMan} from "../CViewManager";
 
 
 export const SitNightSky = {
@@ -283,7 +282,7 @@ export const SitNightSky = {
                             }
                         })
                         .catch(error => {
-                            console.error("Error fetching shortened URL:", error);
+                            showError("Error fetching shortened URL:", error);
                             // Some error, or not logged in
                             if (oldURL.localeCompare(url) != 0) {
                                 // then push the current state, so we can go back

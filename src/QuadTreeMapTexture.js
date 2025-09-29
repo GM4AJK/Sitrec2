@@ -4,6 +4,7 @@ import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
 import {setRenderOne} from "./Globals";
 import * as LAYER from "./LayerMasks";
+import {showError} from "./showError";
 
 class QuadTreeMapTexture extends QuadTreeMap {
     constructor(scene, terrainNode, geoLocation, options = {}) {
@@ -72,7 +73,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         }
 
         if (!this.loaded) {
-            console.error('Map not loaded yet - only call recalculateCurveMap after loadedCallback')
+            showError('Map not loaded yet - only call recalculateCurveMap after loadedCallback')
             return;
         }
         this.radius = radius
@@ -215,7 +216,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
                 const materialPromise = tile.applyMaterial().catch(error => {
                     // Don't log abort errors or cancellation errors - they're expected when tiles are cancelled
                     if (error.message !== 'Aborted' && error.message !== 'Tile is being cancelled') {
-                        console.error(`Failed to load texture for reactivated tile ${key}:`, error);
+                        showError(`Failed to load texture for reactivated tile ${key}:`, error);
                     }
                 });
                 this.trackTileLoading(`${key}-reactivated`, materialPromise);
@@ -265,11 +266,11 @@ class QuadTreeMapTexture extends QuadTreeMap {
         const materialPromise = tile.applyMaterial().catch(error => {
             // Don't log abort errors or cancellation errors - they're expected when tiles are cancelled
             if (error.message !== 'Aborted' && error.message !== 'Tile is being cancelled') {
-                console.error(`Failed to load texture for tile ${key}:`, error);
+                showError(`Failed to load texture for tile ${key}:`, error);
             } else if (error.message === 'Aborted') {
                 // Check if the tile is active again - this should now be rare since we prevent reactivation during cancellation
                 if (tile.tileLayers > 0) {
-                    console.error(`Tile ${key} ABORTED load texture but is still active - this should not happen with the new prevention logic.`);
+                    showError(`Tile ${key} ABORTED load texture but is still active - this should not happen with the new prevention logic.`);
                 }
             }
             // Tile will remain with wireframe material if texture loading fails

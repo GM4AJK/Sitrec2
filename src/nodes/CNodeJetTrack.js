@@ -6,6 +6,7 @@ import {CNodeTrack} from "./CNodeTrack";
 import {assert} from "../assert.js";
 import {V3} from "../threeUtils";
 import {wgs84} from "../LLA-ECEF-ENU";
+import {showError} from "../showError";
 
 export class CNodeJetTrack extends CNodeTrack {
     constructor(v) {
@@ -20,10 +21,10 @@ export class CNodeJetTrack extends CNodeTrack {
         // if radius is not defined, use the earth's radius
         // this is just for backwards compatibility
         if (v.radius !== undefined) {
-            console.error("CNodeJetTrack: radius is deprecated, id = " + v.id)
+            showError("CNodeJetTrack: radius is deprecated, id = " + v.id)
         }
         if (v.altitude !== undefined) {
-            console.error("CNodeJetTrack: altitude is deprecated, id = " + v.id)
+            showError("CNodeJetTrack: altitude is deprecated, id = " + v.id)
         }
 
         this.requireInputs(["speed", "turnRate", "wind", "heading", "origin"])

@@ -3,7 +3,9 @@
  * @param {string} title - Error title
  * @param {string} message - Error message
  */
-export function showError(title, message, error=null) {
+export function showError(message, error=null) {
+
+    const title = "Error"
 
     message += '\n\n';
     // add stack trace if available
@@ -134,4 +136,6 @@ export function showError(title, message, error=null) {
 
     // Auto-select text for easy copying
     textarea.select();
+
+    console.error(message);
 }

@@ -71,6 +71,8 @@
 // - adds a 0 before a decimal point (JSON does not allow numbers to start with a decimal point)
 // - converts single quotes to double quotes
 // - removes trailing commas
+import {showError} from "./showError";
+
 class JSParser {
     constructor(js) {
         this.js = js;
@@ -172,7 +174,7 @@ class JSParser {
         if (k === "{" || k === "[") {
             console.log(this.out)
 
-            console.error("Error parsing object: unexpected character: " + k);
+            showError("Error parsing object: unexpected character: " + k);
 
 
             debugger;

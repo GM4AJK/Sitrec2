@@ -411,7 +411,7 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             // if the sourceW or sourceH is not set, then we can't calculate the coordinates correctly
             // so we just use the canvas size for now
             // when the is loaded, this will be updated
-//            console.error("CNodeVideoView.getSourceAndDestCoords called with invalid image dimensions, video not loaded? this="+this.id+", sourceW="+sourceW+", sourceH="+sourceH);
+//            showError("CNodeVideoView.getSourceAndDestCoords called with invalid image dimensions, video not loaded? this="+this.id+", sourceW="+sourceW+", sourceH="+sourceH);
             sourceW = this.widthPx;
             sourceH = this.heightPx;
         }

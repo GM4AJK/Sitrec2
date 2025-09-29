@@ -2,6 +2,7 @@ import {QuadTreeMap} from "./QuadTreeMap";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {assert} from "./assert";
 import * as LAYER from "./LayerMasks";
+import {showError} from "./showError";
 
 export class QuadTreeMapElevation extends QuadTreeMap {
     constructor(terrainNode, geoLocation, options = {}) {
@@ -64,8 +65,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                 }
                 this.terrainNode.elevationTileLoaded(tile);
             }).catch(error => {
-                console.error(`Failed to load elevation tile ${key}:`, error);
-                console.error(`Elevation URL was: ${tile.elevationURL()}`);
+                showError(`Failed to load elevation tile ${key}: Elevation URL was: ${tile.elevationURL()}`, error);
                 // Mark tile as having no elevation data so it doesn't keep trying
                 tile.elevation = null;
                 tile.elevationLoadFailed = true;

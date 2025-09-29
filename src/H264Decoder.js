@@ -5,6 +5,8 @@
  * native WebCodecs API without requiring MP4 container conversion.
  */
 
+import {showError} from "./showError";
+
 /**
  * Bit reader for H.264 streams with Exponential-Golomb decoding support
  */
@@ -128,7 +130,7 @@ export class H264Decoder {
         const { 
             fps = 30,
             onFrame = (frame) => console.log("Decoded frame:", frame),
-            onError = (error) => console.error("Decoder error:", error)
+            onError = (error) => showError("Decoder error:", error)
         } = options;
 
         // Create decoder configuration from SPS/PPS
@@ -166,7 +168,7 @@ export class H264Decoder {
             console.log("H.264 decoder configured successfully");
             
         } catch (error) {
-            console.error("VideoDecoder configuration failed:", error);
+            showError("VideoDecoder configuration failed:", error);
             decoder.close();
             throw new Error(`Failed to configure VideoDecoder: ${error.message}`);
         }

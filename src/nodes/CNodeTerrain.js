@@ -12,6 +12,7 @@ import {EventManager} from "../CEventManager";
 import {QuadTreeMapTexture} from "../QuadTreeMapTexture";
 import {QuadTreeMapElevation} from "../QuadTreeMapElevation";
 import * as LAYER from "../LayerMasks";
+import {showError} from "../showError";
 
 const terrainGUIColor = "#c0ffc0";
 
@@ -368,7 +369,7 @@ export class CNodeTerrain extends CNode {
                     // first check to see if it has been disposed
                     // this happnes and need fixing, but for now just warn and
                     if (this.maps[id].map === undefined) {
-                        console.error("FIX NEEDED: CNodeTerrain: id = " + id + " map loaded callback called with no map object")
+                        showError("FIX NEEDED: CNodeTerrain: id = " + id + " map loaded callback called with no map object")
                         return;
                     }
 

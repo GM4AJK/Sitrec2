@@ -252,8 +252,8 @@ export class QuadTreeMap {
                 //         const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for error
                 //         const timeSinceSet = tile.mesh._lastLayerSetTime ? Date.now() - tile.mesh._lastLayerSetTime : 'unknown';
                 //         const lastSetMask = tile.mesh._lastLayerSetMask || 'unknown';
-                //         console.error(`LAYERS MISMATCH DETECTED: key=${key}, loaded=(${tile.loaded}), mesh.layers.mask=${tile.mesh.layers.mask.toString(2)} (${tile.mesh.layers.mask}), tile.tileLayers=${tile.tileLayers.toString(2)} (${tile.tileLayers})`);
-                //         console.error(`Debug info: lastSetMask=${lastSetMask.toString ? lastSetMask.toString(2) : lastSetMask}, timeSinceSet=${timeSinceSet}ms`);
+                //         showError(`LAYERS MISMATCH DETECTED: key=${key}, loaded=(${tile.loaded}), mesh.layers.mask=${tile.mesh.layers.mask.toString(2)} (${tile.mesh.layers.mask}), tile.tileLayers=${tile.tileLayers.toString(2)} (${tile.tileLayers})`);
+                //         showError(`Debug info: lastSetMask=${lastSetMask.toString ? lastSetMask.toString(2) : lastSetMask}, timeSinceSet=${timeSinceSet}ms`);
                 //         console.trace('Stack trace for layers mismatch:');
                 //     }
                 //     const key = `${tile.z}/${tile.x}/${tile.y}`; // Generate key only when needed for assertion

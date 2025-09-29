@@ -43,7 +43,7 @@
 //     this.processQueue();
 //    } catch (error) {
 //     this.activeRequests--;
-//     console.error(`Error fetching file: ${file}. Re-queueing.`);
+//     showError(`Error fetching file: ${file}. Re-queueing.`);
 //     this.enqueue(file).then(resolve).catch(reject);
 //     this.processQueue();
 //    }
@@ -59,7 +59,7 @@
 // //   const data = await asyncFileLoader.enqueue(file);
 // //   return data;
 // //  } catch (error) {
-// //   console.error(`Failed to fetch ${file}: ${error}`);
+// //   showError(`Failed to fetch ${file}: ${error}`);
 // //   throw error;
 // //  }
 // // }
@@ -70,7 +70,7 @@
 // //      console.log(`File 1 loaded: ${data}`);
 // //     })
 // //     .catch(error => {
-// //      console.error(`Failed to load File 1: ${error}`);
+// //      showError(`Failed to load File 1: ${error}`);
 // //     });
 // //
 // // // ... enqueue more files using fetch

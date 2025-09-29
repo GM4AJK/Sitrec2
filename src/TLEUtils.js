@@ -1,6 +1,6 @@
-
 import {assert} from "./assert";
 import * as satellite from 'satellite.js';
+import {showError} from "./showError";
 
 
 // given an array of satrecs, return the one that best matches the date
@@ -159,7 +159,7 @@ function fixTLELine(line, ends) {
         }
         // if it's too long, that's an error
         if (actualLength > expectedLength) {
-            console.error("TLE field " + i + " is too long: " + field)
+            showError("TLE field " + i + " is too long: " + field)
         }
         newLine += field
         assert(newLine.length === expectedLength, "TLE field " + i + " is not the right length: " + newLine)
@@ -413,7 +413,7 @@ export class CTLEData {
 
 
         if (typeof s !== "number" && typeof s !== "string") {
-            console.error("CNodeSatelliteTrack: not number or string " + s)
+            showError("CNodeSatelliteTrack: not number or string " + s)
         }
 
         return null

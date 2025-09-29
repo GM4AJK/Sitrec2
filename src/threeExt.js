@@ -661,7 +661,7 @@ export function forceFilterChange(texture, filter, renderer) {
         // Ensure Three.js is aware of the state change
         texture.needsUpdate = false;
     } else {
-        console.error('No WebGL texture handle found for the texture.');
+        showError('No WebGL texture handle found for the texture.');
     }
 }
 

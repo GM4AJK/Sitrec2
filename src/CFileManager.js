@@ -29,6 +29,7 @@ import {stripDuplicateTimes} from "./ParseUtils";
 import {isConsole, isLocal, SITREC_APP, SITREC_DOMAIN, SITREC_SERVER} from "./configUtils";
 import {resetGlobalOrigin} from "./ResetOrigin";
 import {probeTransportStreamBufferDetailed, TSParser} from "./TSParser";
+import {showError} from "./showError";
 
 
 // The file manager is a singleton that manages all the files
@@ -536,7 +537,7 @@ export class CFileManager extends CManager {
             this.exportFolder = this.guiFolder.addFolder("Export").perm().close();
         }
 
-      //  console.error("ADDING EXPORT BUTTON FOR "+object.id+" with function "+functionName+ "and name "+name)
+      //  showError("ADDING EXPORT BUTTON FOR "+object.id+" with function "+functionName+ "and name "+name)
 
 
         return this.exportFolder.add(object, functionName).name(name);
@@ -546,7 +547,7 @@ export class CFileManager extends CManager {
     removeExportButton(object) {
         if (this.exportFolder !== undefined) {
             if (object.exportButtons !== undefined) {
-        //        console.error("Removing export button for " + object.id)
+        //        showError("Removing export button for " + object.id)
                 for (let i = 0; i < object.exportButtons.length; i++) {
                     object.exportButtons[i].destroy();
                 }
@@ -792,7 +793,7 @@ export class CFileManager extends CManager {
             const f = this.list[key];
             if (f.filename === filename) {
                 duplicate = true;
-                console.error("Duplicate file " + filename + " found as existing id: " + key + " new id requested:" + id)
+                showError("Duplicate file " + filename + " found as existing id: " + key + " new id requested:" + id)
             }
         });
 
@@ -1022,7 +1023,7 @@ export class CFileManager extends CManager {
                     return Promise.all(filePromises);
                 })
                 .catch(error => {
-                    console.error('Error unzipping the file:', error);
+                    showError('Error unzipping the file:', error);
                 });
         } else {
 
@@ -1347,7 +1348,7 @@ export function detectCSVType(csv) {
     // only give an error warning for custom, as some sitches have custom code to use
     // specific columns of CSV files.
     if (Sit.isCustom) {
-        console.error("Unhandled CSV type detected.  Please add to detectCSVType() function.")
+        showError("Unhandled CSV type detected.  Please add to detectCSVType() function.")
     }
     return "Unknown";
 }

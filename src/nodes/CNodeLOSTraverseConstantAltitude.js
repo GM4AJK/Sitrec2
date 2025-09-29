@@ -1,12 +1,12 @@
 // given a LOS node and a radius
 // we either have an "altitude" node for constant altitude
 // or "startDist" to start at a particular distance along the first line
-import {metersFromMiles} from "../utils";
 import {Color, Ray, Sphere} from "three";
 import {CNodeTrack} from "./CNodeTrack";
 import {intersectSphere2, V3} from "../threeUtils";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {assert} from "../assert";
+import {showError} from "../showError";
 
 export class CNodeLOSTraverseConstantAltitude extends CNodeTrack {
     constructor(v) {
@@ -23,7 +23,7 @@ export class CNodeLOSTraverseConstantAltitude extends CNodeTrack {
         this.frames = this.in.LOS.frames
         var earthRadius = wgs84.RADIUS;
         if (this.in.radius !== undefined) {
-            console.error("Radius deprecated, generally we assume fixed wgs84 radius")
+            showError("Radius deprecated, generally we assume fixed wgs84 radius")
             earthRadius = (this.in.radius.v0)
         }
         var startRadius = earthRadius;

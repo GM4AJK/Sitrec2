@@ -116,7 +116,7 @@ export function parseCustom1CSV(csv) {
     }
 
     // } catch (error) {
-    //     console.error(error.message)
+    //     showError(error.message)
     // }
 
     return MISBArray;
@@ -180,7 +180,7 @@ export function parseFR24CSV(csv) {
 
         const postiion = csv[i][3].split(",");
         if (postiion.length !== 2) {
-            console.error("Invalid position format in FR24 CSV at row " + i);
+            showError("Invalid position format in FR24 CSV at row " + i);
             continue;
         }
         MISBArray[i - 1][MISB.SensorLatitude] = Number(postiion[0]);

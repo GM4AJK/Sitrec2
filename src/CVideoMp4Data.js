@@ -4,6 +4,7 @@ import {MP4Demuxer, MP4Source} from "./js/mp4-decode/mp4_demuxer";
 import {CVideoWebCodecBase} from "./CVideoWebCodecBase";
 import {updateSitFrames} from "./UpdateSitFrames";
 import {EventManager} from "./CEventManager";
+import {showError} from "./showError";
 
 // MP4 video data handler using WebCodec API
 // Handles MP4/MOV files with demuxing and frame caching
@@ -89,7 +90,7 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
                 
                 this.processDecodedFrame(frameNumber, videoFrame, group);
             },
-            error: e => console.error(e),
+            error: e => showError(e),
         };
     }
 

@@ -17,6 +17,7 @@ import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
+import {showError} from "./showError";
 
 //const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020", transparent: true, opacity: 0.5})
 
@@ -2361,7 +2362,7 @@ export class QuadTreeTile {
             this.updateDebugGeometry(); // Update debug geometry to remove elevation loading indicator
             return this;
         } catch (error) {
-            console.error('Error fetching elevation data:', error);
+            showError('Error fetching elevation data:', error);
             this.isLoadingElevation = false; // Clear elevation loading state on error
             this.updateDebugGeometry(); // Update debug geometry to remove elevation loading indicator
             throw error;
@@ -2582,7 +2583,7 @@ export class QuadTreeTile {
     //         neighbor.mesh.geometry.attributes.position.count
     //     )
     //     if (nPosition !== nPositionN) {
-    //         console.error("resolveSeamY only implemented for geometries of same size")
+    //         showError("resolveSeamY only implemented for geometries of same size")
     //         return
     //     }
     //
@@ -2612,7 +2613,7 @@ export class QuadTreeTile {
     //         neighbor.mesh.geometry.attributes.position.count
     //     )
     //     if (nPosition !== nPositionN) {
-    //         console.error("resolveSeamX only implemented for geometries of same size")
+    //         showError("resolveSeamX only implemented for geometries of same size")
     //         return
     //     }
     //

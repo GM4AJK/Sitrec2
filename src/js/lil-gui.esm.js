@@ -12,6 +12,7 @@
 
 import {assert} from "../assert";
 import {setRenderOne} from "../Globals";
+import {showError} from "../showError";
 
 /**
  * Base class for all controllers.
@@ -2168,7 +2169,7 @@ class GUI {
 
         }
 
-        console.error( `gui.add failed
+        showError( `gui.add failed
 	property:`, property, `
 	object:`, object, `
 	value:`, initialValue );

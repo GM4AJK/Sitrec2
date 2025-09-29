@@ -1,8 +1,9 @@
 import {CNodeEmptyArray} from "./CNodeArray";
-import {GlobalDateTimeNode, NodeMan} from "../Globals";
+import {NodeMan} from "../Globals";
 import {EUSToLLA, LLAToEUS} from "../LLA-ECEF-ENU";
 import {EventManager} from "../CEventManager";
 import {pointOnSphereBelow} from "../SphericalMath";
+import {showError} from "../showError";
 
 export class CNodeTrack extends CNodeEmptyArray {
     constructor(v) {
@@ -20,7 +21,7 @@ export class CNodeTrack extends CNodeEmptyArray {
 //         let csv = "Frame,time,Lat,Lon,Alt\n"
 //         let pos = this.v(0)
 //         if (pos === undefined || pos.position === undefined) {
-//             console.error("No position data to export")
+//             showError("No position data to export")
 //             return
 //         }
 //         for (let f=0;f<this.frames;f++) {
@@ -42,7 +43,7 @@ export class CNodeTrack extends CNodeEmptyArray {
     getLLAExtents() {
         let pos = this.v(0)
         if (pos === undefined || pos.position === undefined) {
-            console.error("No position data to find extents of track");
+            showError("No position data to find extents of track");
             return
         }
         let minLat = 90

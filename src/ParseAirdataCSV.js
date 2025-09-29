@@ -4,6 +4,7 @@ import {addMillisecondsToDate, findColumn, parseUTCDate} from "./ParseUtils";
 import {MISB, MISBFields} from "./MISBUtils";
 import {Sit} from "./Globals";
 import {f2m} from "./utils";
+import {showError} from "./showError";
 
 export function parseAirdataCSV(csv) {
     const rows = csv.length;
@@ -54,7 +55,7 @@ export function parseAirdataCSV(csv) {
         }
 
     } catch (error) {
-        console.error(error.message)
+        showError(error.message)
     }
 
     return MISBArray;

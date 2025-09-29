@@ -2,6 +2,7 @@
 import {SitchMan} from "./Globals";
 import {parseJavascriptObject} from "./Serialize";
 import {checkForModding} from "./utils";
+import {showError} from "./showError";
 
 //////////////////////////////////////////////////////////////////////////////////////
 // Note. This failed once due to what seemed to be a circular dependency
@@ -114,7 +115,7 @@ export function textSitchToObject(text, canMod = true) {
         }
     } catch (e) {
         console.error("Error parsing text sitch: ");
-        console.error(e);
+        showError(e);
         // if the error message contains something like:  (line 51 column 18)
         // then we can try to find that line and column in the text
         // and display it in an alert

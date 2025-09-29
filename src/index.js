@@ -87,6 +87,7 @@ import {CNodeView3D} from "./nodes/CNodeView3D";
 import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {QuadTreeTile} from "./QuadTreeTile";
+import {showError} from "./showError";
 
 
 console.log ("SITREC START - index.js after imports")
@@ -270,7 +271,7 @@ if (latlon) {
                     alt = f2m(alt);
                     console.log("Setting GlobalDateTimeNode start altitude to " + alt);
                 } else {
-                    console.error("Invalid altitude format: " + latlonArray[2]);
+                    showError("Invalid altitude format: " + latlonArray[2]);
                 }
             }
 
@@ -303,10 +304,10 @@ if (latlon) {
 
 
         } else {
-            console.error("Invalid lat/lon format: " + latlon);
+            showError("Invalid lat/lon format: " + latlon);
         }
     } else {
-        console.error("Invalid lat/lon format: " + latlon);
+        showError("Invalid lat/lon format: " + latlon);
     }
 }
 
@@ -812,7 +813,7 @@ function initRendering() {
         const renderer = new WebGLRenderer({});
         renderer.dispose();
     } catch (e) {
-        console.error("Incompatible Browser or Graphics Acceleration Disabled\n Error creating WebGLRenderer: "+e)
+        showError("Incompatible Browser or Graphics Acceleration Disabled\n Error creating WebGLRenderer: "+e)
         // show an alert
         alert("Incompatible Browser or Graphics Acceleration Disabled\n Error creating WebGLRenderer:\n "+e)
 
@@ -1352,10 +1353,12 @@ function selectInitialSitch(force) {
     if (lower === "testall") {
         const url = SITREC_APP + "?testAll=1"
         window.location.assign(url)
+        return;
     }
     if (lower === "testquick") {
         const url = SITREC_APP + "?testAll=2"
         window.location.assign(url)
+        return;
     }
 
     par.name = lower;

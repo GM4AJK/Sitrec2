@@ -178,7 +178,7 @@ export class CNodeView3D extends CNodeViewCanvas {
         if (navigator.xr) {
             navigator.xr.requestSession('immersive-vr').then(this.onXRSessionStarted);
         } else {
-            console.error('WebXR not supported on this device');
+            showError('WebXR not supported on this device');
         }
     }
 
@@ -228,7 +228,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                 logarithmicDepthBuffer: true,
             });
         } catch (e) {
-            console.error("Incompatible Browser or Graphics Acceleration Disabled\n Error creating WebGLRenderer: " + e)
+            showError("Incompatible Browser or Graphics Acceleration Disabled\n Error creating WebGLRenderer: " + e)
             // show an alert
             alert("Incompatible Browser or Graphics Acceleration Disabled\n Error creating WebGLRenderer:\n " + e)
 
@@ -280,7 +280,7 @@ export class CNodeView3D extends CNodeViewCanvas {
 
         // Ensure GlobalScene and this.camera are defined
         if (!GlobalScene || !this.camera) {
-            console.error("GlobalScene or this.camera is not defined.");
+            showError("GlobalScene or this.camera is not defined.");
             return;
         }
 

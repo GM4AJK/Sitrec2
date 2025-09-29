@@ -4,6 +4,7 @@ import {loadImage} from "./utils";
 import {CVideoData} from "./CVideoData";
 import {par} from "./par";
 import {isLocal} from "./configUtils";
+import {showError} from "./showError";
 
 /**
  * Base class for WebCodec-based video data handlers
@@ -92,7 +93,7 @@ export class CVideoWebCodecBase extends CVideoData {
                 this.processDecodedFrame(frameNumber, videoFrame, group);
             },
             error: e => {
-                console.error("Decoder error:", e);
+                showError("Decoder error:", e);
                 this.handleDecoderError(e);
             }
         };
@@ -143,7 +144,7 @@ export class CVideoWebCodecBase extends CVideoData {
                 this.handleGroupComplete();
             }
         }).catch(error => {
-            console.error("Error creating ImageBitmap:", error);
+            showError("Error creating ImageBitmap:", error);
         });
 
         videoFrame.close();
@@ -173,7 +174,7 @@ export class CVideoWebCodecBase extends CVideoData {
      * Handle decoder errors - can be overridden by subclasses
      */
     handleDecoderError(error) {
-        console.error("Decoder error:", error);
+        showError("Decoder error:", error);
         // Default implementation - subclasses can override for specific error handling
     }
 
@@ -283,7 +284,7 @@ export class CVideoWebCodecBase extends CVideoData {
             // Kick the reorder buffer so the tail frames are delivered.
             this.decoder.flush().catch(() => { /* ignore mid-seek aborts */ });
         } catch (error) {
-            console.error("Error during group decode:", error);
+            showError("Error during group decode:", error);
             group.pending = 0;
             group.loaded = false;
             this.groupsPending--;

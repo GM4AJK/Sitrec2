@@ -47,6 +47,7 @@ import {TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
+import {showError} from "./showError";
 
 
 export class CCustomManager {
@@ -456,7 +457,7 @@ export class CCustomManager {
     mirrorGUIFolder(sourceFolderName, menuTitle, x = 200, y = 200) {
         // Check if the source folder exists
         if (!guiMenus[sourceFolderName]) {
-            console.error(`Source folder '${sourceFolderName}' not found in guiMenus`);
+            showError(`Source folder '${sourceFolderName}' not found in guiMenus`);
             return null;
         }
 
@@ -1085,7 +1086,7 @@ export class CCustomManager {
     mirrorNodeGUI(nodeId, menuTitle, x = 200, y = 200) {
         const node = NodeMan.get(nodeId);
         if (!node || !node.gui) {
-            console.error(`Node '${nodeId}' not found or has no GUI`);
+            showError(`Node '${nodeId}' not found or has no GUI`);
             return null;
         }
 
