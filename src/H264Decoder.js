@@ -5,7 +5,7 @@
  * native WebCodecs API without requiring MP4 container conversion.
  */
 
-import {showError} from "./showError";
+import {showError} from "./showError.js";
 
 /**
  * Bit reader for H.264 streams with Exponential-Golomb decoding support
