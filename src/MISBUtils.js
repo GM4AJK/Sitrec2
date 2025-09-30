@@ -358,10 +358,121 @@ for(const standard of standards) {
 
 
 export function parseKLVFile(data) {
-//    const result = klv.decode(data, standards, null, {debug: false})
+    console.log(`parseKLVFile: Received data type: ${data.constructor.name}, byteLength: ${data.byteLength}`);
+    
+    // Convert to Uint8Array for processing
+    let uint8Data;
+    if (data instanceof ArrayBuffer) {
+        uint8Data = new Uint8Array(data);
+        console.log(`parseKLVFile: Data is ArrayBuffer with ${data.byteLength} bytes`);
+    } else if (data instanceof Uint8Array) {
+        uint8Data = data;
+        console.log(`parseKLVFile: Data is Uint8Array with ${data.length} bytes, buffer has ${data.buffer.byteLength} bytes`);
+    } else {
+        showError('parseKLVFile: Unsupported data type');
+        return;
+    }
+    
+    console.log(`parseKLVFile: First 32 bytes: ${Array.from(uint8Data.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+    console.log(`parseKLVFile: Last 32 bytes: ${Array.from(uint8Data.slice(-32)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+    
+    // Validate and extract complete KLV packets
+    // KLV structure: Key (variable, often 16 bytes for universal keys) + Length (BER encoded) + Value
+    const validPackets = [];
+    let offset = 0;
+    let packetCount = 0;
+    let skippedIncomplete = 0;
+    
+    while (offset < uint8Data.length) {
+        // Look for potential KLV packet start
+        // Check for local set key (3 bytes: 00 00 df) or universal key (16 bytes starting with 06 0e 2b 34)
+        let keyLength = 0;
+        let packetStart = offset;
+        
+        if (offset + 3 <= uint8Data.length && 
+            uint8Data[offset] === 0x00 && 
+            uint8Data[offset + 1] === 0x00 && 
+            uint8Data[offset + 2] === 0xdf) {
+            // Local set key (3 bytes)
+            keyLength = 3;
+        } else if (offset + 16 <= uint8Data.length && 
+                   uint8Data[offset] === 0x06 && 
+                   uint8Data[offset + 1] === 0x0e && 
+                   uint8Data[offset + 2] === 0x2b && 
+                   uint8Data[offset + 3] === 0x34) {
+            // Universal key (16 bytes)
+            keyLength = 16;
+        } else {
+            // Not a recognized KLV key, skip this byte
+            offset++;
+            continue;
+        }
+        
+        // Parse BER length
+        offset += keyLength;
+        if (offset >= uint8Data.length) break;
+        
+        let length = 0;
+        const firstLengthByte = uint8Data[offset];
+        
+        if ((firstLengthByte & 0x80) === 0) {
+            // Short form: length is in the first byte (0-127)
+            length = firstLengthByte;
+            offset += 1;
+        } else {
+            // Long form: first byte indicates how many bytes encode the length
+            const numLengthBytes = firstLengthByte & 0x7f;
+            offset += 1;
+            
+            if (offset + numLengthBytes > uint8Data.length) {
+                console.log(`parseKLVFile: Incomplete BER length at offset ${packetStart}, skipping`);
+                skippedIncomplete++;
+                break;
+            }
+            
+            for (let i = 0; i < numLengthBytes; i++) {
+                length = (length << 8) | uint8Data[offset + i];
+            }
+            offset += numLengthBytes;
+        }
+        
+        // Check if we have the complete value
+        const packetEnd = offset + length;
+        if (packetEnd > uint8Data.length) {
+            console.log(`parseKLVFile: Incomplete packet at offset ${packetStart}: expected ${length} bytes but only ${uint8Data.length - offset} available, skipping`);
+            skippedIncomplete++;
+            break;
+        }
+        
+        // Extract complete packet (key + length + value)
+        const completePacket = uint8Data.slice(packetStart, packetEnd);
+        validPackets.push(completePacket);
+        packetCount++;
+        
+        offset = packetEnd;
+    }
+    
+    console.log(`parseKLVFile: Found ${packetCount} complete KLV packets, skipped ${skippedIncomplete} incomplete packets`);
+    
+    if (validPackets.length === 0) {
+        showError('parseKLVFile: No valid KLV packets found');
+        return;
+    }
+    
+    // Concatenate all valid packets
+    const totalLength = validPackets.reduce((sum, packet) => sum + packet.length, 0);
+    const cleanedData = new Uint8Array(totalLength);
+    let writeOffset = 0;
+    for (const packet of validPackets) {
+        cleanedData.set(packet, writeOffset);
+        writeOffset += packet.length;
+    }
+    
+    console.log(`parseKLVFile: Cleaned data size: ${cleanedData.length} bytes (was ${uint8Data.length} bytes)`);
+    
     let result;
     try {
-        result = klv.decode(data, st0601, null, {debug: false});
+        result = klv.decode(cleanedData.buffer, st0601, null, {debug: false});
     } catch (error) {
         showError(error);
         return;
@@ -385,15 +496,12 @@ export function parseKLVFile(data) {
         for (const index of Object.keys(data0601[i])) {
             const line = data0601[i][index];
             MISBArray[i][line.key] = line.value;
-            if (line.key === 2) console.log(`${line.key}:${line.value}`)
         }
-//        console.log(`MISB Packet ${i+1}/${n}, timestamp=${MISBArray[i][MISB["UnixTimeStamp"]]}`);
         const unixTime = MISBArray[i][MISB["UnixTimeStamp"]];
         // display as actual time:
         if (unixTime > 0) {
             const date = new Date(unixTime / 1000); // Convert microseconds to seconds
             const formattedDate = date.toLocaleString();
-            console.log(formattedDate);
         }
 
     }
