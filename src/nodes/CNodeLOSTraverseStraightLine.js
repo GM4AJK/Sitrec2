@@ -1,6 +1,6 @@
 // attempt to traverse the LOS in a straight line (straight in the horizontal plane, i.e. viewed from above)
 // given start distance and a heading track
-import { radians} from "../utils";
+import {radians} from "../utils";
 import {Color, Plane, Ray} from "three";
 import {CNodeTrack} from "./CNodeTrack";
 import {assert} from "../assert.js";
@@ -218,6 +218,7 @@ export class CNodeLOSTraverseWind extends CNodeTrack {
                     position.add(heading)
                 }
                 startPosition = position.clone();
+                assert(!isNaN(position.x), "NaN LOS position in CNodeLOSTraverseWind");
 
             } else {
 

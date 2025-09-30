@@ -962,7 +962,7 @@ export class CFileManager extends CManager {
           //  const probe = probeTransportStreamBuffer(buffer);
             const probe = probeTransportStreamBufferDetailed(buffer);
             // and as JSON, pretty formatted
-            console.log(JSON.stringify(probe, null, 2));
+          // console.log(JSON.stringify(probe, null, 2));
 
            // debugger;
 

@@ -1071,6 +1071,8 @@ class CTrackManager extends CManager {
 
                         assert(misb, `Misb file ${trackFileName} not found when expected in findShortName`)
 
+                        assert(misb[0] !== undefined, `Misb file ${trackFileName} does not contain data when expected in findShortName`)
+
                         if (misb[0][MISB.PlatformTailNumber] !== null) {
                             shortName = misb[0][MISB.PlatformTailNumber];
                         } else {

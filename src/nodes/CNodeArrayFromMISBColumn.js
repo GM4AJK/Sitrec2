@@ -3,6 +3,7 @@ import {MISB} from "../MISBUtils";
 import {ExpandMISBKeyframes, RollingAverage, RollingAverageDegrees} from "../utils";
 import {CNode} from "./CNode";
 import {assert} from "../assert.js";
+import {showError} from "../showError";
 
 // These nodes replace the manually created CNodeArrays
 // in makeArrayNodeFromMISBColumn in CNodeArray.js
@@ -58,13 +59,18 @@ export function makeArrayNodeFromMISBColumn(id, misbTrack, columnIndex, smooth =
     // asset that the misbTrack is derived from CNode
     assert(misbTrack instanceof CNode, "makeArrayNodeFromMISBColumn: misbTrack is not a CNode");
 
-    const node = new CNodeArrayFromMISBColumn({
-        id: id,
-        misb: misbTrack,
-        columnIndex: columnIndex,
-        smooth: smooth,
-        degrees: degrees
-    });
-    return node;
+    try {
+        const node = new CNodeArrayFromMISBColumn({
+            id: id,
+            misb: misbTrack,
+            columnIndex: columnIndex,
+            smooth: smooth,
+            degrees: degrees
+        });
+        return node;
+    } catch (e) {
+        showError(e);
+        return null;
+}
 
 }

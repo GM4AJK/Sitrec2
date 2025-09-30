@@ -463,10 +463,25 @@ export function ExpandMISBKeyframes(array, columnIndex) {
     for (let i=0;i<array.length;i++) {
         const misbRow = array[i].misbRow
         if (misbRow !== lastMISBRow) {
-            keyframes.push([i,misbRow[columnIndex]])
+            const value = misbRow[columnIndex];
+            console.log("keyframe: "+i+" "+value)
+            keyframes.push([i,value])
             lastMISBRow = misbRow
         }
     }
+
+
+    if (keyframes.length === 1 ) {
+        throw new Error("Only one keyframe found. Possible sparse track ("+array.length+" frames) that is not covered by "+Sit.frames+" Sit.frames");
+    }
+
+    if (keyframes.length < 1  ) {
+        throw new Error("No keyframes found");
+    }
+
+    assert(keyframes.length>1,"ExpandMISBKeyframes: only one keyframe found")
+
+
     // then just expand it.
     return ExpandKeyframes(keyframes, array.length, 0, 1)
 

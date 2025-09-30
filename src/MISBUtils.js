@@ -385,7 +385,17 @@ export function parseKLVFile(data) {
         for (const index of Object.keys(data0601[i])) {
             const line = data0601[i][index];
             MISBArray[i][line.key] = line.value;
+            if (line.key === 2) console.log(`${line.key}:${line.value}`)
         }
+//        console.log(`MISB Packet ${i+1}/${n}, timestamp=${MISBArray[i][MISB["UnixTimeStamp"]]}`);
+        const unixTime = MISBArray[i][MISB["UnixTimeStamp"]];
+        // display as actual time:
+        if (unixTime > 0) {
+            const date = new Date(unixTime / 1000); // Convert microseconds to seconds
+            const formattedDate = date.toLocaleString();
+            console.log(formattedDate);
+        }
+
     }
 
     return MISBArray;
