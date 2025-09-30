@@ -43,8 +43,19 @@ export function parse(buffer, options = {}) {
 	const values = [];
 
 	let i = key.length + berHeader + berLength; //index of first content key
-	while (i < parsedLength) {
+	let checksumFound = false;
+	
+	while (i < parsedLength && !checksumFound) {
 		const { key, keyLength } = klv.getKey(packet.subarray(i, packet.length));
+
+		// Check for suspicious key values that indicate padding or corruption
+		if (keyLength > 1 && key > 200) {
+			// Long-form key with suspiciously high value - likely padding
+			options.debug === true && console.debug(
+				`ST0601: Stopping parse at position ${i}. Encountered suspicious key value ${key} (0x${key.toString(16)}) which appears to be padding or end marker. Remaining bytes: ${parsedLength - i}`
+			);
+			break;
+		}
 
 		let { berHeader, berLength, contentLength } = klv.getBer(packet[i + keyLength]);
 		if (contentLength === null) {
@@ -105,6 +116,14 @@ export function parse(buffer, options = {}) {
 		}
 
 		values.push(parsed);
+
+		// Checksum (key 1) should be the last field in ST0601
+		if (key === 1) {
+			checksumFound = true;
+			options.debug === true && console.debug(
+				`ST0601: Checksum found at position ${i}. Stopping parse. Remaining bytes in packet: ${parsedLength - (i + keyLength + berHeader + berLength + contentLength)}`
+			);
+		}
 
 		i += keyLength + berHeader + berLength + contentLength; // advance past key, length and value bytes
 	}
@@ -194,11 +213,20 @@ function convert(key, dataview, options) {
 	try {
 		switch (key) {
 			case 1:
-				// klv.checkRequiredSize(key, buffer, st0601data(key).length)
+				// Checksum - should be 2 bytes per standard, but handle 1 byte for non-compliant files
+				let checksumValue;
+				if (dataview.byteLength === 1) {
+					checksumValue = dataview.getUint8(0);
+					console.warn(`ST0601: Non-standard 1-byte checksum detected (expected 2 bytes). Value: 0x${checksumValue.toString(16).padStart(2, '0')}`);
+				} else if (dataview.byteLength === 2) {
+					checksumValue = dataview.getUint16(0, false);
+				} else {
+					throw new Error(`ST0601: Invalid checksum length. Expected 1 or 2 bytes, got ${dataview.byteLength} bytes`);
+				}
 				return {
 					key,
 					name: st0601data(key).name,
-					value: dataview.getUint16(0, false),
+					value: checksumValue,
 					valid: true,
 				};
 			case 2:
