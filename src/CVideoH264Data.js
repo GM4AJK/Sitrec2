@@ -225,6 +225,15 @@ export class CVideoH264Data extends CVideoWebCodecBase {
                 );
             }
 
+            // Set video dimensions from SPS if available
+            if (analysis.width && analysis.height) {
+                this.videoWidth = analysis.width;
+                this.videoHeight = analysis.height;
+                console.log(`✓ Video dimensions from SPS: ${this.videoWidth}x${this.videoHeight}`);
+            } else {
+                console.warn("⚠️ Could not parse dimensions from SPS, will use default 100x100 until first frame is decoded");
+            }
+
             // Validate SPS/PPS data
             if (!analysis.spsData || analysis.spsData.length < 4) {
                 throw new Error(`Invalid SPS data: ${analysis.spsData ? analysis.spsData.length : 'null'} bytes`);

@@ -570,6 +570,16 @@ export class H264Decoder {
                         } catch (e) {
                             console.warn("Failed to parse VUI from SPS:", e.message);
                         }
+                        // Try to parse dimensions from SPS
+                        try {
+                            const dimensions = this.parseDimensionsFromSPS(analysis.spsData);
+                            if (dimensions) {
+                                analysis.width = dimensions.width;
+                                analysis.height = dimensions.height;
+                            }
+                        } catch (e) {
+                            console.warn("Failed to parse dimensions from SPS:", e.message);
+                        }
                     } else if (nalType === 8) { // PPS
                         analysis.hasPPS = true;
                         analysis.ppsData = data.slice(nalStart, nalEnd);
@@ -581,6 +591,93 @@ export class H264Decoder {
         }
 
         return analysis;
+    }
+
+    /**
+     * Parse video dimensions from SPS data
+     * Returns {width, height} or null if parsing fails
+     */
+    static parseDimensionsFromSPS(spsData) {
+        try {
+            // Create bit reader for SPS data
+            const bitReader = new H264BitReader(spsData);
+            
+            // Skip NAL header (8 bits)
+            bitReader.readBits(8);
+            
+            // Parse SPS header
+            const profile_idc = bitReader.readBits(8);
+            const constraint_flags = bitReader.readBits(8);
+            const level_idc = bitReader.readBits(8);
+            
+            // seq_parameter_set_id (ue(v))
+            const seq_parameter_set_id = bitReader.readUE();
+            
+            // Handle high profiles (100, 110, 122, 244, 44, 83, 86, 118, 128)
+            if (profile_idc === 100 || profile_idc === 110 || profile_idc === 122 || 
+                profile_idc === 244 || profile_idc === 44 || profile_idc === 83 || 
+                profile_idc === 86 || profile_idc === 118 || profile_idc === 128) {
+                
+                const chroma_format_idc = bitReader.readUE();
+                if (chroma_format_idc === 3) {
+                    bitReader.readBits(1); // separate_colour_plane_flag
+                }
+                bitReader.readUE(); // bit_depth_luma_minus8
+                bitReader.readUE(); // bit_depth_chroma_minus8
+                bitReader.readBits(1); // qpprime_y_zero_transform_bypass_flag
+                
+                const seq_scaling_matrix_present_flag = bitReader.readBits(1);
+                if (seq_scaling_matrix_present_flag) {
+                    const scaling_list_count = (chroma_format_idc !== 3) ? 8 : 12;
+                    for (let i = 0; i < scaling_list_count; i++) {
+                        const seq_scaling_list_present_flag = bitReader.readBits(1);
+                        if (seq_scaling_list_present_flag) {
+                            // Skip scaling list parsing
+                            this.skipScalingList(bitReader, i < 6 ? 16 : 64);
+                        }
+                    }
+                }
+            }
+            
+            // Continue parsing SPS
+            const log2_max_frame_num_minus4 = bitReader.readUE();
+            const pic_order_cnt_type = bitReader.readUE();
+            
+            if (pic_order_cnt_type === 0) {
+                bitReader.readUE(); // log2_max_pic_order_cnt_lsb_minus4
+            } else if (pic_order_cnt_type === 1) {
+                bitReader.readBits(1); // delta_pic_order_always_zero_flag
+                bitReader.readSE(); // offset_for_non_ref_pic
+                bitReader.readSE(); // offset_for_top_to_bottom_field
+                const num_ref_frames_in_pic_order_cnt_cycle = bitReader.readUE();
+                for (let i = 0; i < num_ref_frames_in_pic_order_cnt_cycle; i++) {
+                    bitReader.readSE(); // offset_for_ref_frame[i]
+                }
+            }
+            
+            bitReader.readUE(); // max_num_ref_frames
+            bitReader.readBits(1); // gaps_in_frame_num_value_allowed_flag
+            
+            // These are the values we need for dimensions
+            const pic_width_in_mbs_minus1 = bitReader.readUE();
+            const pic_height_in_map_units_minus1 = bitReader.readUE();
+            
+            const frame_mbs_only_flag = bitReader.readBits(1);
+            
+            // Calculate dimensions
+            // Width is in macroblocks (16 pixels each)
+            const width = (pic_width_in_mbs_minus1 + 1) * 16;
+            // Height calculation depends on frame_mbs_only_flag
+            const height = (pic_height_in_map_units_minus1 + 1) * 16 * (frame_mbs_only_flag ? 1 : 2);
+            
+            console.log(`Parsed dimensions from SPS: ${width}x${height}`);
+            
+            return { width, height };
+            
+        } catch (error) {
+            console.warn("Failed to parse dimensions from SPS:", error.message);
+            return null;
+        }
     }
 
     /**
