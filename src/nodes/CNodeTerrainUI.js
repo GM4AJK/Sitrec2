@@ -498,9 +498,9 @@ export class CNodeTerrainUI extends CNode {
     doRefresh() {
         this.log("Refreshing terrain")
         assert(this.terrainNode.maps[this.mapType].map !== undefined, "Terrain map not defined when trying the set startLoading")
-        // this.startLoading = true;
-        // this.flagForRecalculation();
-        this.terrainNode.reloadMap(this.mapType)
+         this.startLoading = true;
+         this.flagForRecalculation();
+        //this.terrainNode.reloadMap(this.mapType)
     }
 
     flagForRecalculation() {
