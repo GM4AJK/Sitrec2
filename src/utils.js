@@ -464,23 +464,25 @@ export function ExpandMISBKeyframes(array, columnIndex) {
         const misbRow = array[i].misbRow
         if (misbRow !== lastMISBRow) {
             const value = misbRow[columnIndex];
-            console.log("keyframe: "+i+" "+value)
             keyframes.push([i,value])
             lastMISBRow = misbRow
         }
-    }
-
-
-    if (keyframes.length === 1 ) {
-        throw new Error("Only one keyframe found. Possible sparse track ("+array.length+" frames) that is not covered by "+Sit.frames+" Sit.frames");
     }
 
     if (keyframes.length < 1  ) {
         throw new Error("No keyframes found");
     }
 
-    assert(keyframes.length>1,"ExpandMISBKeyframes: only one keyframe found")
-
+    // If we only have one keyframe, this can happen during initial load when Sit.frames
+    // is still at its default value (e.g., 900) but the actual video/KLV data is shorter.
+    // In this case, return a constant array filled with that single value.
+    // When the video finishes loading and Sit.frames is updated to the correct value,
+    // this function will be called again with the proper frame count.
+    if (keyframes.length === 1 ) {
+        console.warn("ExpandMISBKeyframes: only one keyframe found - returning constant array. This may be temporary during initial load. Sit.frames=" + Sit.frames + ", array.length=" + array.length);
+        const constantValue = keyframes[0][1];
+        return new Array(array.length).fill(constantValue);
+    }
 
     // then just expand it.
     return ExpandKeyframes(keyframes, array.length, 0, 1)
