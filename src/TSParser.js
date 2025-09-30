@@ -1,4 +1,4 @@
-import {showError} from "./showError";
+import {showError} from "./showError.js";
 
 /**
  * Transport Stream (TS) Parser
@@ -142,11 +142,16 @@ export class TSParser {
                     offset += chunk.length;
                 }
 
-                // For video streams, extract elementary stream data from PES packets
+                // For KLV streams, extract elementary stream data from PES packets
+                // Video streams (H.264, MPEG2, etc.) are already in the correct format from TS payload extraction
                 let finalData = concatenatedData;
-                if (streamInfo.codec_type === 'video' || streamInfo.codec_name === 'h264') {
+                console.log(`extractTSStreams: PID ${pid}, codec_type: ${streamInfo.codec_type}, codec_name: ${streamInfo.codec_name}, concatenated: ${concatenatedData.length} bytes`);
+                if (streamInfo.codec_name === 'klv') {
+                    console.log(`extractTSStreams: Applying PES extraction for PID ${pid} (KLV stream)`);
                     finalData = TSParser.extractElementaryStreamFromPES(concatenatedData);
-                    console.log(`extractTSStreams: Extracted elementary stream from PES for PID ${pid}: ${finalData.length} bytes`);
+                    console.log(`extractTSStreams: After PES extraction for PID ${pid}: ${finalData.length} bytes (was ${concatenatedData.length} bytes)`);
+                } else {
+                    console.log(`extractTSStreams: Skipping PES extraction for PID ${pid} (not a KLV stream)`);
                 }
 
                 // Determine file extension based on codec
@@ -192,13 +197,17 @@ export class TSParser {
                         extension = 'bin';
                 }
 
-                console.log(`extractTSStreams: Extracted ${streamInfo.codec_name} stream (PID ${pid}): ${totalLength} bytes`);
+                console.log(`extractTSStreams: Extracted ${streamInfo.codec_name} stream (PID ${pid}): ${finalData.length} bytes`);
+
+                // Create a proper ArrayBuffer from the Uint8Array
+                // Using .buffer directly can include extra data if the Uint8Array is a view
+                const arrayBuffer = finalData.buffer.slice(finalData.byteOffset, finalData.byteOffset + finalData.byteLength);
 
                 streams.push({
                     pid: pid,
                     type: streamInfo.codec_name,
                     extension: extension,
-                    data: finalData.buffer,
+                    data: arrayBuffer,
                     codec_type: streamInfo.codec_type,
                     stream_type: streamInfo.stream_type,
                     descriptors: streamInfo.descriptors
@@ -242,14 +251,18 @@ export class TSParser {
     static extractElementaryStreamFromPES(pesData) {
         const elementaryStreamChunks = [];
         let offset = 0;
+        let pesPacketCount = 0;
 
         while (offset < pesData.length - 6) { // Need at least 6 bytes for PES header
             // Look for PES start code: 0x00 0x00 0x01
             if (pesData[offset] === 0x00 && pesData[offset + 1] === 0x00 && pesData[offset + 2] === 0x01) {
                 const streamId = pesData[offset + 3];
                 
-                // Check if this is a video stream ID (0xE0-0xEF)
-                if (streamId >= 0xE0 && streamId <= 0xEF) {
+                // Check if this is a video stream (0xE0-0xEF) or private stream (0xBD-0xFF)
+                // Private streams include KLV data, subtitles, etc.
+                if ((streamId >= 0xE0 && streamId <= 0xEF) || (streamId >= 0xBD && streamId <= 0xFF)) {
+                    pesPacketCount++;
+                    
                     // Parse PES packet header
                     const packetLength = (pesData[offset + 4] << 8) | pesData[offset + 5];
                     
@@ -259,22 +272,19 @@ export class TSParser {
                     // If packet length is 0, this is an unbounded PES packet
                     let nextPesStart = pesData.length;
                     if (packetLength > 0) {
-                        nextPesStart = offset + 6 + packetLength;
+                        nextPesStart = Math.min(offset + 6 + packetLength, pesData.length);
                     } else {
                         // Find next PES start code
                         for (let i = headerOffset + 3; i < pesData.length - 2; i++) {
                             if (pesData[i] === 0x00 && pesData[i + 1] === 0x00 && pesData[i + 2] === 0x01) {
-                                const nextStreamId = pesData[i + 3];
-                                if (nextStreamId >= 0xE0 && nextStreamId <= 0xEF) {
-                                    nextPesStart = i;
-                                    break;
-                                }
+                                nextPesStart = i;
+                                break;
                             }
                         }
                     }
                     
-                    // For video streams, check for optional PES header fields
-                    if (headerOffset < pesData.length) {
+                    // Check for optional PES header fields (present in most streams)
+                    if (headerOffset < pesData.length - 2) {
                         const pesHeaderDataLength = pesData[headerOffset + 2];
                         headerOffset += 3 + pesHeaderDataLength; // Skip fixed fields + optional fields
                     }
@@ -283,11 +293,17 @@ export class TSParser {
                     if (headerOffset < nextPesStart) {
                         const elementaryData = pesData.slice(headerOffset, nextPesStart);
                         elementaryStreamChunks.push(elementaryData);
+                        
+                        // Log first and last few PES packets for debugging
+                        if (pesPacketCount <= 3 || pesPacketCount >= 103) {
+                            console.log(`PES packet ${pesPacketCount}: offset=${offset}, packetLength=${packetLength}, headerOffset=${headerOffset}, nextPesStart=${nextPesStart}, elementaryDataSize=${elementaryData.length}`);
+                            console.log(`  First 16 bytes: ${Array.from(elementaryData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+                        }
                     }
                     
                     offset = nextPesStart;
                 } else {
-                    // Not a video stream, skip this PES packet
+                    // Not a supported stream type, skip this PES packet
                     offset += 6;
                     if (offset < pesData.length - 2) {
                         const packetLength = (pesData[offset - 2] << 8) | pesData[offset - 1];
