@@ -2,7 +2,7 @@ import * as st0102 from "./st0102.mjs";
 import * as st0806 from "./st0806.mjs";
 import * as st0903 from "./st0903.mjs";
 import * as klv from "./klv.mjs";
-import { cast, startsWith, asHexString } from "./klv.mjs";
+import {asHexString, cast, startsWith} from "./klv.mjs";
 
 // module.exports.name = 'st0601'
 export const name = "st0601";
@@ -18,12 +18,13 @@ export function parse(buffer, options = {}) {
 
 	if (packet.length < minSize) {
 		// must have a 16 byte key, 1 byte BER, 10 byte timestamp, 4 byte checksum
-		throw new Error("Buffer has no content to read");
+		throw new Error(`ST0601: Buffer too small to parse. Expected at least ${minSize} bytes, but received ${packet.length} bytes`);
 	}
 
 	if (!startsWith(packet, key)) {
 		// compare first 16 bytes before BER
-		throw new Error("Not ST0601");
+		const receivedKey = asHexString(packet.subarray(0, Math.min(key.length, packet.length)));
+		throw new Error(`ST0601: Invalid packet key. Expected key '${asHexString(key)}', but received '${receivedKey}'`);
 	}
 
 	let { berHeader, berLength, contentLength } = klv.getBer(packet[key.length]);
@@ -36,7 +37,7 @@ export function parse(buffer, options = {}) {
 	const parsedLength = key.length + berHeader + berLength + contentLength;
 	if (parsedLength > packet.length) {
 		// buffer length isn't long enough to read content
-		throw new Error("Buffer includes ST0601 key and BER but not content");
+		throw new Error(`ST0601: Incomplete packet. Expected ${parsedLength} bytes (key: ${key.length}, BER header: ${berHeader}, BER length: ${berLength}, content: ${contentLength}), but packet is only ${packet.length} bytes`);
 	}
 
 	const values = [];
@@ -64,7 +65,7 @@ export function parse(buffer, options = {}) {
 
 		if (parsedLength < i + keyLength + berHeader + berLength + contentLength) {
 			throw new Error(
-				`Invalid ST0601 buffer, not enough content key: ${key}, key length: ${keyLength}, content length: ${contentLength}`
+				`ST0601: Buffer overflow at position ${i}. Item key ${key} requires ${keyLength + berHeader + berLength + contentLength} bytes (key: ${keyLength}, BER header: ${berHeader}, BER length: ${berLength}, content: ${contentLength}), but only ${parsedLength - i} bytes remain in packet`
 			);
 		}
 
@@ -1062,7 +1063,7 @@ function convert(key, dataview, options) {
 				};
 			default:
 				if (options.strict === true) {
-					throw Error(`st0601 key ${key} not found`);
+					throw Error(`ST0601: Unknown or unsupported key ${key} (0x${key.toString(16).padStart(2, '0')}). Buffer size: ${dataview.byteLength} bytes`);
 				}
 				return {
 					key,
@@ -1071,6 +1072,11 @@ function convert(key, dataview, options) {
 				};
 		}
 	} catch (e) {
+		// Add context to the error if it doesn't already have ST0601 prefix
+		if (e.message && !e.message.startsWith('ST0601:')) {
+			const keyName = st0601data(key)?.name || 'Unknown';
+			throw new Error(`ST0601: Error parsing key ${key} (0x${key.toString(16).padStart(2, '0')}) '${keyName}'. Buffer size: ${dataview.byteLength} bytes. Original error: ${e.message}`, { cause: e });
+		}
 		throw e;
 	}
 }
