@@ -35,6 +35,31 @@ function getAirDensity(altitude) {
     return rho
 }
 
+/**
+ * CNodeHomingMissileTrack - Simulates a missile with proportional navigation guidance
+ * 
+ * This node creates a track for a missile that uses Proportional Navigation (PN) guidance
+ * to intercept a target. The missile physics includes:
+ * - Thrust (with configurable burn time)
+ * - Drag (atmospheric resistance based on altitude)
+ * - Gravity
+ * - Proportional Navigation guidance with direct pursuit augmentation
+ * - Augmented PN for target acceleration compensation
+ * 
+ * Guidance System Configuration (Balanced for Effective Tracking):
+ * - Navigation Gain: 5.0 (higher end of typical 3-5 range)
+ * - Max Lateral Acceleration: 200 m/s² (20g)
+ * - Direct Pursuit: 20 m/s² constant acceleration toward target
+ * - Min Effective Closing Velocity: 50 m/s (ensures guidance works at launch)
+ * - Thrust Direction: Blends from target-pointing to velocity-aligned (30% min toward target)
+ * - LOS Rate Threshold: 0.00001 rad/s (very sensitive)
+ * - Lateral Force Threshold: 0.001 m/s² (applies even small corrections)
+ * 
+ * The guidance combines:
+ * 1. Direct Pursuit - constant acceleration toward target for aggressive tracking
+ * 2. Proportional Navigation - lateral acceleration to null LOS rotation
+ * 3. Augmented PN - compensates for target acceleration
+ */
 export class CNodeHomingMissileTrack extends CNodeTrack {
     constructor(v) {
         if (v.frames === undefined) {
@@ -106,8 +131,32 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
             tooltip: "Duration of thrust in seconds"
         }))
 
+        this.addInput("navigationGain", new CNodeGUIValue({
+            value: 3,
+            start: 1,
+            end: 10,
+            step: 0.1,
+            desc: "Navigation Gain (N)",
+            gui: "missile",
+            tooltip: "Proportional navigation gain constant (typical: 3-5)"
+        }))
+
+        this.addInput("maxLateralAccel", new CNodeGUIValue({
+            value: 100,
+            start: 10,
+            end: 300,
+            step: 5,
+            desc: "Max Lateral Accel (m/s²)",
+            gui: "missile",
+            tooltip: "Maximum lateral acceleration the missile can achieve"
+        }))
+
         this.requireInputs(["source", "target"])
         this.isNumber = false;
+        
+        // Store previous LOS for rate calculation
+        this.prevLOS = null;
+        
         this.recalculate()
     }
 
@@ -120,6 +169,8 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
         const dragCoefficient = this.in.dragCoefficient.v0 // Cd (dimensionless)
         const referenceArea = this.in.referenceArea.v0 // m²
         const burnTime = this.in.burnTime.v0 // seconds
+        const navigationGain = this.in.navigationGain.v0 ?? 5.0 // Higher PN gain for good tracking (typical 3-5)
+        const maxLateralAccel = this.in.maxLateralAccel.v0 ?? 200.0 // m/s² (about 20g) - reasonable for a missile
         const burnFrames = Math.floor(burnTime * Sit.fps)
         const endBurnFrame = startFrame + burnFrames
 
@@ -136,6 +187,9 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
 
         const dt = 1.0 / Sit.fps // time step in seconds
         const gravity = 9.81 // m/s^2
+        
+        // Previous LOS vector for rate calculation
+        let prevLOS = null
 
         for (let f = 0; f < this.frames; f++) {
             // Store current position
@@ -153,15 +207,19 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
                     const sourcePos1 = this.in.source.p(f + 1)
                     missileVel = sourcePos1.clone().sub(sourcePos0).multiplyScalar(Sit.fps)
                 }
+                // Initialize prevLOS just before launch
+                if (f === startFrame - 1) {
+                    const targetFrame = Math.min(f, this.in.target.frames - 1)
+                    const targetPos = this.in.target.p(targetFrame)
+                    prevLOS = targetPos.clone().sub(missilePos)
+                }
                 continue
             }
 
-            // Get target position
+            // Get target position and velocity
             const targetFrame = Math.min(f, this.in.target.frames - 1)
             const targetPos = this.in.target.p(targetFrame)
-
-            // Calculate direction to target for interception
-            // Simple proportional navigation: aim towards where target will be
+            
             let targetVel = V3(0, 0, 0)
             if (targetFrame < this.in.target.frames - 1) {
                 const targetPos0 = this.in.target.p(targetFrame)
@@ -169,20 +227,96 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
                 targetVel = targetPos1.clone().sub(targetPos0).multiplyScalar(Sit.fps)
             }
 
-            // Estimate time to intercept
-            const relativePos = targetPos.clone().sub(missilePos)
-            const distance = relativePos.length()
-            const missileSpeed = missileVel.length()
-            const timeToIntercept = missileSpeed > 0 ? distance / missileSpeed : 1.0
+            // Calculate Line of Sight (LOS) vector from missile to target
+            const LOS = targetPos.clone().sub(missilePos)
+            const range = LOS.length()
+            
+            // Normalize LOS to get unit vector
+            const LOSUnit = range > 0 ? LOS.clone().normalize() : V3(0, 0, 1)
+            
+            // Calculate commanded acceleration using Proportional Navigation
+            let commandedAccel = V3(0, 0, 0)
+            
+            // Add moderate direct pursuit component for better tracking
+            // This helps the missile track the target, especially at launch
+            const directPursuitAccel = LOSUnit.clone().multiplyScalar(20.0) // 20 m/s² toward target
+            commandedAccel.add(directPursuitAccel)
+            
+            if (range > 1.0 && prevLOS !== null && prevLOS.length() > 0) {
+                // Calculate LOS rate directly from change in LOS
+                // This is more robust than using relative velocity
+                const LOSdot = LOS.clone().sub(prevLOS).multiplyScalar(Sit.fps)
+                
+                // Calculate closing velocity (how fast the range is decreasing)
+                const closingVelocity = -(targetVel.clone().sub(missileVel)).dot(LOSUnit)
+                
+                // Calculate the LOS angular rate vector
+                // ω = (LOS × LOS_dot) / |LOS|²
+                const LOSRateVector = LOS.clone().cross(LOSdot).divideScalar(range * range)
+                const LOSRateMagnitude = LOSRateVector.length()
+                
 
-            // Predict target position
-            const predictedTargetPos = targetPos.clone().add(targetVel.clone().multiplyScalar(timeToIntercept))
-
-            // Calculate desired direction
-            const desiredDir = predictedTargetPos.clone().sub(missilePos)
-            if (desiredDir.length() > 0) {
-                desiredDir.normalize()
+                
+                // Apply PN guidance whenever there's any LOS rotation at all
+                // Very aggressive - even tiny LOS rates will cause guidance
+                if (LOSRateMagnitude > 0.00001) {  // Very low threshold
+                    // The acceleration should be perpendicular to LOS
+                    // Direction: perpendicular component of LOS_dot normalized
+                    const LOSdotPerp = LOSdot.clone().sub(
+                        LOSUnit.clone().multiplyScalar(LOSdot.dot(LOSUnit))
+                    )
+                    
+                    // Acceleration direction is perpendicular to LOS, in direction of LOS rotation
+                    // We want to accelerate to REDUCE the rotation, so we use LOSdotPerp direction
+                    let accelDirection = V3(0, 0, 0)
+                    if (LOSdotPerp.length() > 0.01) {
+                        // The acceleration should be in the direction of LOSdotPerp
+                        // to null out the LOS rotation
+                        accelDirection = LOSdotPerp.clone().normalize()
+                    }
+                    
+                    // Standard PN: a = N * Vc * ω
+                    // Use max of closing velocity or a minimum value to ensure guidance works at launch
+                    // Use reasonable minimum to ensure guidance works even with low closing velocity
+                    const effectiveClosingVel = Math.max(closingVelocity, 50.0) // minimum 50 m/s for effective guidance
+                    const PN_accel = accelDirection.multiplyScalar(
+                        navigationGain * effectiveClosingVel * LOSRateMagnitude
+                    )
+                    commandedAccel.add(PN_accel)
+                    
+                    // Debug output for first few frames after launch (compact version)
+                    if (f >= startFrame && f < startFrame + 5) {  // Just first 5 frames
+                        console.log(`Frame ${f}: Range=${range.toFixed(0)}m, Speed=${missileVel.length().toFixed(0)}m/s, ClosingVel=${closingVelocity.toFixed(0)}m/s, LOSRate=${LOSRateMagnitude.toFixed(3)}rad/s, PNAccel=${PN_accel.length().toFixed(0)}m/s², TotalAccel=${commandedAccel.length().toFixed(0)}m/s²`)
+                    }
+                }
+                
+                // Augmented PN: add target acceleration compensation
+                let targetAccel = V3(0, 0, 0)
+                if (targetFrame < this.in.target.frames - 2) {
+                    const targetPos0 = this.in.target.p(targetFrame)
+                    const targetPos1 = this.in.target.p(targetFrame + 1)
+                    const targetPos2 = this.in.target.p(targetFrame + 2)
+                    const targetVel0 = targetPos1.clone().sub(targetPos0).multiplyScalar(Sit.fps)
+                    const targetVel1 = targetPos2.clone().sub(targetPos1).multiplyScalar(Sit.fps)
+                    targetAccel = targetVel1.clone().sub(targetVel0).multiplyScalar(Sit.fps)
+                }
+                
+                // Project target acceleration perpendicular to LOS
+                const targetAccelPerp = targetAccel.clone().sub(LOSUnit.clone().multiplyScalar(targetAccel.dot(LOSUnit)))
+                
+                // Augmented PN term: (N/2) * target_accel_perpendicular
+                const APN_accel = targetAccelPerp.multiplyScalar(navigationGain / 2.0)
+                commandedAccel.add(APN_accel)
+                
+                // Clamp to maximum lateral acceleration
+                const commandedAccelMag = commandedAccel.length()
+                if (commandedAccelMag > maxLateralAccel) {
+                    commandedAccel.multiplyScalar(maxLateralAccel / commandedAccelMag)
+                }
             }
+            
+            // Store current LOS for next iteration
+            prevLOS = LOS.clone()
 
             // Calculate forces
             const localUp = getLocalUpVector(missilePos)
@@ -192,8 +326,43 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
 
             // Add thrust if still burning
             if (f < endBurnFrame) {
-                const thrustForce = desiredDir.clone().multiplyScalar(thrust)
+                // Thrust direction logic:
+                // - At launch: point toward target
+                // - After launch: blend velocity direction with desired direction based on guidance
+                let thrustDir
+                
+                const speed = missileVel.length()
+                if (speed < 1.0) {
+                    // At launch, point directly at target
+                    thrustDir = LOSUnit.clone()
+                } else {
+                    // After launch, primarily thrust along velocity direction
+                    // but allow some steering toward target
+                    const velDir = missileVel.clone().normalize()
+                    
+                    // Blend velocity direction with target direction for better guidance
+                    // Gradually transition from target-pointing to velocity-aligned as speed increases
+                    const blendFactor = Math.min(speed / 100.0, 0.7) // Max 0.7, so always at least 30% toward target
+                    thrustDir = velDir.multiplyScalar(blendFactor)
+                        .add(LOSUnit.clone().multiplyScalar(1.0 - blendFactor))
+                        .normalize()
+                }
+                
+                const thrustForce = thrustDir.multiplyScalar(thrust)
                 totalForce.add(thrustForce)
+                
+
+            }
+            
+            // Add the commanded lateral acceleration as a force
+            // This represents control surfaces or thrust vectoring
+            // This is the ONLY place we apply the PN guidance command
+            // VERY AGGRESSIVE - apply even tiny guidance commands
+            if (commandedAccel.length() > 0.001) {
+                const lateralForce = commandedAccel.clone().multiplyScalar(mass)
+                totalForce.add(lateralForce)
+                
+
             }
 
             // Add air resistance using physically accurate drag equation
@@ -219,6 +388,8 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
 
             // Calculate acceleration (F = ma)
             const acceleration = totalForce.divideScalar(mass)
+            
+
 
             // Update velocity and position using Euler integration
             missileVel.add(acceleration.multiplyScalar(dt))

@@ -754,6 +754,7 @@ sitch = {
         kind: "HomingMissileTrack",
         source: "cameraTrackSwitchSmooth",
         target: "traverseSmoothedTrack",
+        force: true,
     },
 
     // Missile object (sphere)
@@ -768,9 +769,12 @@ sitch = {
         emissive: '#FF4040',
         widthSegments: 16,
         heightSegments: 16,
+        force: true,
     },
 
-    moveMissileAlongPath: {kind: "TrackPosition", object: "missileObject", sourceTrack: "homingMissileTrack"},
+    moveMissileAlongPath: {kind: "TrackPosition", object: "missileObject", sourceTrack: "homingMissileTrack",
+        force: true,
+    },
 
     // Display the missile track
     displayMissileTrack: {
@@ -778,6 +782,7 @@ sitch = {
         track: "homingMissileTrack",
         color: "#FF0000",
         width: 2,
+        force: true,
     },
 
 
@@ -789,8 +794,6 @@ sitch = {
         left: 0.25, top:0, width: .15, height:-1,
         dynamicY: true,
         force: true,
-
-
     },
 
     displayLOS: {kind: "DisplayLOS", LOS: "JetLOS", color: "red", width: 0.5, spacing : 30, maxLines: 500},
