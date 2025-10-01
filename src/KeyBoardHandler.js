@@ -1,4 +1,4 @@
-import {Globals, gui, guiShowHide, keyCodeHeld, keyHeld, NodeMan, setRenderOne, Sit} from "./Globals";
+import {Globals, gui, guiShowHide, keyCodeHeld, keyHeld, mouseOverGUI, NodeMan, setRenderOne, Sit} from "./Globals";
 import {par} from "./par";
 import {closeFullscreen, openFullscreen} from "./utils";
 import {Vector3} from "three";
@@ -180,6 +180,12 @@ var isFullScreen = false;
 
 export function initKeyboard() {
     document.onkeydown = function (e) {
+
+        // If mouse is over a GUI element, don't process keyboard shortcuts
+        // This allows normal text operations like Ctrl+C to work in menus
+        if (mouseOverGUI) {
+            return;
+        }
 
         if (e.repeat && e.code !== 'Comma' && e.code !== 'Period') return; // ignore repeating keys, except for frame advance
 

@@ -1,7 +1,7 @@
 // Helper functions for lil-gui
 import GUI, {Controller} from "./js/lil-gui.esm";
 //import {updateSize} from "./JetStuff";
-import {Globals} from "./Globals";
+import {Globals, setMouseOverGUI} from "./Globals";
 import {Color} from "three";
 import {assert} from "./assert";
 import {ViewMan} from "./CViewManager";
@@ -75,6 +75,18 @@ export function dumpGUIMenu(controller) {
 export function preventDoubleClicks(gui) {
     gui.domElement.addEventListener('dblclick', function(e) {
         e.stopPropagation();
+    });
+}
+
+// Add mouse tracking to GUI elements to disable keyboard shortcuts when mouse is over them
+export function addGUIMouseTracking(gui) {
+    // Track mouse enter/leave on the entire GUI element
+    gui.domElement.addEventListener('mouseenter', function(e) {
+        setMouseOverGUI(true);
+    });
+    
+    gui.domElement.addEventListener('mouseleave', function(e) {
+        setMouseOverGUI(false);
     });
 }
 
@@ -628,6 +640,7 @@ export class CGuiMenuBar {
 
 
         preventDoubleClicks(newGUI);
+        addGUIMouseTracking(newGUI);
         this.slots[this.nextSlot] = newGUI;
         this.nextSlot++;
 
@@ -970,6 +983,9 @@ export class CGuiMenuBar {
         
         // Prevent double clicks
         preventDoubleClicks(gui);
+        
+        // Add mouse tracking to disable keyboard shortcuts
+        addGUIMouseTracking(gui);
         
         // Add drag functionality to the title
         gui.$title.addEventListener("mousedown", (event) => {

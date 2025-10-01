@@ -102,6 +102,10 @@ export function setFileManager(f) {FileManager = f;}
 export var keyHeld = {}
 export var keyCodeHeld = {}
 
+// Track if mouse is over a GUI element (to disable keyboard shortcuts)
+export var mouseOverGUI = false;
+export function setMouseOverGUI(value) { mouseOverGUI = value; }
+
 // Helper function to access the debug view
 export function getDebugView() {
     if (NodeMan && NodeMan.exists("debugView")) {
