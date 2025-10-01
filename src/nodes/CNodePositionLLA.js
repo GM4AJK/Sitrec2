@@ -208,6 +208,10 @@ export class CNodePositionLLA extends CNode {
         this.recalculate()
     }
 
+    getAltitude() {
+        return this._LLA[2];
+    }
+
     setLLA(lat, lon, alt) {
         this._LLA = [lat, lon, alt];
         if (this.guiLat) {

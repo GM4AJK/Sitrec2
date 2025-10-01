@@ -1,9 +1,9 @@
 import {CNode} from "./CNode";
-import {guiShowHide, mainLoopCount, NodeFactory, NodeMan, setRenderOne} from "../Globals";
+import {guiShowHide, mainLoopCount, NodeFactory, setRenderOne} from "../Globals";
 import {par} from "../par";
 import {assert} from "../assert.js";
 import {normalizeLayerType} from "../utils";
-import {getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
+import {altitudeAboveSphere, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 
 // wrapper class for THREE.JS objects, like cameras, groups, 3D models, etc.
 // Mostly to allow hooking up of controllers, which previous were camera-only
@@ -20,6 +20,17 @@ export class CNode3D extends CNode {
     update(f) {
         super.update(f);
         this.applyControllers(f);
+    }
+
+    // get the MSL altitude of the origin of the object (or group)
+    // (typically will be the CoG of the object, like a plane)
+    getAltitude() {
+        if (!this._object || !this._object.position) {
+            console.warn("getAltitude(): No 3D object attached to " + this.id)
+            return 0;
+        }
+        const alt = altitudeAboveSphere(this._object.position);
+        return alt;
     }
 
     // add a gui checkbox toggle for a member variable

@@ -27,7 +27,7 @@ import {
     Units
 } from "./Globals";
 import {isKeyHeld, toggler} from "./KeyBoardHandler";
-import {ECEFToLLAVD_Sphere, EUSToECEF} from "./LLA-ECEF-ENU";
+import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA} from "./LLA-ECEF-ENU";
 import {createCustomModalWithCopy, saveFilePrompted} from "./CFileManager";
 import {DragDropHandler} from "./DragDropHandler";
 import {par} from "./par";
@@ -42,12 +42,13 @@ import {ViewMan} from "./CViewManager";
 import {EventManager} from "./CEventManager";
 import {SITREC_APP} from "./configUtils";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
-import {DebugArrowAB} from "./threeExt";
+import {DebugArrowAB, elevationAtLL} from "./threeExt";
 import {TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
+import {GlobalContextMenu} from "./CContextMenu";
 
 
 export class CCustomManager {
@@ -1155,6 +1156,67 @@ export class CCustomManager {
                 alert("Demo mirror created! You can drag it around and use all the controls.\nCheck the console for more details.");
             }
         }
+    }
+
+    /**
+     * Show a context menu for ground clicks with camera/target positioning options
+     * @param {number} mouseX - Screen X coordinate
+     * @param {number} mouseY - Screen Y coordinate
+     * @param {Vector3} groundPoint - The 3D point where the ground was clicked (in EUS coordinates)
+     */
+    showGroundContextMenu(mouseX, mouseY, groundPoint) {
+        // Convert ground point to LLA
+        const groundLLA = EUSToLLA(groundPoint);
+        const lat = groundLLA.x;
+        const lon = groundLLA.y;
+        const alt = groundLLA.z;
+        
+        // Get ground elevation at this point
+        const groundElevation = elevationAtLL(lat, lon);
+        
+        // Show the context menu
+        GlobalContextMenu.show(mouseX, mouseY);
+        
+        // Add menu items
+        GlobalContextMenu.addItem("Set Camera Above", () => {
+            if (NodeMan.exists("fixedCameraPosition")) {
+                const camera = NodeMan.get("fixedCameraPosition");
+                // Maintain current altitude, only update lat/lon
+                const currentAlt = camera.getAltitude();
+                camera.setLLA(lat, lon, currentAlt);
+                console.log(`Camera set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
+            }
+        });
+        
+        GlobalContextMenu.addItem("Set Camera on Ground", () => {
+            if (NodeMan.exists("fixedCameraPosition")) {
+                const camera = NodeMan.get("fixedCameraPosition");
+                const currentAlt = camera.getAltitude();
+                // Set camera at ground level (2m above ground for eye level)
+                camera.setLLA(lat, lon, alt+2);
+                console.log(`Camera set to ground: ${lat}, ${lon}, 2m AGL`);
+            }
+        });
+        
+        GlobalContextMenu.addItem("Set Target Above", () => {
+            if (NodeMan.exists("fixedTargetPositionWind")) {
+                const target = NodeMan.get("fixedTargetPositionWind");
+                // Maintain current altitude, only update lat/lon
+                const currentAlt = target.getAltitude();
+
+                target.setLLA(lat, lon, currentAlt);
+                console.log(`Target set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
+            }
+        });
+        
+        GlobalContextMenu.addItem("Set Target on Ground", () => {
+            if (NodeMan.exists("fixedTargetPositionWind")) {
+                const target = NodeMan.get("fixedTargetPositionWind");
+                // Set target at ground level
+                target.setLLA(lat, lon, alt);
+                console.log(`Target set to ground: ${lat}, ${lon}, 0m AGL`);
+            }
+        });
     }
 
     updateViewFromPreset() {

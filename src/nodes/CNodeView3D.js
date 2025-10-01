@@ -1247,6 +1247,9 @@ export class CNodeView3D extends CNodeViewCanvas {
             const intersects = this.raycaster.intersectObjects(this.scene.children, true);
             
             if (intersects.length > 0) {
+                // Track if we found a valid object with nodeId
+                let foundObject = false;
+                
                 // Find the closest intersected object that belongs to a CNode3DObject
                 for (const intersect of intersects) {
                     const object = intersect.object;
@@ -1254,6 +1257,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                     
                     if (objectID) {
                         console.log(`Found object: ${objectID}`);
+                        foundObject = true;
 
                         // get coordinates of the intersection point
                         const groundPoint = intersect.point;
@@ -1285,6 +1289,17 @@ export class CNodeView3D extends CNodeViewCanvas {
                         // Debug: log what we're hitting
                         console.log(`Hit object without valid name: ${object.type}, name: "${object.name}", userData:`, object.userData);
                     }
+                }
+                
+                // If we didn't find an object with nodeId, but we hit something (like terrain/ground)
+                // and we're in the custom sitch, show the ground context menu
+                if (!foundObject && Sit.name === "custom") {
+                    // Get the first intersection point (closest to camera)
+                    const groundPoint = intersects[0].point;
+                    console.log(`Ground clicked at:`, groundPoint);
+                    
+                    // Show the ground context menu
+                    CustomManager.showGroundContextMenu(mouseX, mouseY, groundPoint);
                 }
             }
         }

@@ -49,7 +49,7 @@ export class CNode3DGroup extends CNode3D {
         super.dispose();
     }
 
-    
+
     get group() {
         return this._object;
     }
