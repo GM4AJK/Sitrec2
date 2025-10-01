@@ -113,8 +113,10 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
         this.addLoadingMessage()
         this.disposeVideoData()
         
+        const fileName = file.name.toLowerCase();
+        
         // Check if it's an H.264 file and use specialized handler
-        if (file.name.toLowerCase().endsWith('.h264') || file.type === 'video/h264') {
+        if (fileName.endsWith('.h264') || file.type === 'video/h264') {
             console.log("Using H.264 specialized handler for: " + file.name);
             this.videoData = new CVideoH264Data({id: this.id + "_data", dropFile: file},
                 this.loadedCallback.bind(this), this.errorCallback.bind(this));

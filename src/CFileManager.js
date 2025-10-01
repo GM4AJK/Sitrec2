@@ -952,7 +952,7 @@ export class CFileManager extends CManager {
     }
 
 
-    parseAsset(filename, id, buffer) {
+    parseAsset(filename, id, buffer, metadata = null) {
 
 //        console.log("parseAsset(" + filename + "," + id + ",<buffer>)")
         
@@ -967,9 +967,9 @@ export class CFileManager extends CManager {
            // debugger;
 
 
-            return TSParser.parseTSFile(filename, id, buffer, (streamFilename, streamId, streamData) => {
+            return TSParser.parseTSFile(filename, id, buffer, (streamFilename, streamId, streamData, streamMetadata) => {
                 console.log("Detected TS Stream: " + streamFilename + " for id: " + streamId + "")
-                return this.parseAsset(streamFilename, streamId, streamData);
+                return this.parseAsset(streamFilename, streamId, streamData, streamMetadata);
             });
         }
         
@@ -1152,6 +1152,24 @@ export class CFileManager extends CManager {
                     parsed = buffer;
                     console.log("Parsed H.264 stream: " + filename + " (" + buffer.byteLength + " bytes)");
                     console.warn("H.264 streams require MP4 container - raw H.264 playback not yet implemented");
+                    break;
+
+                case "m2v":
+                    // MPEG-2 video elementary stream from TS file
+                    // Note: MPEG-2 support is limited and may not work in all browsers
+                    dataType = "video";
+                    parsed = buffer;
+                    // Attach metadata (FPS, dimensions) if available from TS parser
+                    if (metadata) {
+                        parsed.fps = metadata.fps;
+                        parsed.width = metadata.width;
+                        parsed.height = metadata.height;
+                        console.log("Parsed MPEG-2 stream: " + filename + " (" + buffer.byteLength + " bytes)" + 
+                                    (metadata.fps ? ` @ ${metadata.fps.toFixed(2)} fps` : '') +
+                                    (metadata.width && metadata.height ? ` ${metadata.width}x${metadata.height}` : ''));
+                    } else {
+                        console.log("Parsed MPEG-2 stream: " + filename + " (" + buffer.byteLength + " bytes)");
+                    }
                     break;
 
                 default:

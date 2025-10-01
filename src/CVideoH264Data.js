@@ -534,8 +534,8 @@ export class CVideoH264Data extends CVideoWebCodecBase {
                         if (this.decoder.state === 'configured') {
                             console.log("Alternative H.264 format working");
                         } else {
-                            console.log("Alternative H.264 format failed, using fallback");
-                            this.implementFinalFallback();
+                            console.log("Alternative H.264 format failed, showing error");
+                            this.showDecoderError();
                             return;
                         }
                         
@@ -548,14 +548,14 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             
         } catch (error) {
             console.log("Alternative H.264 decoding failed:", error.message);
-            this.implementFinalFallback();
+            this.showDecoderError();
         }
     }
     
-    implementFinalFallback() {
-        console.log("H.264 stream incompatible with WebCodecs, using fallback mode");
+    showDecoderError() {
+        console.log("H.264 stream incompatible with WebCodecs, showing error image");
         
-        // Mark as using fallback mode
+        // Mark as decoder error
         this.decoderError = true;
         this.fallbackMode = true;
         

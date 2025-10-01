@@ -25,7 +25,8 @@ export class TSParser {
             // Create promises for each extracted stream
             const streamPromises = streams.map(stream => {
                 const streamFilename = filename + "_" + stream.type + "_" + stream.pid + "." + stream.extension;
-                return parseAssetCallback(streamFilename, id, stream.data);
+                // Pass stream metadata along with the data
+                return parseAssetCallback(streamFilename, id, stream.data, stream);
             });
 
             // Wait for all streams to be processed
@@ -61,11 +62,24 @@ export class TSParser {
             for (const program of analysis.programs) {
                 for (const stream of program.streams) {
                     const pid = parseInt(stream.id, 16);
+                    
+                    // Parse FPS from r_frame_rate if available (format: "num/den")
+                    let fps = null;
+                    if (stream.r_frame_rate && stream.r_frame_rate !== "0/0") {
+                        const [num, den] = stream.r_frame_rate.split('/').map(Number);
+                        if (den && den !== 0) {
+                            fps = num / den;
+                        }
+                    }
+                    
                     elementaryStreams.set(pid, {
                         codec_name: stream.codec_name,
                         codec_type: stream.codec_type,
                         stream_type: stream.stream_type,
-                        descriptors: stream.descriptors
+                        descriptors: stream.descriptors,
+                        fps: fps,
+                        width: stream.width,
+                        height: stream.height
                     });
                 }
             }
@@ -197,7 +211,7 @@ export class TSParser {
                         extension = 'bin';
                 }
 
-                console.log(`extractTSStreams: Extracted ${streamInfo.codec_name} stream (PID ${pid}): ${finalData.length} bytes`);
+                console.log(`extractTSStreams: Extracted ${streamInfo.codec_name} stream (PID ${pid}): ${finalData.length} bytes${streamInfo.fps ? ` @ ${streamInfo.fps.toFixed(2)} fps` : ''}`);
 
                 // Create a proper ArrayBuffer from the Uint8Array
                 // Using .buffer directly can include extra data if the Uint8Array is a view
@@ -210,7 +224,10 @@ export class TSParser {
                     data: arrayBuffer,
                     codec_type: streamInfo.codec_type,
                     stream_type: streamInfo.stream_type,
-                    descriptors: streamInfo.descriptors
+                    descriptors: streamInfo.descriptors,
+                    fps: streamInfo.fps,
+                    width: streamInfo.width,
+                    height: streamInfo.height
                 });
             }
 
@@ -708,6 +725,71 @@ function parseH264SPS(nalUnit) {
 }
 
 /**
+ * Parse MPEG-2 sequence header to extract video parameters
+ * MPEG-2 sequence header format:
+ * - Start code: 0x000001B3
+ * - 12 bits: horizontal_size_value (width)
+ * - 12 bits: vertical_size_value (height)
+ * - 4 bits: aspect_ratio_information
+ * - 4 bits: frame_rate_code
+ */
+function parseMPEG2SequenceHeader(data) {
+    try {
+        // Look for sequence header start code (0x000001B3)
+        let sequenceHeaderOffset = -1;
+        for (let i = 0; i < data.length - 8; i++) {
+            if (data[i] === 0x00 && data[i + 1] === 0x00 && 
+                data[i + 2] === 0x01 && data[i + 3] === 0xB3) {
+                sequenceHeaderOffset = i + 4; // Skip start code
+                break;
+            }
+        }
+        
+        if (sequenceHeaderOffset === -1 || sequenceHeaderOffset + 4 > data.length) {
+            return null;
+        }
+        
+        // Parse width (12 bits)
+        const byte0 = data[sequenceHeaderOffset];
+        const byte1 = data[sequenceHeaderOffset + 1];
+        const width = (byte0 << 4) | ((byte1 & 0xF0) >> 4);
+        
+        // Parse height (12 bits)
+        const byte2 = data[sequenceHeaderOffset + 2];
+        const height = ((byte1 & 0x0F) << 8) | byte2;
+        
+        // Parse frame rate code (4 bits)
+        const byte3 = data[sequenceHeaderOffset + 3];
+        const frameRateCode = byte3 & 0x0F;
+        
+        // MPEG-2 frame rate table
+        const frameRates = [
+            null,    // 0: forbidden
+            23.976,  // 1: 24000/1001 (23.976 fps)
+            24,      // 2: 24 fps
+            25,      // 3: 25 fps
+            29.97,   // 4: 30000/1001 (29.97 fps)
+            30,      // 5: 30 fps
+            50,      // 6: 50 fps
+            59.94,   // 7: 60000/1001 (59.94 fps)
+            60,      // 8: 60 fps
+            null,    // 9-15: reserved
+        ];
+        
+        const fps = frameRates[frameRateCode] || null;
+        
+        return {
+            width,
+            height,
+            fps,
+            frameRateCode
+        };
+    } catch (e) {
+        return null;
+    }
+}
+
+/**
  * Parse AAC ADTS header to extract audio parameters
  */
 function parseAACHeader(data) {
@@ -923,6 +1005,31 @@ export function probeTransportStreamBufferDetailed(buffer) {
                 const fps = 90000 / frameInterval;
                 detailedStream.r_frame_rate = `${Math.round(fps * 1000)}/1000`;
                 detailedStream.avg_frame_rate = detailedStream.r_frame_rate;
+            }
+        }
+        
+        if (analysis.codec_name === 'mpeg2video' && analysis.elementaryData.length > 0) {
+            // Look for MPEG-2 sequence headers
+            for (const data of analysis.elementaryData) {
+                const mpeg2Info = parseMPEG2SequenceHeader(data);
+                if (mpeg2Info) {
+                    detailedStream.width = mpeg2Info.width;
+                    detailedStream.height = mpeg2Info.height;
+                    if (mpeg2Info.fps) {
+                        // Convert fps to fractional format
+                        if (mpeg2Info.fps === 23.976) {
+                            detailedStream.r_frame_rate = "24000/1001";
+                        } else if (mpeg2Info.fps === 29.97) {
+                            detailedStream.r_frame_rate = "30000/1001";
+                        } else if (mpeg2Info.fps === 59.94) {
+                            detailedStream.r_frame_rate = "60000/1001";
+                        } else {
+                            detailedStream.r_frame_rate = `${mpeg2Info.fps}/1`;
+                        }
+                        detailedStream.avg_frame_rate = detailedStream.r_frame_rate;
+                    }
+                    break;
+                }
             }
         }
         
