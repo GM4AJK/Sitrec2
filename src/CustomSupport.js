@@ -48,7 +48,6 @@ import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
-import {GlobalContextMenu} from "./CContextMenu";
 
 
 export class CCustomManager {
@@ -1174,49 +1173,76 @@ export class CCustomManager {
         // Get ground elevation at this point
         const groundElevation = elevationAtLL(lat, lon);
         
-        // Show the context menu
-        GlobalContextMenu.show(mouseX, mouseY);
+        // Create the context menu using lil-gui standalone menu
+        const menu = Globals.menuBar.createStandaloneMenu("Ground", mouseX, mouseY);
+        menu.open();
+        
+        // Create an object to hold the LLA text and menu actions
+        const menuData = {
+            lla: `${lat.toFixed(6)}, ${lon.toFixed(6)}, ${alt.toFixed(1)}m`,
+            setCameraAbove: () => {
+                if (NodeMan.exists("fixedCameraPosition")) {
+                    const camera = NodeMan.get("fixedCameraPosition");
+                    // Maintain current altitude, only update lat/lon
+                    const currentAlt = camera.getAltitude();
+                    camera.setLLA(lat, lon, currentAlt);
+                    console.log(`Camera set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
+                }
+                menu.destroy();
+            },
+            setCameraOnGround: () => {
+                if (NodeMan.exists("fixedCameraPosition")) {
+                    const camera = NodeMan.get("fixedCameraPosition");
+                    // Set camera at ground level (2m above ground for eye level)
+                    camera.setLLA(lat, lon, alt + 2);
+                    console.log(`Camera set to ground: ${lat}, ${lon}, ${alt + 2}m`);
+                }
+                menu.destroy();
+            },
+            setTargetAbove: () => {
+                if (NodeMan.exists("fixedTargetPositionWind")) {
+                    const target = NodeMan.get("fixedTargetPositionWind");
+                    // Maintain current altitude, only update lat/lon
+                    const currentAlt = target.getAltitude();
+                    target.setLLA(lat, lon, currentAlt);
+                    console.log(`Target set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
+                }
+                menu.destroy();
+            },
+            setTargetOnGround: () => {
+                if (NodeMan.exists("fixedTargetPositionWind")) {
+                    const target = NodeMan.get("fixedTargetPositionWind");
+                    // Set target at ground level
+                    target.setLLA(lat, lon, alt);
+                    console.log(`Target set to ground: ${lat}, ${lon}, ${alt}m`);
+                }
+                menu.destroy();
+            }
+        };
+        
+        // Add LLA text field (copyable and bright)
+        const locationController = menu.add(menuData, "lla").name("Location").disable();
+        
+        // Make the text selectable and brighter by overriding the disabled state
+        const input = locationController.$input;
+        if (input) {
+            // Remove the disabled attribute to allow text selection
+            input.removeAttribute('disabled');
+            // Make it read-only instead so it can't be edited but can be selected
+            input.setAttribute('readonly', 'true');
+            // Style it to be bright and selectable
+            input.style.userSelect = 'text';
+            input.style.cursor = 'text';
+            input.style.color = '#ffffff';
+            input.style.opacity = '1';
+            input.style.pointerEvents = 'auto';
+        }
         
         // Add menu items
-        GlobalContextMenu.addItem("Set Camera Above", () => {
-            if (NodeMan.exists("fixedCameraPosition")) {
-                const camera = NodeMan.get("fixedCameraPosition");
-                // Maintain current altitude, only update lat/lon
-                const currentAlt = camera.getAltitude();
-                camera.setLLA(lat, lon, currentAlt);
-                console.log(`Camera set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
-            }
-        });
-        
-        GlobalContextMenu.addItem("Set Camera on Ground", () => {
-            if (NodeMan.exists("fixedCameraPosition")) {
-                const camera = NodeMan.get("fixedCameraPosition");
-                const currentAlt = camera.getAltitude();
-                // Set camera at ground level (2m above ground for eye level)
-                camera.setLLA(lat, lon, alt+2);
-                console.log(`Camera set to ground: ${lat}, ${lon}, 2m AGL`);
-            }
-        });
-        
-        GlobalContextMenu.addItem("Set Target Above", () => {
-            if (NodeMan.exists("fixedTargetPositionWind")) {
-                const target = NodeMan.get("fixedTargetPositionWind");
-                // Maintain current altitude, only update lat/lon
-                const currentAlt = target.getAltitude();
-
-                target.setLLA(lat, lon, currentAlt);
-                console.log(`Target set to: ${lat}, ${lon}, ${currentAlt}m (altitude maintained)`);
-            }
-        });
-        
-        GlobalContextMenu.addItem("Set Target on Ground", () => {
-            if (NodeMan.exists("fixedTargetPositionWind")) {
-                const target = NodeMan.get("fixedTargetPositionWind");
-                // Set target at ground level
-                target.setLLA(lat, lon, alt);
-                console.log(`Target set to ground: ${lat}, ${lon}, 0m AGL`);
-            }
-        });
+        menu.add(menuData, "setCameraAbove").name("Set Camera Above");
+        menu.add(menuData, "setCameraOnGround").name("Set Camera on Ground");
+        menu.add(menuData, "setTargetAbove").name("Set Target Above");
+        menu.add(menuData, "setTargetOnGround").name("Set Target on Ground");
     }
 
     updateViewFromPreset() {
