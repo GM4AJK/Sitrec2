@@ -34,7 +34,7 @@ export class CNode3DLight extends CNode3D {
                 ...sharedUniforms, // shared uniforms for near/far planes
                 uColor: { value: [this.light.color.r, this.light.color.g, this.light.color.b] },
                 uIntensity: { value: this.light.intensity }, // HDR "strength"
-                uRadius: { value: 0.3 },     // proportion of core radius (hard center)
+                uRadius: { value: 0.1 },     // proportion of core radius (hard center)
 
             },
             vertexShader: `

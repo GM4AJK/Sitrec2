@@ -43,22 +43,20 @@ function getAirDensity(altitude) {
  * - Thrust (with configurable burn time)
  * - Drag (atmospheric resistance based on altitude)
  * - Gravity
- * - Proportional Navigation guidance with direct pursuit augmentation
+ * - Proportional Navigation guidance
  * - Augmented PN for target acceleration compensation
  * 
- * Guidance System Configuration (Balanced for Effective Tracking):
- * - Navigation Gain: 5.0 (higher end of typical 3-5 range)
- * - Max Lateral Acceleration: 200 m/s² (20g)
- * - Direct Pursuit: 20 m/s² constant acceleration toward target
+ * Guidance System Configuration:
+ * - Navigation Gain: 3-5 (configurable)
+ * - Max Lateral Acceleration: 100-300 m/s² (configurable)
  * - Min Effective Closing Velocity: 50 m/s (ensures guidance works at launch)
  * - Thrust Direction: Blends from target-pointing to velocity-aligned (30% min toward target)
  * - LOS Rate Threshold: 0.00001 rad/s (very sensitive)
  * - Lateral Force Threshold: 0.001 m/s² (applies even small corrections)
  * 
- * The guidance combines:
- * 1. Direct Pursuit - constant acceleration toward target for aggressive tracking
- * 2. Proportional Navigation - lateral acceleration to null LOS rotation
- * 3. Augmented PN - compensates for target acceleration
+ * The guidance can use either:
+ * 1. Pure Proportional Navigation - lateral acceleration to null LOS rotation (default)
+ * 2. Augmented PN - adds compensation for target acceleration (optional via checkbox)
  */
 export class CNodeHomingMissileTrack extends CNodeTrack {
     constructor(v) {
@@ -73,7 +71,7 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
         // Create input nodes if they don't exist
         this.addInput("startFrame", new CNodeGUIValue({
             value: 0,
-            start: 0,
+            start: -900,
             end: 900,
             step: 1,
             desc: "Start Frame",
@@ -151,6 +149,14 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
             tooltip: "Maximum lateral acceleration the missile can achieve"
         }))
 
+        this.addInput("useAugmentedPN", new CNodeGUIValue({
+            value: false,
+            type: "boolean",
+            desc: "Use Augmented PN",
+            gui: "missile",
+            tooltip: "Enable Augmented Proportional Navigation to compensate for target acceleration"
+        }))
+
         this.requireInputs(["source", "target"])
         this.isNumber = false;
         
@@ -174,8 +180,23 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
         const burnFrames = Math.floor(burnTime * Sit.fps)
         const endBurnFrame = startFrame + burnFrames
 
+
+
+
+
+        const dt = 1.0 / Sit.fps // time step in seconds
+        const gravity = 9.81 // m/s^2
+        
+        // Previous LOS vector for rate calculation
+        let prevLOS = null
+
+        // we allow a negative start frame to simulate a missile launched in the past
+        // and start out caculations either there, or at zero.
+        // (if zero, then the intial frames will just copy the source track until launch)
+        const calculationStartFrame = Math.min(startFrame, 0);
+
         // Initialize position and velocity from source track
-        let missilePos = this.in.source.p(0).clone()
+        let missilePos = this.in.source.p(calculationStartFrame).clone()
         let missileVel = V3(0, 0, 0)
 
         // Get initial velocity from source track if it's moving
@@ -185,19 +206,15 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
             missileVel = sourcePos1.clone().sub(sourcePos0).multiplyScalar(Sit.fps)
         }
 
-        const dt = 1.0 / Sit.fps // time step in seconds
-        const gravity = 9.81 // m/s^2
-        
-        // Previous LOS vector for rate calculation
-        let prevLOS = null
-
-        for (let f = 0; f < this.frames; f++) {
+        for (let f = calculationStartFrame; f < this.frames; f++) {
             // Store current position
             const trackPoint = {
                 position: missilePos.clone(),
                 velocity: missileVel.clone(),
             }
-            this.array.push(trackPoint)
+            if (f >= 0) {
+                this.array.push(trackPoint)
+            }
 
             // Before start frame, mirror the source track
             if (f < startFrame) {
@@ -236,11 +253,6 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
             
             // Calculate commanded acceleration using Proportional Navigation
             let commandedAccel = V3(0, 0, 0)
-            
-            // Add moderate direct pursuit component for better tracking
-            // This helps the missile track the target, especially at launch
-            const directPursuitAccel = LOSUnit.clone().multiplyScalar(20.0) // 20 m/s² toward target
-            commandedAccel.add(directPursuitAccel)
             
             if (range > 1.0 && prevLOS !== null && prevLOS.length() > 0) {
                 // Calculate LOS rate directly from change in LOS
@@ -285,28 +297,31 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
                     commandedAccel.add(PN_accel)
                     
                     // Debug output for first few frames after launch (compact version)
-                    if (f >= startFrame && f < startFrame + 5) {  // Just first 5 frames
-                        console.log(`Frame ${f}: Range=${range.toFixed(0)}m, Speed=${missileVel.length().toFixed(0)}m/s, ClosingVel=${closingVelocity.toFixed(0)}m/s, LOSRate=${LOSRateMagnitude.toFixed(3)}rad/s, PNAccel=${PN_accel.length().toFixed(0)}m/s², TotalAccel=${commandedAccel.length().toFixed(0)}m/s²`)
+                    // if (f >= startFrame && f < startFrame + 5) {  // Just first 5 frames
+                    //     console.log(`Frame ${f}: Range=${range.toFixed(0)}m, Speed=${missileVel.length().toFixed(0)}m/s, ClosingVel=${closingVelocity.toFixed(0)}m/s, LOSRate=${LOSRateMagnitude.toFixed(3)}rad/s, PNAccel=${PN_accel.length().toFixed(0)}m/s², TotalAccel=${commandedAccel.length().toFixed(0)}m/s²`)
+                    // }
+                }
+                
+                // Augmented PN: add target acceleration compensation (if enabled)
+                const useAugmentedPN = this.in.useAugmentedPN?.v0 ?? false
+                if (useAugmentedPN) {
+                    let targetAccel = V3(0, 0, 0)
+                    if (targetFrame < this.in.target.frames - 2) {
+                        const targetPos0 = this.in.target.p(targetFrame)
+                        const targetPos1 = this.in.target.p(targetFrame + 1)
+                        const targetPos2 = this.in.target.p(targetFrame + 2)
+                        const targetVel0 = targetPos1.clone().sub(targetPos0).multiplyScalar(Sit.fps)
+                        const targetVel1 = targetPos2.clone().sub(targetPos1).multiplyScalar(Sit.fps)
+                        targetAccel = targetVel1.clone().sub(targetVel0).multiplyScalar(Sit.fps)
                     }
+                    
+                    // Project target acceleration perpendicular to LOS
+                    const targetAccelPerp = targetAccel.clone().sub(LOSUnit.clone().multiplyScalar(targetAccel.dot(LOSUnit)))
+                    
+                    // Augmented PN term: (N/2) * target_accel_perpendicular
+                    const APN_accel = targetAccelPerp.multiplyScalar(navigationGain / 2.0)
+                    commandedAccel.add(APN_accel)
                 }
-                
-                // Augmented PN: add target acceleration compensation
-                let targetAccel = V3(0, 0, 0)
-                if (targetFrame < this.in.target.frames - 2) {
-                    const targetPos0 = this.in.target.p(targetFrame)
-                    const targetPos1 = this.in.target.p(targetFrame + 1)
-                    const targetPos2 = this.in.target.p(targetFrame + 2)
-                    const targetVel0 = targetPos1.clone().sub(targetPos0).multiplyScalar(Sit.fps)
-                    const targetVel1 = targetPos2.clone().sub(targetPos1).multiplyScalar(Sit.fps)
-                    targetAccel = targetVel1.clone().sub(targetVel0).multiplyScalar(Sit.fps)
-                }
-                
-                // Project target acceleration perpendicular to LOS
-                const targetAccelPerp = targetAccel.clone().sub(LOSUnit.clone().multiplyScalar(targetAccel.dot(LOSUnit)))
-                
-                // Augmented PN term: (N/2) * target_accel_perpendicular
-                const APN_accel = targetAccelPerp.multiplyScalar(navigationGain / 2.0)
-                commandedAccel.add(APN_accel)
                 
                 // Clamp to maximum lateral acceleration
                 const commandedAccelMag = commandedAccel.length()
