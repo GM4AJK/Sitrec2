@@ -636,6 +636,7 @@ async function initializeOnce() {
     addGUIMenu("terrain", "Terrain").tooltip("Terrain controls\nThe terrain is the 3D model of the ground. The 'Map' is the 2D image of the ground. The 'Elevation' is the height of the ground above sea level");
     // these four have legacy globals
     var _guiPhysics = addGUIMenu("physics", "Physics").tooltip("Physics controls\nThe physics of the situation, like wind speed and the physics of the traverse object");
+    addGUIMenu("missile", "Missile").tooltip("Homing missile parameters\nControls for the missile simulation including mass, thrust, air resistance, and burn time");
 
     addGUIMenu("camera", "Camera").tooltip("Camera controls for the look view camera\nThe look view defaults to the lower right window, and is intended to match the video.");
     addGUIMenu("target", "Target").tooltip("Target controls\nPosition and properties of the optional target object");
