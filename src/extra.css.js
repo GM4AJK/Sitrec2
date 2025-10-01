@@ -229,5 +229,30 @@ html, body {
     margin-top: 0 !important;
 }
 
+/* Custom HTML controller styling */
+.lil-gui .custom-html-controller {
+    display: flex;
+    align-items: center;
+    padding: 0;
+    height: auto;
+    min-height: var(--widget-height);
+}
+
+.lil-gui .custom-html-controller .widget {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    user-select: text;
+    -webkit-user-select: text;
+    cursor: text;
+    color: #ffffff;
+    padding: 4px 8px;
+}
+
+.lil-gui .custom-html-controller .widget * {
+    user-select: text;
+    -webkit-user-select: text;
+}
+
 
 `;

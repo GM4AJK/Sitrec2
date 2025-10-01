@@ -1177,9 +1177,11 @@ export class CCustomManager {
         const menu = Globals.menuBar.createStandaloneMenu("Ground", mouseX, mouseY);
         menu.open();
         
-        // Create an object to hold the LLA text and menu actions
+        // Format the location text
+        const locationText = `${lat.toFixed(6)}, ${lon.toFixed(6)}, ${alt.toFixed(1)}m`;
+        
+        // Create an object to hold the menu actions
         const menuData = {
-            lla: `${lat.toFixed(6)}, ${lon.toFixed(6)}, ${alt.toFixed(1)}m`,
             setCameraAbove: () => {
                 if (NodeMan.exists("fixedCameraPosition")) {
                     const camera = NodeMan.get("fixedCameraPosition");
@@ -1220,23 +1222,8 @@ export class CCustomManager {
             }
         };
         
-        // Add LLA text field (copyable and bright)
-        const locationController = menu.add(menuData, "lla").name("Location").disable();
-        
-        // Make the text selectable and brighter by overriding the disabled state
-        const input = locationController.$input;
-        if (input) {
-            // Remove the disabled attribute to allow text selection
-            input.removeAttribute('disabled');
-            // Make it read-only instead so it can't be edited but can be selected
-            input.setAttribute('readonly', 'true');
-            // Style it to be bright and selectable
-            input.style.userSelect = 'text';
-            input.style.cursor = 'text';
-            input.style.color = '#ffffff';
-            input.style.opacity = '1';
-            input.style.pointerEvents = 'auto';
-        }
+        // Add location text as custom HTML (bright and selectable)
+        menu.addHTML(locationText, "Location");
         
         // Add menu items
         menu.add(menuData, "setCameraAbove").name("Set Camera Above");

@@ -275,6 +275,53 @@ GUI.prototype.addExternalLink = function(text, url) {
     return this.add(obj, text);
 };
 
+// Add a custom HTML element to the GUI
+// This creates a controller-like element that can contain arbitrary HTML
+GUI.prototype.addHTML = function(html, labelText = '') {
+    // Create a wrapper div that looks like a controller
+    const wrapper = document.createElement('div');
+    wrapper.classList.add('controller', 'custom-html-controller');
+    
+    // Create the label part (left side)
+    const label = document.createElement('div');
+    label.classList.add('name');
+    label.textContent = labelText;
+    
+    // Create the widget part (right side) that will contain the HTML
+    const widget = document.createElement('div');
+    widget.classList.add('widget');
+    
+    // If html is a string, set it as innerHTML, otherwise append it as a node
+    if (typeof html === 'string') {
+        widget.innerHTML = html;
+    } else {
+        widget.appendChild(html);
+    }
+    
+    // Assemble the controller
+    wrapper.appendChild(label);
+    wrapper.appendChild(widget);
+    
+    // Add to the GUI's children container
+    this.$children.appendChild(wrapper);
+    
+    // Return an object with methods for manipulation
+    return {
+        domElement: wrapper,
+        widget: widget,
+        label: label,
+        destroy: () => {
+            wrapper.remove();
+        },
+        hide: () => {
+            wrapper.style.display = 'none';
+        },
+        show: () => {
+            wrapper.style.display = '';
+        }
+    };
+};
+
 var injectedLILGUICode = false;
 
 export class CGuiMenuBar {
