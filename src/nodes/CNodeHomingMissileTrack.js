@@ -64,9 +64,18 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
             v.frames = Sit.frames;
             super(v);
             this.useSitFrames = true;
+            this.enabled = (v.enabled !== undefined) ? v.enabled : false;
         } else {
             super(v);
         }
+
+        this.addInput("enabled", new CNodeGUIValue({
+            value: false,
+            type: "boolean",
+            desc: "Enable the missile",
+            gui: "missile",
+            tooltip: "Enable Simulated Homing Missile using Proportional Navigation (PN) guidance"
+        }))
 
         // Create input nodes if they don't exist
         this.addInput("startFrame", new CNodeGUIValue({
@@ -167,6 +176,27 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
     }
 
     recalculate() {
+
+        const showObject = (obName) => {
+            const ob = NodeMan.get(obName, false);
+            if (ob) {
+                ob.show(this.enabled);
+                ob.enabled = this.enabled
+            }
+        }
+
+        // patch, not working missiles disabled for now.
+        showObject("missileObect")
+        showObject("displayMissileTrack")
+        showObject("speedGraphForMissile")
+        showObject("moveMissileAlongPath")
+
+
+        if (!this.enabled) {
+            this.hide();
+            return;
+        }
+
         this.array = []
 
         const startFrame = this.in.startFrame.v0;

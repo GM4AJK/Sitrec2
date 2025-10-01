@@ -319,8 +319,24 @@ export class CNodeDisplayTrack extends CNode3DGroup {
         const line_colors = [];
         assert(this.inputs.track !== undefined, "CNodeDisplayTrack: track input is undefined, id="+this.id)
 
+
         // should have the same number of frames as the data track we are displaying
         this.frames = this.in.track.frames;
+
+        if (this.frames === 0) {
+            console.warn("CNodeDisplayTrack: no frames in track "+this.id)
+            return;
+        }
+
+        // if the track is disabled, then don't render anything
+        // note this is explicity checking for false
+        // undefined is legacy for enabled
+        if (this.in.track.enabled === false) {
+            console.warn("CNodeDisplayTrack: track is disabled, id="+this.id)
+            return;
+        }
+
+
 
         // Line2 has performance issues with large numbers of points that are coincident
         // Because normalize(0,0) produces NaNs/inf. Those NaNs propagate into
