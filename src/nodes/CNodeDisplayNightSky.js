@@ -215,8 +215,22 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                     this.updateCelestialArrowsTo("lookCamera")
                 }
             })
-            .name("Celestial Vectors On Traverse")
+            .name("Vectors On Traverse")
             .tooltip("If checked, the vectors are shown relative to the traverse object. Otherwise they are shown relative to the look camera.");
+
+
+        this.celestialArrowsInLookView = false;
+        this.celestialGUI.add(this, "celestialArrowsInLookView")
+            .listen()
+            .onChange((x)=>{
+                if (x) {
+                    this.updateCelestialArrowsMask(LAYER.MASK_LOOKRENDER)
+                } else {
+                    this.updateCelestialArrowsMask(LAYER.MASK_HELPERS)
+                }
+            })
+            .name("Vectors in Look View")
+            .tooltip("If checked, the vectors are shown in the Look View Otherwise just the main view.");
 
 
         this.flareRegionGroup = new Group();
@@ -563,6 +577,22 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         // it takes two frames for this to have an effect
         setRenderOne(2);
     }
+
+    // Update all celestial arrows to use a new start object
+    updateCelestialArrowsMask(mask) {
+
+        this.planets.forEach(name => {
+            const groupName = name+"ArrowGroup";
+            if (this[groupName]) {
+                this[groupName].group.layers.mask = mask;
+                this[groupName].propagateLayerMask()
+            }
+        });
+
+        // it takes two frames for this to have an effect
+        setRenderOne(2);
+    }
+
 
 
     brightest = [
