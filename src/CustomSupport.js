@@ -1219,7 +1219,18 @@ export class CCustomManager {
                     console.log(`Target set to ground: ${lat}, ${lon}, ${alt}m`);
                 }
                 menu.destroy();
-            }
+            },
+            centerTerrain: () => {
+                if (NodeMan.exists("terrainUI")) {
+                    const terrainUI = NodeMan.get("terrainUI");
+                    terrainUI.lat = lat;
+                    terrainUI.lon = lon;
+                    terrainUI.flagForRecalculation();
+                    console.log(`Centered terrain at: ${lat}, ${lon}`);
+                }
+
+                menu.destroy();
+            },
         };
         
         // Add location text as custom HTML (bright and selectable)
@@ -1230,6 +1241,15 @@ export class CCustomManager {
         menu.add(menuData, "setCameraOnGround").name("Set Camera on Ground");
         menu.add(menuData, "setTargetAbove").name("Set Target Above");
         menu.add(menuData, "setTargetOnGround").name("Set Target on Ground");
+
+
+        if (NodeMan.exists("terrainUI")) {
+            const terrainUI = NodeMan.get("terrainUI");
+            if (!terrainUI.dynamic) {
+                menu.add(menuData, "centerTerrain").name("Center Terrain square here");
+            }
+
+        }
     }
 
     updateViewFromPreset() {

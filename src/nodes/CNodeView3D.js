@@ -1293,7 +1293,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                 
                 // If we didn't find an object with nodeId, but we hit something (like terrain/ground)
                 // and we're in the custom sitch, show the ground context menu
-                if (!foundObject && Sit.name === "custom") {
+                if (!foundObject && Sit.isCustom) {
                     // Get the first intersection point (closest to camera)
                     const groundPoint = intersects[0].point;
                     console.log(`Ground clicked at:`, groundPoint);
