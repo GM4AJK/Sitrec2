@@ -197,7 +197,7 @@ export class H264Decoder {
                 ctx.drawImage(frame, 0, 0);
                 frame.close();
                 frameCount++;
-                console.log(`Rendered frame ${frameCount}`);
+                //console.log(`Rendered frame ${frameCount}`);
             }
         });
 
@@ -205,7 +205,7 @@ export class H264Decoder {
         const nalUnits = this.extractNALUnits(new Uint8Array(h264Data));
         const chunks = this.createEncodedVideoChunks(nalUnits, options.fps || 30);
 
-        console.log(`Decoding ${chunks.length} video chunks...`);
+        //console.log(`Decoding ${chunks.length} video chunks...`);
 
         // Decode all chunks
         for (const chunk of chunks) {
@@ -216,7 +216,7 @@ export class H264Decoder {
         await decoder.flush();
         decoder.close();
 
-        console.log(`Decoding complete. Rendered ${frameCount} frames.`);
+        //console.log(`Decoding complete. Rendered ${frameCount} frames.`);
     }
 
     /**
@@ -235,7 +235,7 @@ export class H264Decoder {
         // Create codec string in format avc1.PPCCLL
         const codecString = `avc1.${profileIdc.toString(16).padStart(2, '0').toUpperCase()}${profileCompatibility.toString(16).padStart(2, '0').toUpperCase()}${levelIdc.toString(16).padStart(2, '0').toUpperCase()}`;
         
-        console.log('Generated H.264 codec string:', codecString);
+        //console.log('Generated H.264 codec string:', codecString);
         return codecString;
     }
 
@@ -245,7 +245,7 @@ export class H264Decoder {
     static createAVCDecoderConfig(spsData, ppsData) {
         // Create proper AVCC format configuration
         // Reference: ISO/IEC 14496-15 Section 5.2.4.1
-        console.log('Creating AVCC config with SPS:', spsData.length, 'bytes, PPS:', ppsData.length, 'bytes');
+        //console.log('Creating AVCC config with SPS:', spsData.length, 'bytes, PPS:', ppsData.length, 'bytes');
         
         // Parse SPS for profile/level information
         if (spsData.length < 4) {
@@ -256,11 +256,11 @@ export class H264Decoder {
         const profileCompatibility = spsData[2]; 
         const levelIdc = spsData[3];
         
-        console.log('SPS Profile/Level:', {
-            profile: profileIdc.toString(16),
-            compatibility: profileCompatibility.toString(16),
-            level: levelIdc.toString(16)
-        });
+        //console.log('SPS Profile/Level:', {
+        //     profile: profileIdc.toString(16),
+        //     compatibility: profileCompatibility.toString(16),
+        //     level: levelIdc.toString(16)
+        // });
 
         // Calculate total size needed
         const configSize = 6 + // AVCC header
@@ -291,8 +291,8 @@ export class H264Decoder {
         config.set(ppsData, offset);
         offset += ppsData.length;
 
-        console.log('Created AVCC config:', config.length, 'bytes');
-        console.log('AVCC header:', Array.from(config.slice(0, 6)).map(x => '0x' + x.toString(16).padStart(2, '0')).join(' '));
+        //console.log('Created AVCC config:', config.length, 'bytes');
+        //console.log('AVCC header:', Array.from(config.slice(0, 6)).map(x => '0x' + x.toString(16).padStart(2, '0')).join(' '));
         
         return config.buffer;
     }
@@ -306,7 +306,7 @@ export class H264Decoder {
 
         // Group NAL units into frames
         const frames = this.groupNALUnitsIntoFrames(nalUnits);
-        console.log(`Grouped ${nalUnits.length} NAL units into ${frames.length} frames`);
+        //console.log(`Grouped ${nalUnits.length} NAL units into ${frames.length} frames`);
 
         // Assign presentation timestamps in display order
         // For streams without B-frames, this will be the same as decode order
@@ -670,7 +670,7 @@ export class H264Decoder {
             // Height calculation depends on frame_mbs_only_flag
             const height = (pic_height_in_map_units_minus1 + 1) * 16 * (frame_mbs_only_flag ? 1 : 2);
             
-            console.log(`Parsed dimensions from SPS: ${width}x${height}`);
+            //console.log(`Parsed dimensions from SPS: ${width}x${height}`);
             
             return { width, height };
             
@@ -686,7 +686,7 @@ export class H264Decoder {
      */
     static parseVUIFromSPS(spsData) {
         try {
-            console.log("Parsing VUI from SPS data...");
+            //console.log("Parsing VUI from SPS data...");
             
             // Create bit reader for SPS data
             const bitReader = new H264BitReader(spsData);
@@ -702,7 +702,7 @@ export class H264Decoder {
             // seq_parameter_set_id (ue(v))
             const seq_parameter_set_id = bitReader.readUE();
             
-            console.log(`SPS: profile=${profile_idc}, level=${level_idc}, seq_id=${seq_parameter_set_id}`);
+            //console.log(`SPS: profile=${profile_idc}, level=${level_idc}, seq_id=${seq_parameter_set_id}`);
             
             // Handle high profiles (100, 110, 122, 244, 44, 83, 86, 118, 128)
             if (profile_idc === 100 || profile_idc === 110 || profile_idc === 122 || 
@@ -768,7 +768,7 @@ export class H264Decoder {
             
             // Finally, check for VUI parameters
             const vui_parameters_present_flag = bitReader.readBits(1);
-            console.log(`VUI parameters present: ${vui_parameters_present_flag}`);
+            //console.log(`VUI parameters present: ${vui_parameters_present_flag}`);
             
             if (vui_parameters_present_flag) {
                 return this.parseVUIParameters(bitReader);
@@ -778,9 +778,9 @@ export class H264Decoder {
             
         } catch (error) {
             console.warn("Failed to parse VUI from SPS:", error.message);
-            console.log("SPS data length:", spsData.length, "bytes");
+            //console.log("SPS data length:", spsData.length, "bytes");
             if (spsData.length > 0) {
-                console.log("First few bytes:", Array.from(spsData.slice(0, Math.min(16, spsData.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
+                //console.log("First few bytes:", Array.from(spsData.slice(0, Math.min(16, spsData.length))).map(b => '0x' + b.toString(16).padStart(2, '0')).join(' '));
             }
             return null;
         }
@@ -830,14 +830,14 @@ export class H264Decoder {
         
         // timing_info_present_flag - This is what we're looking for!
         vui.timing_info_present = bitReader.readBits(1);
-        console.log(`Timing info present: ${vui.timing_info_present}`);
+        //console.log(`Timing info present: ${vui.timing_info_present}`);
         
         if (vui.timing_info_present) {
             vui.num_units_in_tick = bitReader.readBits(32);
             vui.time_scale = bitReader.readBits(32);
             vui.fixed_frame_rate_flag = bitReader.readBits(1);
             
-            console.log(`VUI Timing: num_units_in_tick=${vui.num_units_in_tick}, time_scale=${vui.time_scale}, fixed_frame_rate=${vui.fixed_frame_rate_flag}`);
+            //console.log(`VUI Timing: num_units_in_tick=${vui.num_units_in_tick}, time_scale=${vui.time_scale}, fixed_frame_rate=${vui.fixed_frame_rate_flag}`);
             
             // Calculate frame rate
             if (vui.num_units_in_tick > 0 && vui.time_scale > 0) {
@@ -855,12 +855,12 @@ export class H264Decoder {
                 if (fps_progressive < 1 || fps_progressive > 240) {
                     if (fps_interlaced >= 1 && fps_interlaced <= 240) {
                         fps = fps_interlaced;
-                        console.log(`Using interlaced formula for FPS calculation`);
+                        //console.log(`Using interlaced formula for FPS calculation`);
                     }
                 }
                 
                 vui.calculated_fps = fps;
-                console.log(`Calculated FPS from VUI: ${fps} (progressive: ${fps_progressive}, interlaced: ${fps_interlaced})`);
+                //console.log(`Calculated FPS from VUI: ${fps} (progressive: ${fps_progressive}, interlaced: ${fps_interlaced})`);
             }
         }
         
