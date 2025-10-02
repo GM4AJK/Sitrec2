@@ -515,7 +515,7 @@ export class CNode3DObject extends CNode3DGroup {
         this.lights = []; // Initialize lights array
 
         this.common.material = v.material ?? "lambert";
-        this.materialFolder = this.gui.addFolder("Material").open();
+        this.materialFolder = this.gui.addFolder("Material").close();
         this.materialFolder.isCommon = true; //temp patch - not needed?  not a controller???
         this.addParams(commonMaterialParams, this.common, this.materialFolder, true);
         this.rebuildMaterial();
