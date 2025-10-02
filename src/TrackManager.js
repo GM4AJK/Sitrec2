@@ -48,6 +48,9 @@ class CMetaTrack {
         this.guiFolder.destroy();
 
         const shortName = this.trackNode.shortName;
+        
+        // Remove the short name from the used names set
+        TrackManager.usedShortNames.delete(shortName);
 
 
 // TODO
@@ -144,6 +147,7 @@ class CTrackManager extends CManager {
 
     constructor() {
         super();
+        this.usedShortNames = new Set(); // Track all used short names for uniqueness
     }
 
 
@@ -1118,7 +1122,22 @@ class CTrackManager extends CManager {
                 }
             }
         }
-        return {shortName, moreTracks};
+        
+        // Limit short name to 10 characters
+        shortName = shortName.substring(0, 10);
+        
+        // Ensure uniqueness by adding a number if duplicate
+        let uniqueShortName = shortName;
+        let counter = 1;
+        while (this.usedShortNames.has(uniqueShortName)) {
+            uniqueShortName = shortName + counter;
+            counter++;
+        }
+        
+        // Store the unique short name
+        this.usedShortNames.add(uniqueShortName);
+        
+        return {shortName: uniqueShortName, moreTracks};
     }
 }
 
