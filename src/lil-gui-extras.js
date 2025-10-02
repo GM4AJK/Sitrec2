@@ -476,6 +476,12 @@ export class CGuiMenuBar {
             this.infoGUI.domElement.style.top = process.env.BANNER_HEIGHT + "px";
         }
 
+        // Prevent browser context menu on right-click for info GUI
+        this.infoGUI.domElement.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
+        });
+
          Globals.stats = new Stats();
         // Globals.stats.showPanel( 1 ); // 0: fps, 1: ms, 2: mb, 3+: custom
         // const attach = this.infoGUI.domElement;
@@ -692,6 +698,12 @@ export class CGuiMenuBar {
             if (newGUI.mode === "DETACHED") {
                 this.bringToFront(newGUI);
             }
+        });
+
+        // Prevent browser context menu on right-click
+        newGUI.domElement.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
         });
 
         return newGUI;
@@ -1033,6 +1045,12 @@ export class CGuiMenuBar {
         // Add click listener to bring to front when any part is clicked
         gui.domElement.addEventListener("mousedown", (event) => {
             this.bringToFront(gui);
+        });
+        
+        // Prevent browser context menu on right-click
+        gui.domElement.addEventListener("contextmenu", (event) => {
+            event.preventDefault();
+            event.stopPropagation();
         });
         
         // Store method to bring this standalone menu to front
