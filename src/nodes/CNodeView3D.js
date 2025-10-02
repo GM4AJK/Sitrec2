@@ -1233,11 +1233,87 @@ export class CNodeView3D extends CNodeViewCanvas {
     }
 
     /**
+     * Helper function to check distance from mouse to line segments of a track
+     * @param {Object} trackNode - The track node with position data
+     * @param {number} dataPointCount - Number of data points in the track
+     * @param {Function} getPositionFunc - Function to get position at index i
+     * @param {number} mouseX - Screen X coordinate
+     * @param {number} mouseY - Screen Y coordinate
+     * @returns {number} Minimum distance from mouse to any segment (or Infinity if no valid segments)
+     */
+    checkTrackSegments(trackNode, dataPointCount, getPositionFunc, mouseX, mouseY) {
+        let minDistance = Infinity;
+        
+        // Check distance to line segments between consecutive points
+        for (let dataIndex = 0; dataIndex < dataPointCount - 1; dataIndex++) {
+            // For nodes with validPoint method, check if data exists before accessing
+            if (trackNode.validPoint) {
+                if (!trackNode.validPoint(dataIndex) || !trackNode.validPoint(dataIndex + 1)) {
+                    continue;
+                }
+            }
+            
+            const pos3D_A = getPositionFunc(dataIndex);
+            const pos3D_B = getPositionFunc(dataIndex + 1);
+            if (!pos3D_A || !pos3D_B) continue;
+            
+            // Project both endpoints to screen space
+            const screenPos_A = new Vector3(pos3D_A.x, pos3D_A.y, pos3D_A.z);
+            screenPos_A.project(this.camera);
+            
+            const screenPos_B = new Vector3(pos3D_B.x, pos3D_B.y, pos3D_B.z);
+            screenPos_B.project(this.camera);
+            
+            // Skip if both points are behind camera
+            if (screenPos_A.z > 1 && screenPos_B.z > 1) continue;
+            
+            // Convert from normalized device coordinates (-1 to 1) to screen pixels
+            const screenX_A = (screenPos_A.x * 0.5 + 0.5) * this.widthPx + this.leftPx;
+            const screenY_A = (1 - (screenPos_A.y * 0.5 + 0.5)) * this.heightPx + this.topPx;
+            
+            const screenX_B = (screenPos_B.x * 0.5 + 0.5) * this.widthPx + this.leftPx;
+            const screenY_B = (1 - (screenPos_B.y * 0.5 + 0.5)) * this.heightPx + this.topPx;
+            
+            // Calculate distance from mouse to line segment
+            // Using point-to-line-segment distance formula
+            const dx = screenX_B - screenX_A;
+            const dy = screenY_B - screenY_A;
+            const lengthSquared = dx * dx + dy * dy;
+            
+            let distance;
+            if (lengthSquared === 0) {
+                // Degenerate case: A and B are the same point
+                const px = mouseX - screenX_A;
+                const py = mouseY - screenY_A;
+                distance = Math.sqrt(px * px + py * py);
+            } else {
+                // Calculate the parameter t for the closest point on the line segment
+                // t = 0 means closest to A, t = 1 means closest to B
+                let t = ((mouseX - screenX_A) * dx + (mouseY - screenY_A) * dy) / lengthSquared;
+                t = Math.max(0, Math.min(1, t)); // Clamp to [0, 1] to stay on segment
+                
+                // Calculate the closest point on the segment
+                const closestX = screenX_A + t * dx;
+                const closestY = screenY_A + t * dy;
+                
+                // Calculate distance from mouse to closest point
+                const px = mouseX - closestX;
+                const py = mouseY - closestY;
+                distance = Math.sqrt(px * px + py * py);
+            }
+            
+            minDistance = Math.min(minDistance, distance);
+        }
+        
+        return minDistance;
+    }
+
+    /**
      * Find the closest track to the mouse position in screen space
      * @param {number} mouseX - Screen X coordinate
      * @param {number} mouseY - Screen Y coordinate
      * @param {number} threshold - Maximum distance in pixels to consider (default: 10)
-     * @returns {Object|null} Object with {trackID, trackOb, guiFolder} or null if no track is close enough
+     * @returns {Object|null} Object with {trackID, nodeId, guiFolder} or null if no track is close enough
      */
     findClosestTrack(mouseX, mouseY, threshold = 10) {
         if (!this.camera) return null;
@@ -1245,9 +1321,8 @@ export class CNodeView3D extends CNodeViewCanvas {
         let closestTrack = null;
         let closestDistance = threshold;
         
-        // Iterate through all tracks
+        // First, check tracks from TrackManager (user-loaded tracks from KML/CSV/etc)
         TrackManager.iterate((trackID, trackOb) => {
-            // Get the track node and track data node
             const trackNode = trackOb.trackNode;
             const trackDataNode = trackOb.trackDataNode;
             
@@ -1256,70 +1331,58 @@ export class CNodeView3D extends CNodeViewCanvas {
             // Check ONLY the track data node if it exists (raw data points)
             // This represents the actual track data (e.g., from KML/CSV) and is the complete track
             if (trackDataNode && trackDataNode.getPosition && trackDataNode.misb) {
-                // Use getPosition() for CNodeMISBDataTrack which directly accesses raw MISB data
-                // Use misb.length to get the actual number of data points (not trackDataNode.frames)
                 const dataPointCount = trackDataNode.misb.length;
+                const distance = this.checkTrackSegments(
+                    trackDataNode, 
+                    dataPointCount, 
+                    (i) => trackDataNode.getPosition(i),
+                    mouseX, 
+                    mouseY
+                );
                 
-                // Check distance to line segments between consecutive points
-                for (let dataIndex = 0; dataIndex < dataPointCount - 1; dataIndex++) {
-                    const pos3D_A = trackDataNode.getPosition(dataIndex);
-                    const pos3D_B = trackDataNode.getPosition(dataIndex + 1);
-                    if (!pos3D_A || !pos3D_B) continue;
-                    
-                    // Project both endpoints to screen space
-                    const screenPos_A = new Vector3(pos3D_A.x, pos3D_A.y, pos3D_A.z);
-                    screenPos_A.project(this.camera);
-                    
-                    const screenPos_B = new Vector3(pos3D_B.x, pos3D_B.y, pos3D_B.z);
-                    screenPos_B.project(this.camera);
-                    
-                    // Skip if both points are behind camera
-                    if (screenPos_A.z > 1 && screenPos_B.z > 1) continue;
-                    
-                    // Convert from normalized device coordinates (-1 to 1) to screen pixels
-                    const screenX_A = (screenPos_A.x * 0.5 + 0.5) * this.widthPx + this.leftPx;
-                    const screenY_A = (1 - (screenPos_A.y * 0.5 + 0.5)) * this.heightPx + this.topPx;
-                    
-                    const screenX_B = (screenPos_B.x * 0.5 + 0.5) * this.widthPx + this.leftPx;
-                    const screenY_B = (1 - (screenPos_B.y * 0.5 + 0.5)) * this.heightPx + this.topPx;
-                    
-                    // Calculate distance from mouse to line segment
-                    // Using point-to-line-segment distance formula
-                    const dx = screenX_B - screenX_A;
-                    const dy = screenY_B - screenY_A;
-                    const lengthSquared = dx * dx + dy * dy;
-                    
-                    let distance;
-                    if (lengthSquared === 0) {
-                        // Degenerate case: A and B are the same point
-                        const px = mouseX - screenX_A;
-                        const py = mouseY - screenY_A;
-                        distance = Math.sqrt(px * px + py * py);
-                    } else {
-                        // Calculate the parameter t for the closest point on the line segment
-                        // t = 0 means closest to A, t = 1 means closest to B
-                        let t = ((mouseX - screenX_A) * dx + (mouseY - screenY_A) * dy) / lengthSquared;
-                        t = Math.max(0, Math.min(1, t)); // Clamp to [0, 1] to stay on segment
-                        
-                        // Calculate the closest point on the segment
-                        const closestX = screenX_A + t * dx;
-                        const closestY = screenY_A + t * dy;
-                        
-                        // Calculate distance from mouse to closest point
-                        const px = mouseX - closestX;
-                        const py = mouseY - closestY;
-                        distance = Math.sqrt(px * px + py * py);
-                    }
-                    
-                    // Update closest track if this segment is closer
-                    if (distance < closestDistance) {
-                        closestDistance = distance;
-                        closestTrack = {
-                            trackID: trackID,
-                            trackOb: trackOb,
-                            guiFolder: trackOb.guiFolder
-                        };
-                    }
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestTrack = {
+                        trackID: trackID,
+                        nodeId: trackDataNode.id,
+                        guiFolder: trackOb.guiFolder
+                    };
+                }
+            }
+        });
+        
+        // Second, check display tracks (cameraDisplayTrack, satelliteDisplayTrack, traverseDisplayTrack, etc)
+        // These are algorithmic tracks that aren't in TrackManager
+        NodeMan.iterate((nodeId, node) => {
+            // Check if this is a CNodeDisplayTrack with a visible track
+            if (node.constructor.name === 'CNodeDisplayTrack' && node.visible && node.guiFolder) {
+                const trackNode = node.in.track;
+                if (!trackNode || !trackNode.p || !trackNode.validPoint) return;
+                
+                // For display tracks, we check the track node's position data
+                // Use trackNode.frames to get the number of frames
+                const frameCount = trackNode.frames;
+                if (!frameCount || frameCount < 2) return;
+                
+                // Check if the track has valid data at the first frame
+                // Some tracks (like satellites) might not have data loaded yet
+                if (!trackNode.validPoint(0)) return;
+                
+                const distance = this.checkTrackSegments(
+                    trackNode,
+                    frameCount,
+                    (i) => trackNode.p(i),
+                    mouseX,
+                    mouseY
+                );
+                
+                if (distance < closestDistance) {
+                    closestDistance = distance;
+                    closestTrack = {
+                        trackID: nodeId,
+                        nodeId: nodeId,
+                        guiFolder: node.guiFolder
+                    };
                 }
             }
         });
@@ -1400,7 +1463,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                         
                         // Mirror the track's GUI folder from the Contents menu
                         if (closestTrack.guiFolder) {
-                            const menuTitle = `Track: ${closestTrack.trackOb.menuText || closestTrack.trackID}`;
+                            const menuTitle = `Track: ${closestTrack.trackID}`;
                             
                             // Create a standalone menu and mirror the track's GUI folder
                             const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
