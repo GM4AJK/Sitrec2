@@ -1,5 +1,5 @@
 import {par} from "../par";
-import {NodeMan, setRenderOne, Sit} from "../Globals";
+import {GlobalDateTimeNode, NodeMan, setRenderOne, Sit} from "../Globals";
 import {CNode} from "./CNode";
 import {parseBoolean} from "../utils";
 
@@ -799,11 +799,51 @@ export class CNodeFrameSlider extends CNode {
         par.frame = frame;
     }
 
+    // Helper function to format time in timezone (HH:MM:SS.xx)
+    formatTimeInTimeZone(date, offsetHours) {
+        // Convert the offset to milliseconds
+        const offsetMilliseconds = offsetHours * 60 * 60 * 1000;
+        
+        // Apply the offset
+        const localTime = date.getTime();
+        const localOffset = date.getTimezoneOffset() * 60000; // getTimezoneOffset returns in minutes
+        const utc = localTime + localOffset;
+        const targetTime = new Date(utc + offsetMilliseconds);
+        
+        // Format the time as HH:MM:SS.xx
+        const pad = num => num.toString().padStart(2, '0');
+        const hours = pad(targetTime.getHours());
+        const minutes = pad(targetTime.getMinutes());
+        const seconds = pad(targetTime.getSeconds());
+        const centiseconds = Math.floor(targetTime.getMilliseconds() / 10).toString().padStart(2, '0');
+        
+        return `${hours}:${minutes}:${seconds}.${centiseconds}`;
+    }
+
+    // Get frame display text with frame number, video time, and timezone time
+    getFrameDisplayText(frame) {
+        // Line 1: Frame number and video time
+        const videoTime = (frame / Sit.fps).toFixed(2);
+        const line1 = `${frame} ${videoTime}s`;
+        
+        // Line 2: Time in designated timezone
+        let line2 = '';
+        if (GlobalDateTimeNode && GlobalDateTimeNode.dateNow) {
+            const nowDate = GlobalDateTimeNode.dateNow;
+            const timeInTZ = this.formatTimeInTimeZone(nowDate, GlobalDateTimeNode.getTimeZoneOffset());
+            const tzName = GlobalDateTimeNode.getTimeZoneName();
+            line2 = `${timeInTZ}`;
+        }
+        
+        return line1 + '\n' + line2;
+    }
+
     // Show frame display box
     showFrameDisplay(frame, mouseX) {
         if (this.frameDisplayBox) {
-            this.frameDisplayBox.textContent = `${frame}`;
+            this.frameDisplayBox.textContent = this.getFrameDisplayText(frame);
             this.frameDisplayBox.style.display = 'block';
+            this.frameDisplayBox.style.whiteSpace = 'pre'; // Preserve line breaks
             
             // Calculate position based on frame position on slider, not mouse position
             const sliderRect = this.sliderDiv.getBoundingClientRect();
@@ -822,7 +862,7 @@ export class CNodeFrameSlider extends CNode {
     // Update frame display position and content
     updateFrameDisplay(frame, mouseX) {
         if (this.frameDisplayBox && this.frameDisplayBox.style.display === 'block') {
-            this.frameDisplayBox.textContent = `${frame}`;
+            this.frameDisplayBox.textContent = this.getFrameDisplayText(frame);
             
             // Calculate position based on frame position on slider, not mouse position
             const sliderRect = this.sliderDiv.getBoundingClientRect();
