@@ -1124,18 +1124,18 @@ class CTrackManager extends CManager {
         }
         
         // Limit short name to 10 characters
-        shortName = shortName.substring(0, 10);
-        
-        // Ensure uniqueness by adding a number if duplicate
-        let uniqueShortName = shortName;
-        let counter = 1;
-        while (this.usedShortNames.has(uniqueShortName)) {
-            uniqueShortName = shortName + counter;
-            counter++;
-        }
-        
-        // Store the unique short name
-        this.usedShortNames.add(uniqueShortName);
+        // shortName = shortName.substring(0, 10);
+        //
+        // // Ensure uniqueness by adding a number if duplicate
+         let uniqueShortName = shortName;
+        // let counter = 1;
+        // while (this.usedShortNames.has(uniqueShortName)) {
+        //     uniqueShortName = shortName + counter;
+        //     counter++;
+        // }
+        //
+        // // Store the unique short name
+        // this.usedShortNames.add(uniqueShortName);
         
         return {shortName: uniqueShortName, moreTracks};
     }
