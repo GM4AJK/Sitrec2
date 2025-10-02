@@ -66,6 +66,10 @@ class CameraMapControls {
 
 		this.state = STATE.NONE
 		this.enabled = true;
+		
+		// Track mouse position for context menu drag detection
+		this.contextMenuDownPos = null;
+		this.contextMenuDragThreshold = 2; // pixels
 
 		const id = this.view.id;
 		this.measureStartPoint = V3()
@@ -117,12 +121,11 @@ class CameraMapControls {
 
 		if ( this.enabled === false ) return;
 
+		// Always prevent the default browser context menu
 		event.preventDefault();
 		
-		// Check if the view has a context menu handler
-		if (this.view && this.view.onContextMenu) {
-			this.view.onContextMenu(event, event.clientX, event.clientY);
-		}
+		// Don't show our context menu - we'll handle it in handleMouseUp instead
+		// This prevents the menu from showing on right-click down
 
 	}
 
@@ -257,6 +260,12 @@ class CameraMapControls {
 		if (!mouseInViewOnly(this.view,event.clientX, event.clientY)) return;
 //		console.log ("CameraMapControls Mouse DOWN, button = "+event.button)
 		this.button = event.button;
+		
+		// Track right mouse button down position for context menu drag detection
+		if (event.button === 2) {
+			this.contextMenuDownPos = { x: event.clientX, y: event.clientY };
+		}
+		
 		this.updateStateFromEvent(event)
 		const [x, y] = mouseToView(this.view, event.clientX, event.clientY)
 		this.mouseStart.set( x, y );
@@ -295,6 +304,24 @@ class CameraMapControls {
 			NodeMan.disposeRemove("cursorLLA");
 		}
 		this.view.cursorSprite.visible = false;
+		
+		// Check if this was a right-click release without dragging
+		if (event.button === 2 && this.contextMenuDownPos) {
+			const dx = event.clientX - this.contextMenuDownPos.x;
+			const dy = event.clientY - this.contextMenuDownPos.y;
+			const distance = Math.sqrt(dx * dx + dy * dy);
+			
+			// If mouse didn't move much, show the context menu
+			if (distance <= this.contextMenuDragThreshold) {
+				if (this.view && this.view.onContextMenu) {
+					this.view.onContextMenu(event, event.clientX, event.clientY);
+				}
+			}
+		}
+		
+		// Reset context menu tracking
+		this.contextMenuDownPos = null;
+		
 		this.state = STATE.NONE
 		if (!this.enabled) return;
 		this.canvas.releasePointerCapture(event.pointerId)

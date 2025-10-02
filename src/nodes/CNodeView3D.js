@@ -1390,6 +1390,164 @@ export class CNodeView3D extends CNodeViewCanvas {
         return closestTrack;
     }
 
+    // Display a context menu for a celestial object
+    showCelestialObjectMenu(celestialObject, clientX, clientY) {
+        console.log(`Found celestial object: ${celestialObject.type} - ${celestialObject.name}`);
+        
+        // Create an info menu for the celestial object
+        let menuTitle = '';
+        if (celestialObject.type === 'planet') {
+            menuTitle = `Planet: ${celestialObject.name}`;
+        } else if (celestialObject.type === 'satellite') {
+            menuTitle = `Satellite: ${celestialObject.name}`;
+        } else if (celestialObject.type === 'star') {
+            menuTitle = `Star: ${celestialObject.name}`;
+        }
+        
+        const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, clientX, clientY);
+        
+        // Add information about the celestial object
+        if (celestialObject.type === 'planet') {
+            const data = celestialObject.data;
+            if (data.ra !== undefined) {
+                standaloneMenu.add({raHours: data.ra * 12 / Math.PI}, 'raHours').name('RA (hours)').listen().disable();
+            }
+            if (data.dec !== undefined) {
+                standaloneMenu.add({decDegrees: data.dec * 180 / Math.PI}, 'decDegrees').name('Dec (degrees)').listen().disable();
+            }
+            if (data.mag !== undefined) {
+                standaloneMenu.add({magnitude: data.mag}, 'magnitude').name('Magnitude').listen().disable();
+            }
+        } else if (celestialObject.type === 'satellite') {
+            standaloneMenu.add({number: celestialObject.number}, 'number').name('NORAD Number').listen().disable();
+            standaloneMenu.add({name: celestialObject.name}, 'name').name('Name').listen().disable();
+        } else if (celestialObject.type === 'star') {
+            if (celestialObject.ra !== undefined) {
+                standaloneMenu.add({raHours: celestialObject.ra * 12 / Math.PI}, 'raHours').name('RA (hours)').listen().disable();
+            }
+            if (celestialObject.dec !== undefined) {
+                standaloneMenu.add({decDegrees: celestialObject.dec * 180 / Math.PI}, 'decDegrees').name('Dec (degrees)').listen().disable();
+            }
+            if (celestialObject.magnitude !== undefined && celestialObject.magnitude !== 'Unknown') {
+                standaloneMenu.add({magnitude: celestialObject.magnitude}, 'magnitude').name('Magnitude').listen().disable();
+            }
+        }
+        
+        // Add angle information (how close to the click)
+        standaloneMenu.add({angle: celestialObject.angle.toFixed(3)}, 'angle').name('Angle (degrees)').listen().disable();
+        
+        // Open the menu
+        standaloneMenu.open();
+    }
+
+    // Find the closest celestial object (star, planet, or satellite) to a ray
+    findClosestCelestialObject(mouseRay, maxAngleDegrees = 5) {
+        const nightSkyNode = NodeMan.get("NightSkyNode", true);
+        if (!nightSkyNode) {
+            console.log("NightSkyNode not found");
+            return null;
+        }
+
+        let closestObject = null;
+        let closestAngle = maxAngleDegrees;
+
+        // Convert mouse ray to a direction vector using the raycaster
+        // mouseRay is in NDC coordinates (-1 to +1)
+        
+        // IMPORTANT: The night sky is rendered with the camera temporarily at the origin (0,0,0)
+        // So we need to get the ray direction as if the camera were at the origin
+        // Save the camera's actual position and temporarily move it to origin
+        const savedCameraPos = this.camera.position.clone();
+        this.camera.position.set(0, 0, 0);
+        this.camera.updateMatrixWorld();
+        
+        this.raycaster.setFromCamera(mouseRay, this.camera);
+        const rayDirection = this.raycaster.ray.direction.clone();
+        
+        // Restore the camera's actual position
+        this.camera.position.copy(savedCameraPos);
+        this.camera.updateMatrixWorld();
+        
+        console.log(`Checking celestial objects:`);
+        console.log(`  Ray direction (from origin): (${rayDirection.x.toFixed(4)}, ${rayDirection.y.toFixed(4)}, ${rayDirection.z.toFixed(4)})`);
+
+        // Check planets
+        if (nightSkyNode.planetSprites) {
+            console.log(`Checking ${Object.keys(nightSkyNode.planetSprites).length} planets`);
+            for (const [planetName, planetData] of Object.entries(nightSkyNode.planetSprites)) {
+                if (!planetData.sprite || !planetData.sprite.visible) continue;
+
+                // Get planet position in world space
+                // Planets are on a celestial sphere, so we only care about direction, not distance
+                // The sprite position is in the celestial sphere's local space, so we need world position
+                const planetLocalPos = planetData.sprite.position.clone();
+                const planetWorldPos = new Vector3();
+                planetData.sprite.getWorldPosition(planetWorldPos);
+                const planetDir = planetWorldPos.clone().normalize(); // Direction from world origin
+
+                // Calculate angle between ray and planet direction
+                const dot = rayDirection.dot(planetDir);
+                const angle = Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI;
+                
+                console.log(`  Planet ${planetName}: angle = ${angle.toFixed(2)}°, visible = ${planetData.sprite.visible}`);
+                if (planetName === "Sun") {
+                    // Calculate RA/Dec from local position to compare with stars
+                    const sunRA = Math.atan2(planetLocalPos.y, planetLocalPos.x);
+                    const sunDec = Math.asin(planetLocalPos.z / planetLocalPos.length());
+                    console.log(`    Sun RA=${sunRA.toFixed(4)} (${(sunRA*180/Math.PI).toFixed(2)}°), Dec=${sunDec.toFixed(4)} (${(sunDec*180/Math.PI).toFixed(2)}°)`);
+                    console.log(`    Sun local pos: (${planetLocalPos.x.toFixed(4)}, ${planetLocalPos.y.toFixed(4)}, ${planetLocalPos.z.toFixed(4)})`);
+                    console.log(`    Sun world pos: (${planetWorldPos.x.toFixed(4)}, ${planetWorldPos.y.toFixed(4)}, ${planetWorldPos.z.toFixed(4)})`);
+                    console.log(`    Sun world dir: (${planetDir.x.toFixed(4)}, ${planetDir.y.toFixed(4)}, ${planetDir.z.toFixed(4)})`);
+                }
+
+                if (angle < closestAngle) {
+                    closestAngle = angle;
+                    closestObject = {
+                        type: 'planet',
+                        name: planetName,
+                        data: planetData,
+                        angle: angle
+                    };
+                    console.log(`    -> New closest object: ${planetName} at ${angle.toFixed(2)}°`);
+                }
+            }
+        }
+
+        // Check satellites
+        if (nightSkyNode.TLEData && nightSkyNode.TLEData.satData) {
+            for (const satData of nightSkyNode.TLEData.satData) {
+                if (!satData.visible || !satData.eus) continue;
+
+                // Get satellite position
+                const satPos = satData.eus.clone();
+                const satDir = satPos.clone().sub(this.camera.position).normalize();
+
+                // Calculate angle between ray and satellite direction
+                const dot = rayDirection.dot(satDir);
+                const angle = Math.acos(Math.max(-1, Math.min(1, dot))) * 180 / Math.PI;
+
+                if (angle < closestAngle) {
+                    closestAngle = angle;
+                    closestObject = {
+                        type: 'satellite',
+                        name: satData.name,
+                        number: satData.number,
+                        data: satData,
+                        angle: angle
+                    };
+                }
+            }
+        }
+
+        if (closestObject) {
+            console.log(`Found closest celestial object: ${closestObject.type} - ${closestObject.name} at ${closestObject.angle.toFixed(2)}°`);
+        } else {
+            console.log(`No celestial objects found within ${maxAngleDegrees}°`);
+        }
+
+        return closestObject;
+    }
+
     onContextMenu(event, mouseX, mouseY) {
         if (!this.mouseEnabled) return;
         
@@ -1487,7 +1645,15 @@ export class CNodeView3D extends CNodeViewCanvas {
                         return; // Found a track, don't show ground menu
                     }
                     
-                    // No object or track found, show ground context menu if in custom sitch
+                    // No object or track found, check for celestial objects before showing ground menu
+                    const celestialObject = this.findClosestCelestialObject(mouseRay);
+                    
+                    if (celestialObject) {
+                        this.showCelestialObjectMenu(celestialObject, event.clientX, event.clientY);
+                        return; // Found celestial object, don't show ground menu
+                    }
+                    
+                    // No object, track, or celestial object found, show ground context menu if in custom sitch
                     if (Sit.isCustom) {
                         // Get the first intersection point (closest to camera)
                         const groundPoint = intersects[0].point;
@@ -1523,6 +1689,14 @@ export class CNodeView3D extends CNodeViewCanvas {
                         standaloneMenu.open();
                         console.log(`Created standalone menu for track: ${closestTrack.trackID}`);
                     }
+                    return; // Found a track, don't check celestial objects
+                }
+                
+                // No tracks found, check for celestial objects (stars, planets, satellites)
+                const celestialObject = this.findClosestCelestialObject(mouseRay);
+                
+                if (celestialObject) {
+                    this.showCelestialObjectMenu(celestialObject, event.clientX, event.clientY);
                 }
             }
         }
