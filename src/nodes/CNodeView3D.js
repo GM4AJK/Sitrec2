@@ -746,7 +746,7 @@ export class CNodeView3D extends CNodeViewCanvas {
 
     otherSetup(v) {
         this.raycaster = new Raycaster();
-        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK | LAYER.MASK_TARGET;
         assert(this.scene, "CNodeView3D needs global GlobalScene")
 
         const spriteCrosshairMaterial = new SpriteMaterial({
@@ -1427,20 +1427,24 @@ export class CNodeView3D extends CNodeViewCanvas {
                         // Get the node from NodeManager
                         const node = NodeMan.get(objectID);
                         if (node && node.gui) {
-                            // Create a draggable window with the node's GUI controls using dynamic mirroring
+                            // Create a draggable window with the node's GUI controls
                             const menuTitle = `3D Ob: ${objectID}`;
                             
-                            // Use the new dynamic mirroring system that automatically updates when the node's GUI changes
-                            // This handles model/geometry switching and other programmatic GUI changes
-                            const standaloneMenu = CustomManager.mirrorNodeGUI(objectID, menuTitle, event.clientX, event.clientY);
+                            // Create a standalone menu and mirror the object's GUI folder
+                            // Use the same approach as tracks for consistency
+                            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
                             
-                            if (standaloneMenu) {
-                                // Open the menu by default
-                                standaloneMenu.open();
-                                console.log(`Created dynamic standalone menu for object: ${objectID}`);
-                            } else {
-                                console.log(`Failed to create dynamic menu for object: ${objectID}`);
-                            }
+                            // Set up dynamic mirroring for the object's GUI folder
+                            CustomManager.setupDynamicMirroring(node.gui, standaloneMenu);
+                            
+                            // Add a method to manually refresh the mirror
+                            standaloneMenu.refreshMirror = () => {
+                                CustomManager.updateMirror(standaloneMenu);
+                            };
+                            
+                            // Open the menu by default
+                            standaloneMenu.open();
+                            console.log(`Created standalone menu for object: ${objectID}`);
                         } else {
                             console.log(`Node ${objectID} not found or has no GUI folder`);
                         }
@@ -1553,7 +1557,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                 break;
             }
         }
-        
+
         // If no nodeId found, return null to indicate no valid CNode3DGroup object
         return null;
     }
