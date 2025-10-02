@@ -27,7 +27,7 @@ import {CNodeTrackFromMISB} from "./nodes/CNodeTrackFromMISB";
 import {assert} from "./assert.js";
 import {getLocalSouthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
 import {closestIntersectionTime, trackBoundingBox} from "./trackUtils";
-import {CNode3DObject} from "./nodes/CNode3DObject";
+import {CNode3DObject, ModelFiles} from "./nodes/CNode3DObject";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {CGeoJSON} from "./geoJSONUtils";
 import {CNodeSmoothedPositionTrack} from "./nodes/CNodeSmoothedPositionTrack";
@@ -534,15 +534,33 @@ class CTrackManager extends CManager {
 
         const sphereId = trackOb.menuText ?? shortName;
 
-        // instead of a sphere, add a 3dObject sphere and follow controllers
-        trackOb.displayTargetSphere = new CNode3DObject({
-            id: sphereId + "_ob",
-            object: "sphere",
-            radius: 40,
-            color: trackColor,
-            label: shortName,
 
-        });
+        if (process.env.DEFAULT_PLATFORM_MODEL && trackOb.trackFileName.endsWith(".klv")) {
+
+            // check if in the ModelFiles object, and use it if available
+            if (ModelFiles[process.env.DEFAULT_PLATFORM_MODEL]) {
+                trackOb.displayTargetSphere = new CNode3DObject({
+                    id: sphereId + "_ob",
+                    model: process.env.DEFAULT_PLATFORM_MODEL,
+
+                    label: shortName,
+                })
+            }
+        }
+
+        // if we didn't make a model, then we use a default sphere
+        if (!trackOb.displayTargetSphere)
+        {
+
+            trackOb.displayTargetSphere = new CNode3DObject({
+                id: sphereId + "_ob",
+                object: "sphere",
+                radius: 40,
+                color: trackColor,
+                label: shortName,
+
+            });
+        }
 
         trackOb.displayTargetSphere.addController("TrackPosition", {
             //   id: trackOb.shortName+"_controller",
