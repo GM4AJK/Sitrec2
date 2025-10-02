@@ -4,6 +4,7 @@ import {XYZ2EA, XYZJ2PR} from "../SphericalMath";
 import {CustomManager, Globals, guiMenus, guiTweaks, keyHeld, NodeMan, setRenderOne, Sit} from "../Globals";
 import {GlobalDaySkyScene, GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene} from "../LocalFrame";
 import {DRAG, makeMouseRay} from "../mouseMoveView";
+import {TrackManager} from "../TrackManager";
 import {
     Camera,
     Color,
@@ -1231,6 +1232,101 @@ export class CNodeView3D extends CNodeViewCanvas {
 
     }
 
+    /**
+     * Find the closest track to the mouse position in screen space
+     * @param {number} mouseX - Screen X coordinate
+     * @param {number} mouseY - Screen Y coordinate
+     * @param {number} threshold - Maximum distance in pixels to consider (default: 10)
+     * @returns {Object|null} Object with {trackID, trackOb, guiFolder} or null if no track is close enough
+     */
+    findClosestTrack(mouseX, mouseY, threshold = 10) {
+        if (!this.camera) return null;
+        
+        let closestTrack = null;
+        let closestDistance = threshold;
+        
+        // Iterate through all tracks
+        TrackManager.iterate((trackID, trackOb) => {
+            // Get the track node and track data node
+            const trackNode = trackOb.trackNode;
+            const trackDataNode = trackOb.trackDataNode;
+            
+            if (!trackNode || !trackNode.visible) return;
+            
+            // Check ONLY the track data node if it exists (raw data points)
+            // This represents the actual track data (e.g., from KML/CSV) and is the complete track
+            if (trackDataNode && trackDataNode.getPosition && trackDataNode.misb) {
+                // Use getPosition() for CNodeMISBDataTrack which directly accesses raw MISB data
+                // Use misb.length to get the actual number of data points (not trackDataNode.frames)
+                const dataPointCount = trackDataNode.misb.length;
+                
+                // Check distance to line segments between consecutive points
+                for (let dataIndex = 0; dataIndex < dataPointCount - 1; dataIndex++) {
+                    const pos3D_A = trackDataNode.getPosition(dataIndex);
+                    const pos3D_B = trackDataNode.getPosition(dataIndex + 1);
+                    if (!pos3D_A || !pos3D_B) continue;
+                    
+                    // Project both endpoints to screen space
+                    const screenPos_A = new Vector3(pos3D_A.x, pos3D_A.y, pos3D_A.z);
+                    screenPos_A.project(this.camera);
+                    
+                    const screenPos_B = new Vector3(pos3D_B.x, pos3D_B.y, pos3D_B.z);
+                    screenPos_B.project(this.camera);
+                    
+                    // Skip if both points are behind camera
+                    if (screenPos_A.z > 1 && screenPos_B.z > 1) continue;
+                    
+                    // Convert from normalized device coordinates (-1 to 1) to screen pixels
+                    const screenX_A = (screenPos_A.x * 0.5 + 0.5) * this.widthPx + this.leftPx;
+                    const screenY_A = (1 - (screenPos_A.y * 0.5 + 0.5)) * this.heightPx + this.topPx;
+                    
+                    const screenX_B = (screenPos_B.x * 0.5 + 0.5) * this.widthPx + this.leftPx;
+                    const screenY_B = (1 - (screenPos_B.y * 0.5 + 0.5)) * this.heightPx + this.topPx;
+                    
+                    // Calculate distance from mouse to line segment
+                    // Using point-to-line-segment distance formula
+                    const dx = screenX_B - screenX_A;
+                    const dy = screenY_B - screenY_A;
+                    const lengthSquared = dx * dx + dy * dy;
+                    
+                    let distance;
+                    if (lengthSquared === 0) {
+                        // Degenerate case: A and B are the same point
+                        const px = mouseX - screenX_A;
+                        const py = mouseY - screenY_A;
+                        distance = Math.sqrt(px * px + py * py);
+                    } else {
+                        // Calculate the parameter t for the closest point on the line segment
+                        // t = 0 means closest to A, t = 1 means closest to B
+                        let t = ((mouseX - screenX_A) * dx + (mouseY - screenY_A) * dy) / lengthSquared;
+                        t = Math.max(0, Math.min(1, t)); // Clamp to [0, 1] to stay on segment
+                        
+                        // Calculate the closest point on the segment
+                        const closestX = screenX_A + t * dx;
+                        const closestY = screenY_A + t * dy;
+                        
+                        // Calculate distance from mouse to closest point
+                        const px = mouseX - closestX;
+                        const py = mouseY - closestY;
+                        distance = Math.sqrt(px * px + py * py);
+                    }
+                    
+                    // Update closest track if this segment is closer
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        closestTrack = {
+                            trackID: trackID,
+                            trackOb: trackOb,
+                            guiFolder: trackOb.guiFolder
+                        };
+                    }
+                }
+            }
+        });
+        
+        return closestTrack;
+    }
+
     onContextMenu(event, mouseX, mouseY) {
         if (!this.mouseEnabled) return;
         
@@ -1243,6 +1339,7 @@ export class CNodeView3D extends CNodeViewCanvas {
         const mouseRay = makeMouseRay(this, viewX, mouseYUp);
         
         if (this.camera && mouseInViewOnly(this, mouseX, mouseY)) {
+            // First, check for 3D objects using raycasting (they have priority over tracks)
             this.raycaster.setFromCamera(mouseRay, this.camera);
             const intersects = this.raycaster.intersectObjects(this.scene.children, true);
             
@@ -1284,7 +1381,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                         } else {
                             console.log(`Node ${objectID} not found or has no GUI folder`);
                         }
-                        break;
+                        return; // Found an object, don't check tracks or ground
                     } else {
                         // Debug: log what we're hitting
                         console.log(`Hit object without valid name: ${object.type}, name: "${object.name}", userData:`, object.userData);
@@ -1292,14 +1389,73 @@ export class CNodeView3D extends CNodeViewCanvas {
                 }
                 
                 // If we didn't find an object with nodeId, but we hit something (like terrain/ground)
-                // and we're in the custom sitch, show the ground context menu
-                if (!foundObject && Sit.isCustom) {
-                    // Get the first intersection point (closest to camera)
-                    const groundPoint = intersects[0].point;
-                    console.log(`Ground clicked at:`, groundPoint);
+                // Check for tracks before showing ground menu
+                if (!foundObject) {
+                    // Check if we're close to any track in screen space
+                    // Tracks are too thin to pick with raycasting, so we check screen space distance
+                    const closestTrack = this.findClosestTrack(mouseX, mouseY, 10);
                     
-                    // Show the ground context menu
-                    CustomManager.showGroundContextMenu(mouseX, mouseY, groundPoint);
+                    if (closestTrack) {
+                        console.log(`Found track near mouse: ${closestTrack.trackID}`);
+                        
+                        // Mirror the track's GUI folder from the Contents menu
+                        if (closestTrack.guiFolder) {
+                            const menuTitle = `Track: ${closestTrack.trackOb.menuText || closestTrack.trackID}`;
+                            
+                            // Create a standalone menu and mirror the track's GUI folder
+                            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
+                            
+                            // Set up dynamic mirroring for the track's GUI folder
+                            CustomManager.setupDynamicMirroring(closestTrack.guiFolder, standaloneMenu);
+                            
+                            // Add a method to manually refresh the mirror
+                            standaloneMenu.refreshMirror = () => {
+                                CustomManager.updateMirror(standaloneMenu);
+                            };
+                            
+                            // Open the menu by default
+                            standaloneMenu.open();
+                            console.log(`Created standalone menu for track: ${closestTrack.trackID}`);
+                        }
+                        return; // Found a track, don't show ground menu
+                    }
+                    
+                    // No object or track found, show ground context menu if in custom sitch
+                    if (Sit.isCustom) {
+                        // Get the first intersection point (closest to camera)
+                        const groundPoint = intersects[0].point;
+                        console.log(`Ground clicked at:`, groundPoint);
+                        
+                        // Show the ground context menu
+                        CustomManager.showGroundContextMenu(mouseX, mouseY, groundPoint);
+                    }
+                }
+            } else {
+                // No intersections at all, check for tracks
+                const closestTrack = this.findClosestTrack(mouseX, mouseY, 10);
+                
+                if (closestTrack) {
+                    console.log(`Found track near mouse: ${closestTrack.trackID}`);
+                    
+                    // Mirror the track's GUI folder from the Contents menu
+                    if (closestTrack.guiFolder) {
+                        const menuTitle = `Track: ${closestTrack.trackOb.menuText || closestTrack.trackID}`;
+                        
+                        // Create a standalone menu and mirror the track's GUI folder
+                        const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
+                        
+                        // Set up dynamic mirroring for the track's GUI folder
+                        CustomManager.setupDynamicMirroring(closestTrack.guiFolder, standaloneMenu);
+                        
+                        // Add a method to manually refresh the mirror
+                        standaloneMenu.refreshMirror = () => {
+                            CustomManager.updateMirror(standaloneMenu);
+                        };
+                        
+                        // Open the menu by default
+                        standaloneMenu.open();
+                        console.log(`Created standalone menu for track: ${closestTrack.trackID}`);
+                    }
                 }
             }
         }
