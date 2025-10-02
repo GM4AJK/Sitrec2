@@ -2130,13 +2130,46 @@ export class CCustomManager {
 
 
 function disableIfNearCameraTrack(ob, camera) {
-    const dist = ob.position.distanceTo(camera.position)
-    if (dist < 0.001) {  // slack WAS 5m, for smoothed vs unsmoothed tracks
+    // Check if the camera is inside the object's bounding sphere
+    let shouldHide = false;
+
+
+    // if the first child is a mesh, use its geometry for bounding sphere calculation
+    let mesh = ob.children[0]
+
+    // if that's a group, then check the first child of the group
+    if (mesh && mesh.type === "Group") {
+        mesh = mesh.children[0]
+    }
+
+    // TODO: not working for complex object, we need to pre-compute a bounding sphere centered on the postition
+
+    // If the object has geometry with a bounding sphere, use that
+    if (mesh && mesh.geometry) {
+        // Ensure bounding sphere is computed
+        if (!mesh.geometry.boundingSphere) {
+            mesh.geometry.computeBoundingSphere();
+        }
+        
+   //     if (mesh.geometry.boundingSphere) {
+            // Get the bounding sphere in world space
+            const boundingSphere = mesh.geometry.boundingSphere.clone();
+            boundingSphere.applyMatrix4(mesh.matrixWorld);
+            
+            // Check if camera is inside the bounding sphere
+            const distToCenter = camera.position.distanceTo(boundingSphere.center);
+            shouldHide = distToCenter < boundingSphere.radius;
+     //   }
+    } else {
+        const dist = ob.position.distanceTo(camera.position);
+        shouldHide = dist < 1;
+    }
+    
+    if (shouldHide) {
         ob.customOldVisible = ob.visible;
         ob.visible = false;
     } else {
         ob.customOldVisible = undefined;
-
     }
 }
 
