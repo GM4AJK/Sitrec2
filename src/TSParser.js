@@ -313,8 +313,8 @@ export class TSParser {
                         
                         // Log first and last few PES packets for debugging
                         if (pesPacketCount <= 3 || pesPacketCount >= 103) {
-                            console.log(`PES packet ${pesPacketCount}: offset=${offset}, packetLength=${packetLength}, headerOffset=${headerOffset}, nextPesStart=${nextPesStart}, elementaryDataSize=${elementaryData.length}`);
-                            console.log(`  First 16 bytes: ${Array.from(elementaryData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
+//                            console.log(`PES packet ${pesPacketCount}: offset=${offset}, packetLength=${packetLength}, headerOffset=${headerOffset}, nextPesStart=${nextPesStart}, elementaryDataSize=${elementaryData.length}`);
+//                            console.log(`  First 16 bytes: ${Array.from(elementaryData.slice(0, 16)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
                         }
                     }
                     
