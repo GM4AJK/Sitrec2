@@ -750,6 +750,9 @@ export class CFileManager extends CManager {
 
     // general file asset loader, detect file type from extension and add to manager
     // returns a promise, which you can then await or .then
+    // Track in-progress asset loads to avoid duplicate loading
+    #loadingPromises = new Map();
+    
     loadAsset(filename, id) {
 
         assert(filename, "Filename is undefined or null");
@@ -774,38 +777,62 @@ export class CFileManager extends CManager {
             id = filename; // Fallback to use filename as id if id is undefined
         }
 
+        // If the asset is already loaded, return it immediately
         if (this.exists(id)) {
-          //  return Promise.resolve(this.list[id]);
-            return Promise.resolve({filename: filename, parsed: this.list[id].data})
-
+            return Promise.resolve({filename: filename, parsed: this.list[id].data});
         }
 
-        // might be loading a file that's already been loaded but using a different ID
-        // so check the existing files, and make a new entry if so. Flag it as a duplicate
-        // so we can handle it later
-        // to find it we need to iterate over the files, and check the filename, not the id
-        // as the id might be different
+        // Check if this file is already being loaded (by filename)
+        // If so, return the existing promise to avoid duplicate loading
+        const loadingKey = `${filename}`;
+        if (this.#loadingPromises.has(loadingKey)) {
+            console.log(`Asset ${filename} is already being loaded, reusing existing promise`);
+            return this.#loadingPromises.get(loadingKey).then(parsedAsset => {
+                // If the requested ID is different from the one being loaded,
+                // we'll need to add a new entry with the requested ID
+                if (parsedAsset.id !== id && !this.exists(id)) {
+                    this.add(id, this.list[parsedAsset.id].data, this.list[parsedAsset.id].original);
+                    this.list[id].dynamicLink = this.list[parsedAsset.id].dynamicLink;
+                    this.list[id].staticURL = this.list[parsedAsset.id].staticURL;
+                    this.list[id].dataType = this.list[parsedAsset.id].dataType;
+                    this.list[id].filename = filename;
+                }
+                return {filename: filename, parsed: this.list[id].data};
+            });
+        }
 
-        // should we strip off "./" from the start, or just fix them in the original data <<<< HEY, FIX THIS
-
-        var duplicate = false;
-        this.iterate( (key, parsed) => {
+        // Check if this file has already been loaded with a different ID
+        var existingId = null;
+        this.iterate((key, parsed) => {
             const f = this.list[key];
             if (f.filename === filename) {
-                duplicate = true;
-                showError("Duplicate file " + filename + " found as existing id: " + key + " new id requested:" + id)
+                existingId = key;
+                console.log(`File ${filename} already loaded with ID ${key}, requested with ID ${id}`);
             }
         });
+        
+        // If the file exists with a different ID, create a new entry with the requested ID
+        if (existingId) {
+            this.add(id, this.list[existingId].data, this.list[existingId].original);
+            this.list[id].dynamicLink = this.list[existingId].dynamicLink;
+            this.list[id].staticURL = this.list[existingId].staticURL;
+            this.list[id].dataType = this.list[existingId].dataType;
+            this.list[id].filename = filename;
+            return Promise.resolve({filename: filename, parsed: this.list[id].data});
+        }
 
 
         // // if we are going to try to load it,
         // assert(!this.exists(id), "Asset " + id + " already exists");
 
+        // Create a loading promise that will be stored in the map
+        let loadingPromise;
+
         // If it has no forward slash, then it's a local file
         // and will be in the this.directoryHandle folder
         if (!filename.includes("/")) {
             assert(this.directoryHandle !== undefined, "No directory handle for local file")
-            return this.directoryHandle.getFileHandle(filename).then(fileHandle => {
+            loadingPromise = this.directoryHandle.getFileHandle(filename).then(fileHandle => {
                 return fileHandle.getFile().then(file => {
                     return file.arrayBuffer().then(arrayBuffer => {
                         return this.parseAsset(filename, id, arrayBuffer).then(parsedAsset => {
@@ -813,135 +840,146 @@ export class CFileManager extends CManager {
                             this.add(id, parsedAsset.parsed, arrayBuffer); // Add the loaded and parsed asset to the manager
                             this.list[id].dynamicLink = true;  // Local files are always dynamic links, meaning they require rehosting
                             this.list[id].staticURL = null; // indicates it has NOT been rehosted
-                            this.list[id].filename = filename
+                            this.list[id].filename = filename;
+                            
+                            // Add the ID to the parsed asset for reference in the loading promise map
+                            parsedAsset.id = id;
                             return parsedAsset; // Return the asset for further chaining if necessary
                         });
                     });
                 });
             });
-        }
+        } else {
+            // if not a local file, then it's a URL
+            // either a dynamic link (like to the current Starlink TLE) or a static link
+            // so fetch it and parse it
 
-        // if not a local file, then it's a URL
-        // either a dynamic link (like to the current Starlink TLE) or a static link
-        // so fetch it and parse it
-
-        var isUrl = isHttpOrHttps(filename);
-        if (!isUrl) {
-            // legacy sitches have videos specified as: "../sitrec-videos/public/2 - Gimbal-WMV2PRORES-CROP-428x428.mp4"
-            // and in that case it's relative to SITREC_APP wihtout the data folder
-            if (filename.startsWith("../sitrec-videos/")) {
-                filename = SITREC_APP + filename;
+            var isUrl = isHttpOrHttps(filename);
+            if (!isUrl) {
+                // legacy sitches have videos specified as: "../sitrec-videos/public/2 - Gimbal-WMV2PRORES-CROP-428x428.mp4"
+                // and in that case it's relative to SITREC_APP wihtout the data folder
+                if (filename.startsWith("../sitrec-videos/")) {
+                    filename = SITREC_APP + filename;
+                } else {
+                    // if it's not a url, then redirect to the data folder
+                    //filename = "./data/" + filename;
+                    filename = SITREC_APP + "data/" + filename;
+                }
             } else {
-                // if it's not a url, then redirect to the data folder
-                //filename = "./data/" + filename;
-                filename = SITREC_APP + "data/" + filename;
-            }
-        } else {
-            // if it's a URL, we need to check if it's got a "localhost" in it
-            // Regardless of whether we are on local or not
-            // add the SITREC_DOMAIN to the start of the URL
-            // this is a patch to keep older localhost files compatible with the deployed
-            // and with the new local.metabunk.org
-            if (filename.startsWith("https://localhost/")) {
-                filename = SITREC_DOMAIN + '/' + filename.slice(18);
-                console.log("Redirecting debug local URL to " + filename);
-            }
-
-            // same for https://local.metabunk.org/
-            if (!isLocal && filename.startsWith("https://local.metabunk.org/")) {
-                filename = SITREC_DOMAIN + '/' + filename.slice(27);
-                console.log("Redirecting debug local URL to " + filename);
-            }
-
-            // and the specified process.env.LOCALHOST
-            if (!isLocal && filename.startsWith(process.env.LOCALHOST)) {
-                filename = SITREC_DOMAIN + '/' + filename.slice(process.env.LOCALHOST.length);
-                console.log("Redirecting debug local URL to " + filename);
-            }
-
-        }
-
-        Globals.parsing++;
-//        console.log(">>> loadAsset() Loading Started: " + filename+ " GlobPars=" + Globals.parsing + " id=" + id);
-
-
-        var bufferPromise = null;
-        if(!isUrl && isConsole) {
-            // read the asset from the local filesystem if this is not running inside a browser
-            bufferPromise = import('node:fs')
-            .then(fs => {
-                return fs.promises.readFile(filename);
-            });
-        } else {
-            // add a version string to the filename, so we can force a reload when a new version is deployed
-            // the filename is the URL to the file, so we can just add a query string
-            // unless it already has one, in which case we add a &v=1
-            const versionExtension = (filename.includes("?") ? "&" : "?") + "v=1" + versionString;
-            bufferPromise = fetch(filename + versionExtension)
-            .then(response => {
-                if (!response.ok) {
-                    throw new Error('Network response was not ok');
+                // if it's a URL, we need to check if it's got a "localhost" in it
+                // Regardless of whether we are on local or not
+                // add the SITREC_DOMAIN to the start of the URL
+                // this is a patch to keep older localhost files compatible with the deployed
+                // and with the new local.metabunk.org
+                if (filename.startsWith("https://localhost/")) {
+                    filename = SITREC_DOMAIN + '/' + filename.slice(18);
+                    console.log("Redirecting debug local URL to " + filename);
                 }
-                return response.arrayBuffer(); // Return the promise for the next then()
-            })
-        }
 
-        Globals.pendingActions++;
+                // same for https://local.metabunk.org/
+                if (!isLocal && filename.startsWith("https://local.metabunk.org/")) {
+                    filename = SITREC_DOMAIN + '/' + filename.slice(27);
+                    console.log("Redirecting debug local URL to " + filename);
+                }
 
-        var original = null;
-        return bufferPromise
-            .then(arrayBuffer => {
-                // parseAsset always returns a promise
-//                console.log("<<< loadAsset() Loading Finished: " + filename + " id=" + id);
+                // and the specified process.env.LOCALHOST
+                if (!isLocal && filename.startsWith(process.env.LOCALHOST)) {
+                    filename = SITREC_DOMAIN + '/' + filename.slice(process.env.LOCALHOST.length);
+                    console.log("Redirecting debug local URL to " + filename);
+                }
+            }
 
-                //if (dynamicLink)
-                // always store the original
+            Globals.parsing++;
+            console.log(`>>> loadAsset() Loading Started: ${filename} (id: ${id})`);
+
+            var bufferPromise = null;
+            if(!isUrl && isConsole) {
+                // read the asset from the local filesystem if this is not running inside a browser
+                bufferPromise = import('node:fs')
+                .then(fs => {
+                    return fs.promises.readFile(filename);
+                });
+            } else {
+                // add a version string to the filename, so we can force a reload when a new version is deployed
+                // the filename is the URL to the file, so we can just add a query string
+                // unless it already has one, in which case we add a &v=1
+                const versionExtension = (filename.includes("?") ? "&" : "?") + "v=1" + versionString;
+                bufferPromise = fetch(filename + versionExtension)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok');
+                    }
+                    return response.arrayBuffer(); // Return the promise for the next then()
+                })
+            }
+
+            Globals.pendingActions++;
+
+            var original = null;
+            loadingPromise = bufferPromise
+                .then(arrayBuffer => {
+                    // parseAsset always returns a promise
+                    console.log(`<<< loadAsset() Loading Finished: ${filename} (id: ${id})`);
+
+                    // always store the original
                     original = arrayBuffer;
-                //else
-                //    original = null;
 
-                const assetPromise = this.parseAsset(filename, id, arrayBuffer);
-                return assetPromise;
+                    const assetPromise = this.parseAsset(filename, id, arrayBuffer);
+                    return assetPromise;
+                })
+                .then(parsedAsset => {
+                    // if an array is returned, we just assume it's the first one
+                    // because we are adding by id here, not by filename
+                    // so if it's a zipped asset, it should only be one
+                    if (Array.isArray(parsedAsset)) {
+                        assert(parsedAsset.length === 1, "Zipped IDed asset contains multiple files")
+                        parsedAsset = parsedAsset[0]
+                    }
 
-            })
-            .then(parsedAsset => {
+                    // We now have a full parsed asset in a {filename: filename, parsed: parsed} structure
+                    this.add(id, parsedAsset.parsed, original); // Add the loaded and parsed asset to the manager
+                    this.list[id].dynamicLink = dynamicLink;
+                    this.list[id].staticURL = null; // indicates it has not been rehosted
+                    this.list[id].dataType = parsedAsset.dataType; // Store the data type of the asset
+                    if (isHttpOrHttps(filename) && !dynamicLink) {
+                        // if it's a URL, and it's not a dynamic link, then we can store the URL as the static URL
+                        // indicating we don't want to rehost this later.
+                        this.list[id].staticURL = filename;
+                    }
+                    this.list[id].filename = filename;
+                    if (id === "starLink") {
+                        console.log("Flagging initial starlink file");
+                        this.list[id].isTLE = true;
+                    }
 
-                // if an array is returned, we just assume it's the first one
-                // because we are adding by id here, not by filename
-                // so if it's a zipped asset, it should only be one
-                if (Array.isArray(parsedAsset)) {
-                    assert(parsedAsset.length === 1, "Zipped IDed asset contains multiple files")
-                    parsedAsset = parsedAsset[0]
-                }
+                    Globals.parsing--;
+                    console.log(`<<< loadAsset() parsing Finished: ${filename} (id: ${id})`);
+                    Globals.pendingActions--;
+                    
+                    // Add the ID to the parsed asset for reference in the loading promise map
+                    parsedAsset.id = id;
+                    return parsedAsset; // Return the asset for further chaining if necessary
+                })
+                .catch(error => {
+                    Globals.parsing--;
+                    console.log(`There was a problem loading ${filename}: ${error.message}`);
+                    Globals.pendingActions--;
+                    
+                    // Remove from loading promises map on error
+                    this.#loadingPromises.delete(loadingKey);
+                    throw error;
+                });
+        }
 
-                //           console.log("Adding file with original = ", original)
-                // We now have a full parsed asset in a {filename: filename, parsed: parsed} structure
-                this.add(id, parsedAsset.parsed, original); // Add the loaded and parsed asset to the manager
-                this.list[id].dynamicLink = dynamicLink;
-                this.list[id].staticURL = null; // indicates it has not been rehosted
-                this.list[id].dataType = parsedAsset.dataType; // Store the data type of the asset
-                if (isHttpOrHttps(filename) && !dynamicLink) {
-                    // if it's a URL, and it's not a dynamic link, then we can store the URL as the static URL
-                    // indicating we don't want to rehost this later.
-                    this.list[id].staticURL = filename;
-                }
-                this.list[id].filename = filename
-                if (id === "starLink") {
-                    console.log("Flagging initial starlink file")
-                    this.list[id].isTLE = true;
-                }
-
-                Globals.parsing--;
-//                console.log("<<< loadAsset() parsing Finished: " + filename + " GlobPars=" + Globals.parsing + " id=" + id);
-                Globals.pendingActions--;
-                return parsedAsset; // Return the asset for further chaining if necessary
-            })
-            .catch(error => {
-                Globals.parsing--;
-                console.log('There was a problem with the fetch operation: ', error.message);
-                Globals.pendingActions--;
-                throw error;
-            });
+        // Store the loading promise in the map and return it
+        this.#loadingPromises.set(loadingKey, loadingPromise);
+        
+        // Add a finally handler to clean up the loading promise map
+        loadingPromise.finally(() => {
+            this.#loadingPromises.delete(loadingKey);
+        });
+        
+        return loadingPromise;
     }
 
 
