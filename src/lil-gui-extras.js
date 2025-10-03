@@ -1083,6 +1083,8 @@ export class CGuiMenuBar {
             if (containerDiv.parentElement) {
                 containerDiv.parentElement.removeChild(containerDiv);
             }
+            // Reset mouseOverGUI flag to ensure keyboard controls work after menu is closed
+            setMouseOverGUI(false);
             originalDestroy(all);
         };
         
