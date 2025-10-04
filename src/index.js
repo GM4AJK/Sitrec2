@@ -483,6 +483,10 @@ async function initializeOnce() {
     if (urlParams.get("ignoreunload") === null) {
         //
         window.addEventListener('beforeunload', function (e) {
+            // Check if we're in the middle of a download operation
+            if (Globals.allowUnload) {
+                return; // Allow the operation without showing the dialog
+            }
             e.preventDefault();
             e.returnValue = ''; // Standard for most browsers
         });

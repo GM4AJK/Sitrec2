@@ -1,6 +1,6 @@
 import {CNodeVideoView} from "./CNodeVideoView";
 import {par} from "../par";
-import {FileManager} from "../Globals";
+import {FileManager, Globals} from "../Globals";
 
 import {SITREC_APP} from "../configUtils";
 import {CVideoMp4Data} from "../CVideoMp4Data";
@@ -73,10 +73,17 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
                 // we have a url to the video file and want to let the user download it
                 // so we create a link and click it.
                 // this will download the file.
+                
+                // Temporarily set flag to allow unload without dialog
+                Globals.allowUnload = true;
+                
                 const link = document.createElement('a');
 
-                // fix spaces etc in the url
-                link.href = encodeURI(this.url);
+                // Don't encode the URL if it's already encoded (e.g., from S3)
+                // Only encode if it contains unencoded spaces or special characters
+                // Check if URL is already encoded by looking for % followed by hex digits
+                const isAlreadyEncoded = /%[0-9A-Fa-f]{2}/.test(this.url);
+                link.href = isAlreadyEncoded ? this.url : encodeURI(this.url);
 
                 link.download = this.fileName;
 
@@ -85,7 +92,11 @@ export class CNodeVideoWebCodecView extends CNodeVideoView {
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
-
+                
+                // Restore the beforeunload protection after a short delay
+                setTimeout(() => {
+                    Globals.allowUnload = false;
+                }, 100);
 
             }
         };
