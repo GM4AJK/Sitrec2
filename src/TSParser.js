@@ -163,9 +163,9 @@ export class TSParser {
                 if (streamInfo.codec_name === 'klv') {
                     console.log(`extractTSStreams: Applying PES extraction for PID ${pid} (KLV stream)`);
                     finalData = TSParser.extractElementaryStreamFromPES(concatenatedData);
-                    console.log(`extractTSStreams: After PES extraction for PID ${pid}: ${finalData.length} bytes (was ${concatenatedData.length} bytes)`);
+ //                   console.log(`extractTSStreams: After PES extraction for PID ${pid}: ${finalData.length} bytes (was ${concatenatedData.length} bytes)`);
                 } else {
-                    console.log(`extractTSStreams: Skipping PES extraction for PID ${pid} (not a KLV stream)`);
+ //                   console.log(`extractTSStreams: Skipping PES extraction for PID ${pid} (not a KLV stream)`);
                 }
 
                 // Determine file extension based on codec
@@ -211,7 +211,7 @@ export class TSParser {
                         extension = 'bin';
                 }
 
-                console.log(`extractTSStreams: Extracted ${streamInfo.codec_name} stream (PID ${pid}): ${finalData.length} bytes${streamInfo.fps ? ` @ ${streamInfo.fps.toFixed(2)} fps` : ''}`);
+//                console.log(`extractTSStreams: Extracted ${streamInfo.codec_name} stream (PID ${pid}): ${finalData.length} bytes${streamInfo.fps ? ` @ ${streamInfo.fps.toFixed(2)} fps` : ''}`);
 
                 // Create a proper ArrayBuffer from the Uint8Array
                 // Using .buffer directly can include extra data if the Uint8Array is a view
@@ -354,7 +354,7 @@ export class TSParser {
             resultOffset += chunk.length;
         }
 
-        console.log(`extractElementaryStreamFromPES: Extracted ${elementaryStreamChunks.length} PES packets, ${totalLength} bytes of elementary stream data`);
+//        console.log(`extractElementaryStreamFromPES: Extracted ${elementaryStreamChunks.length} PES packets, ${totalLength} bytes of elementary stream data`);
         return result;
     }
 

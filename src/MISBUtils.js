@@ -373,9 +373,6 @@ export function parseKLVFile(data) {
         return;
     }
     
-    console.log(`parseKLVFile: First 32 bytes: ${Array.from(uint8Data.slice(0, 32)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
-    console.log(`parseKLVFile: Last 32 bytes: ${Array.from(uint8Data.slice(-32)).map(b => b.toString(16).padStart(2, '0')).join(' ')}`);
-    
     // Validate and extract complete KLV packets
     // KLV structure: Key (variable, often 16 bytes for universal keys) + Length (BER encoded) + Value
     const validPackets = [];
