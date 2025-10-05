@@ -43,7 +43,7 @@ import {EventManager} from "./CEventManager";
 import {SITREC_APP} from "./configUtils";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {DebugArrowAB, elevationAtLL} from "./threeExt";
-import {TrackManager} from "./TrackManager";
+import {findRootTrack, TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
@@ -1997,8 +1997,9 @@ export class CCustomManager {
         if (targetObject === undefined) {
             targetObject = NodeMan.get("traverseObject");
         }
+        const tob = targetObject._object;
 
-
+        const targetRoot = findRootTrack(targetObject);
 
         // iterate over the NodeMan objects
         // if the object has a displayTargetSphere, then check if it's following the same track
@@ -2009,17 +2010,21 @@ export class CCustomManager {
                 const ob = node._object;
                 disableIfNearCameraTrack(ob, view.camera)
 
-                const tob = targetObject._object;
                 // rather messy logic now
                 // if we've got a target object then disable THAT if it's too close to this object
                 if (ob !== tob) {
                     const targetObjectDist = ob.position.distanceTo(tob.position);
-                    if (targetObjectDist < 10 && tob.customOldVisible === undefined) {
+                    // we do a quick 100m check, as it's not worth doing a full tree search on everything
+                    if (targetObjectDist < 100 && tob.customOldVisible === undefined) {
 
-                        // removed for now, as it messes with windblown object that come close to the camera
-                        // tob.customOldVisible = ob.visible;
-                        // tob.visible = false;
+                        // check if they share the same root track
+                        if (targetRoot && findRootTrack(node) === targetRoot) {
+
+                            // removed for now, as it messes with windblown object that come close to the camera
+                            tob.customOldVisible = tob.visible;
+                            tob.visible = false;
 //                        console.warn("TODO: Disabling target object as it's too close to this object")
+                        }
                     }
                 }
             }
