@@ -1442,7 +1442,7 @@ export class CNodeView3D extends CNodeViewCanvas {
 
     // Find the closest celestial object (star, planet, or satellite) to a ray
     findClosestCelestialObject(mouseRay, maxAngleDegrees = 5) {
-        const nightSkyNode = NodeMan.get("NightSkyNode", true);
+        const nightSkyNode = NodeMan.get("NightSkyNode", false);
         if (!nightSkyNode) {
             console.log("NightSkyNode not found");
             return null;
