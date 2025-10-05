@@ -64,13 +64,15 @@ export class CNodeHomingMissileTrack extends CNodeTrack {
             v.frames = Sit.frames;
             super(v);
             this.useSitFrames = true;
-            this.enabled = (v.enabled !== undefined) ? v.enabled : false;
         } else {
             super(v);
         }
 
+        this.enabled = (v.enabled !== undefined) ? v.enabled : true;
+
+
         this.addInput("enabled", new CNodeGUIValue({
-            value: false,
+            value: this.enabled,
             type: "boolean",
             desc: "Enable the missile",
             gui: "missile",

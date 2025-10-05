@@ -1,7 +1,7 @@
 import {Camera, PerspectiveCamera, Vector3} from "three";
 import {f2m, m2f, vdump} from "../utils";
 import {GlobalDateTimeNode, guiMenus, NodeMan} from "../Globals";
-import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA, LLAVToEUS, raDecToAzElRADIANS} from "../LLA-ECEF-ENU";
+import {ECEFToLLAVD_Sphere, EUSToECEF, EUSToLLA, LLAVToEUS} from "../LLA-ECEF-ENU";
 import {
     altitudeAboveSphere,
     getAzElFromPositionAndMatrix,
@@ -36,6 +36,8 @@ export class CNodeCamera extends CNode3D {
             this._object.layers.mask = v.layers;
         }
 
+        console.log("🎥🎥🎥 " + this.id + " CREATE CAMERA " + this.id);
+
         this.resetCamera()
 
         if (this.id === "mainCamera") {
@@ -50,6 +52,7 @@ export class CNodeCamera extends CNode3D {
     adjustOrigin(diff) {
         // adjust the camera position
         this.camera.position.add(diff);
+        console.log("🎥🎥🎥 " + this.id + " adjustOrigin to " + vdump(this.camera.position));
 
         // do we need to adjust the startPos, lookAt, startPosLLA, lookAtLLA?
         // the seems mostly uses as default value
@@ -90,6 +93,8 @@ export class CNodeCamera extends CNode3D {
         this.startPosLLA = v.startPosLLA;
         this.lookAtLLA = v.lookAtLLA;
         this.camera.fov = v.fov;
+        console.log("🎥🎥🎥 "+this.id+" modDeserialize camera startLLA = " + this.startPosLLA);
+
         this.resetCamera()
     }
 
@@ -106,10 +111,12 @@ export class CNodeCamera extends CNode3D {
 
         if (this.startPos !== undefined) {
             this._object.position.copy(MV3(this.startPos));  // MV3 converts from array to a Vector3
+            console.log("🎥🎥🎥 " + this.id + " resetCamera by startPos to " + vdump(this.camera.position));
         }
 
         if (this.startPosLLA !== undefined) {
             this._object.position.copy(LLAVToEUS(MV3(this.startPosLLA)));  // MV3 converts from array to a Vector3
+            console.log("🎥🎥🎥 " + this.id + " resetCamera by startPosLLA to " + vdump(this.camera.position));
         }
 
         // set the up vector to be the local up vector at the camera position
@@ -119,13 +126,25 @@ export class CNodeCamera extends CNode3D {
 
         if (this.lookAt !== undefined) {
             this._object.lookAt(MV3(this.lookAt));
+            console.log("🎥🎥🎥 " + this.id + " resetCamera lookAt to " + vdump(this.lookAt));
         }
 
 
         if (this.lookAtLLA !== undefined) {
             this._object.lookAt(LLAVToEUS(MV3(this.lookAtLLA)));
+            console.log("🎥🎥🎥 " + this.id + " resetCamera lookAtLLA to " + vdump(this.lookAtLLA));
 
         }
+
+        this.camera.updateMatrix();
+        this.camera.updateMatrixWorld();
+
+
+        const v = new Vector3();
+        v.setFromMatrixColumn(this.camera.matrixWorld,2);
+        console.log("🎥-> " + this.id + " resetCamera fwd vector is now " + vdump(v))
+
+
     }
 
 
@@ -185,7 +204,7 @@ export class CNodeCamera extends CNode3D {
 
     goToPoint(point, above = 200, back = 20) {
         const altitude = altitudeAboveSphere(point);
-        console.log("Track altitude = " + altitude)
+        console.log("🎥🎥🎥 goToPoint altitude = " + altitude)
 
 
         // get the local up vector at the track point
@@ -196,7 +215,7 @@ export class CNodeCamera extends CNode3D {
         const newCameraPos = point.clone().add(up.clone().multiplyScalar(above)).add(south.clone().multiplyScalar(back));
 
         const newCameraPosAltitude = altitudeAboveSphere(newCameraPos);
-        console.log("newCameraPos altitude = " + newCameraPosAltitude)
+        console.log("🎥🎥🎥 newCameraPos altitude = " + newCameraPosAltitude)
 
         // set the position to the target
         this.camera.position.copy(newCameraPos);
