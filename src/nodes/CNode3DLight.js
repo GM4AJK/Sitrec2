@@ -344,7 +344,24 @@ export class CNode3DLight extends CNode3D {
             const skyOpacity = sunNode.calculateSkyOpacity(camera.position);
             newSize *= (1.0 - skyOpacity); // scale down the size based on the sky opacity
         }
+
         this._object.scale.setScalar(newSize);
+        
+        // CRITICAL: Force immediate matrix world update after changing scale
+        //
+        // When rendering multiple views with different cameras, each view's preRender() sets
+        // a different scale based on camera distance. However, modifying an object's scale
+        // does NOT automatically set the matrixWorldNeedsUpdate flag in Three.js. Without
+        // this explicit updateMatrixWorld() call, the object's world matrix remains stale.
+        //
+        // This causes issues in multi-view rendering where whichever view renders second
+        // experiences incorrect billboard behavior (disappearing at wrong distances). The
+        // exact mechanism is unclear - it could be related to frustum culling using stale
+        // bounding spheres, or other matrix-dependent calculations.
+        //
+        // Calling updateMatrixWorld() immediately after changing the scale ensures the
+        // world matrix is current before the renderer processes this object.
+        this._object.updateMatrixWorld();
 
         // AND - why is moveing camera with C not working right in:
         // - locked mode
