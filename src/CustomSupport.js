@@ -1999,7 +1999,8 @@ export class CCustomManager {
         }
         const tob = targetObject._object;
 
-        const targetRoot = findRootTrack(targetObject);
+        // root track are calculate and cached for all CNode3DObjects in their recalculate()
+        const targetRoot = targetObject.rootTrack;
 
         // iterate over the NodeMan objects
         // if the object has a displayTargetSphere, then check if it's following the same track
@@ -2017,8 +2018,10 @@ export class CCustomManager {
                     // we do a quick 100m check, as it's not worth doing a full tree search on everything
                     if (targetObjectDist < 100 && tob.customOldVisible === undefined) {
 
+                        assert (findRootTrack(node) === node.rootTrack, "findRootTrack(node) is not equal to node.rootTrack")
+
                         // check if they share the same root track
-                        if (targetRoot && findRootTrack(node) === targetRoot) {
+                        if (targetRoot && node.rootTrack === targetRoot) {
 
                             // removed for now, as it messes with windblown object that come close to the camera
                             tob.customOldVisible = tob.visible;

@@ -48,6 +48,7 @@ import {V3} from "../threeUtils";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import {CNodeLabel3D, CNodeMeasureAB} from "./CNodeLabels3D";
 import {EUSToLLA} from "../LLA-ECEF-ENU";
+import {findRootTrack} from "../TrackManager";
 
 // Note these files are CASE SENSIVE. Mac OS is case insensitive, so be careful. (e.g. F-15.glb will not work on my deployed server)
 export const ModelFiles = {
@@ -1941,8 +1942,16 @@ export class CNode3DObject extends CNode3DGroup {
     }
 
     recalculate() {
+        super.recalculate();
         const scale = this.in.size.v0 * Globals.objectScale;
         this.group.scale.setScalar(scale);
+
+        // update the root track if any input changes (which is what triggers a recalculate)
+        // this is using in CustomSupport/preRenderUpdate()
+        // to separate objects on the target track from the traverse/target object
+        this.rootTrack = findRootTrack(this)
+
+
     }
 
     update(f) {
