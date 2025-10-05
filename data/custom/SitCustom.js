@@ -749,53 +749,53 @@ sitch = {
          tiltType: "none", wind: "localWind"
      },
 
-    // // // Homing missile track (parameters are created internally by the node)
-    homingMissileTrack: {
-        kind: "HomingMissileTrack",
-        source: "cameraTrackSwitchSmooth",
-        target: "traverseSmoothedTrack",
-        force: true,
-    },
-
-    // // // Missile object (sphere)
-    missileObject: {
-        kind: "3DObject",
-        geometry: "sphere",
-        layers: "LOOKRENDER",
-        size: 1,
-        radius: 2,
-        material: "lambert",
-        color: "#FF0000",
-        emissive: '#FF4040',
-        widthSegments: 16,
-        heightSegments: 16,
-        force: true,
-    },
-
-    moveMissileAlongPath: {kind: "TrackPosition", object: "missileObject", sourceTrack: "homingMissileTrack",
-        force: true,
-        enabled: false,
-    },
+    // // // // Homing missile track (parameters are created internally by the node)
+    // homingMissileTrack: {
+    //     kind: "HomingMissileTrack",
+    //     source: "cameraTrackSwitchSmooth",
+    //     target: "traverseSmoothedTrack",
+    //     force: true,
+    // },
     //
-    // Display the missile track
-    displayMissileTrack: {
-        kind: "DisplayTrack",
-        track: "homingMissileTrack",
-        color: "#FF0000",
-        width: 2,
-        force: true,
-    },
-
-    speedGraphForMissile: { kind: "speedGraph",
-        visible: false,
-        label: "Missile Speed",
-        track: "homingMissileTrack",
-        min:0, max:1000,
-        left: 0.25, top:0, width: .15, height:-1,
-        dynamicY: true,
-        force: true,
-        enabled: false,
-    },
+    // // // // Missile object (sphere)
+    // missileObject: {
+    //     kind: "3DObject",
+    //     geometry: "sphere",
+    //     layers: "LOOKRENDER",
+    //     size: 1,
+    //     radius: 2,
+    //     material: "lambert",
+    //     color: "#FF0000",
+    //     emissive: '#FF4040',
+    //     widthSegments: 16,
+    //     heightSegments: 16,
+    //     force: true,
+    // },
+    //
+    // moveMissileAlongPath: {kind: "TrackPosition", object: "missileObject", sourceTrack: "homingMissileTrack",
+    //     force: true,
+    //     enabled: false,
+    // },
+    // //
+    // // Display the missile track
+    // displayMissileTrack: {
+    //     kind: "DisplayTrack",
+    //     track: "homingMissileTrack",
+    //     color: "#FF0000",
+    //     width: 2,
+    //     force: true,
+    // },
+    //
+    // speedGraphForMissile: { kind: "speedGraph",
+    //     visible: false,
+    //     label: "Missile Speed",
+    //     track: "homingMissileTrack",
+    //     min:0, max:1000,
+    //     left: 0.25, top:0, width: .15, height:-1,
+    //     dynamicY: true,
+    //     force: true,
+    //     enabled: false,
+    // },
 
     displayLOS: {kind: "DisplayLOS", LOS: "JetLOS", color: "red", width: 0.5, spacing : 30, maxLines: 500},
 
