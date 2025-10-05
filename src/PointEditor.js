@@ -58,7 +58,7 @@ export class PointEditor {
         this.onChange = onChange   // external callback for when spline is changed
 
         this.raycaster = new Raycaster();         // for picking
-        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK | LAYER.MASK_HELPERS;
         this.pointer = new Vector2();
         this.onUpPosition = new Vector2();       // mouse position when up
         this.onDownPosition = new Vector2();      // and down
@@ -76,11 +76,30 @@ export class PointEditor {
         // another object to move it around the world
         // here it's attached to control points when we mouse over them
         this.transformControl = new TransformControls(this.camera, this.renderer.domElement);
-        this.transformControl.addEventListener('change', () => this.render);
-        this.transformControl.addEventListener('dragging-changed', function (event) {
+        this.transformControl.addEventListener('change', () => setRenderOne());
+        this.transformControl.addEventListener('dragging-changed', (event) => {
             controls.enabled = !event.value;
         });
-        this.scene.add(this.transformControl);
+        const gizmo = this.transformControl.getHelper();
+        
+        // Set the gizmo to use HELPERS layer so it's only visible in main view, not look view
+        const setLayersRecursive = (obj) => {
+            if (obj && obj.layers) {
+                obj.layers.mask = LAYER.MASK_HELPERS;
+            }
+            if (obj && obj.children) {
+                obj.children.forEach(child => setLayersRecursive(child));
+            }
+        };
+        setLayersRecursive(gizmo);
+        
+        // Set the TransformControls' internal raycaster to also see HELPERS layer
+        const gizmoRaycaster = this.transformControl.getRaycaster();
+        if (gizmoRaycaster) {
+            gizmoRaycaster.layers.mask = LAYER.MASK_HELPERS;
+        }
+        
+        this.scene.add(gizmo);
 
         document.addEventListener('pointerdown', event => this.onPointerDown(event));
         document.addEventListener('pointerup', event => this.onPointerUp(event));
@@ -89,12 +108,7 @@ export class PointEditor {
 
 
         this.transformControl.addEventListener('objectChange',  () => {
-
-            // object moved
-            // so do any snapping
-
             this.snapPointByIndex(this.editingIndex)
-
             this.updatePointEditorGraphics();
             if (this.onChange) this.onChange();
         });
@@ -163,12 +177,9 @@ export class PointEditor {
     }
 
     updateSnapping() {
-//        console.log("updateSnapping")
-
         for (let i = 0; i < this.numPoints; i++) {
             this.snapPointByIndex(i)
         }
-
     }
 
 
@@ -330,14 +341,14 @@ export class PointEditor {
             const p = this.splineHelperObjects[i].position;
             strplace.push(`[${this.frameNumbers[i]}, ${p.x}, ${p.y}, ${p.z}]`);
         }
-        console.log(strplace.join(',\n'));
+//        console.log(strplace.join(',\n'));
         console.log("LLA----------------------------------->");
         strplace = [];
         for (let i = 0; i < this.numPoints; i++) {
             const p = EUSToLLA(this.splineHelperObjects[i].position);
             strplace.push(`[${this.frameNumbers[i]}, ${p.x}, ${p.y}, ${p.z}]`);
         }
-        console.log(strplace.join(',\n'));
+//        console.log(strplace.join(',\n'));
 
     }
 
@@ -360,6 +371,7 @@ export class PointEditor {
 
         object.castShadow = true;
         object.receiveShadow = true;
+        object.layers.mask = LAYER.MASK_HELPERS;
         this.scene.add(object);
 
         return object;
