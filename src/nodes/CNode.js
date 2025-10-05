@@ -546,6 +546,9 @@ class CNode {
     // frame is usually an integer, but if not then we interpolate
     // if outside of the range, then extrapolate using the two first or last values
     getValue(frameFloat) {
+
+        assert(this.isNumber || this.getValueFrame(0).position !== undefined, "getValueFrame(0) has no position, id=" + this.id)
+
       // TODO: better check like this
         if (!this.isNumber && this.getValueFrame(0).position === undefined) {
             var frameInt = Math.floor(frameFloat);
