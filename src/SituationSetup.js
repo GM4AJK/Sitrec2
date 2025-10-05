@@ -467,6 +467,20 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
                 }
             }
 
+            // Check if there's a serialized version in Sit.mods.mainCamera
+            if (Sit.mods?.mainCamera) {
+                const modCamera = Sit.mods.mainCamera;
+                if (modCamera.startPosLLA !== undefined) {
+                    data.startCameraPositionLLA = modCamera.startPosLLA;
+                }
+                if (modCamera.lookAtLLA !== undefined) {
+                    data.startCameraTargetLLA = modCamera.lookAtLLA;
+                }
+                if (modCamera.fov !== undefined) {
+                    data.fov = modCamera.fov;
+                }
+            }
+
             const cameraNode = new CNodeCamera({
                 id: "mainCamera",
                 fov: data.fov ?? 30,
@@ -495,6 +509,21 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
             SSLog();
 
             const cameraID = data.id ?? "lookCamera";
+            
+            // Check if there's a serialized version in Sit.mods.lookCamera
+            if (cameraID === "lookCamera" && Sit.mods?.lookCamera) {
+                const modCamera = Sit.mods.lookCamera;
+                if (modCamera.startPosLLA !== undefined) {
+                    data.startCameraPositionLLA = modCamera.startPosLLA;
+                }
+                if (modCamera.lookAtLLA !== undefined) {
+                    data.startCameraTargetLLA = modCamera.lookAtLLA;
+                }
+                if (modCamera.fov !== undefined) {
+                    data.fov = modCamera.fov;
+                }
+            }
+            
             node = new CNodeCamera({
                 id: cameraID,
                 fov: data.fov ?? 10,
@@ -503,6 +532,8 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
                 far: data.far ?? 8000000,
                 layers: data.mask ?? LAYER.MASK_LOOKRENDER,
                 //                   layers: data.mask ?? LAYER.MASK_MAIN_HELPERS,
+                startPosLLA: data.startCameraPositionLLA,
+                lookAtLLA: data.startCameraTargetLLA,
             })
 
             if (cameraID === "lookCamera") {
