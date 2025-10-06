@@ -173,7 +173,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
     }
 
     // if tile exists, activate it, otherwise create it
-    activateTile(x, y, z, layerMask = 0) {
+    activateTile(x, y, z, layerMask = 0, useParentData = false) {
         let tile = this.getTile(x, y, z);
 
 
@@ -261,8 +261,41 @@ class QuadTreeMapTexture extends QuadTreeMap {
         tile.recalculateCurve()
         this.setTile(x, y, z, tile);
 
-        // Track the async texture loading
         const key = `${z}/${x}/${y}`;
+
+        // If useParentData is true, try to create material from parent tile
+        if (useParentData && z > 0) {
+            const parentX = Math.floor(x / 2);
+            const parentY = Math.floor(y / 2);
+            const parentZ = z - 1;
+            const parentTile = this.getTile(parentX, parentY, parentZ);
+            
+            if (parentTile && parentTile.loaded && parentTile.mesh && parentTile.mesh.material) {
+                // Create material from parent
+                const parentMaterial = tile.buildMaterialFromParent(parentTile);
+                if (parentMaterial) {
+                    tile.mesh.material = parentMaterial;
+                    tile.updateSkirtMaterial();
+                    tile.usingParentData = true;
+                    tile.needsHighResLoad = true; // Mark for high-res loading when visible
+                    tile.loaded = true; // Consider it "loaded" with parent data
+                    
+                    // Add to scene immediately
+                    this.scene.add(tile.mesh);
+                    if (tile.skirtMesh) {
+                        this.scene.add(tile.skirtMesh);
+                    }
+                    tile.added = true;
+                    
+                    this.refreshDebugGeometry(tile);
+                    setRenderOne(true);
+                    return tile;
+                }
+            }
+            // If parent data not available, fall through to normal loading
+        }
+
+        // Track the async texture loading (normal path or fallback if parent data unavailable)
         const materialPromise = tile.applyMaterial().catch(error => {
             // Don't log abort errors or cancellation errors - they're expected when tiles are cancelled
             if (error.message !== 'Aborted' && error.message !== 'Tile is being cancelled') {

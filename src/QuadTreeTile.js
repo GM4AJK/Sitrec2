@@ -57,6 +57,8 @@ export class QuadTreeTile {
         this.isLoadingElevation = false // Track if this tile is currently loading elevation data
         this.isCancelling = false // Track if this tile is currently being cancelled
         this.highestAltitude = 0;
+        this.usingParentData = false; // Track if this tile is using resampled parent texture/elevation
+        this.needsHighResLoad = false; // Track if this tile needs to load high-res data when visible
         
         // AbortController for cancelling texture loading
         this.textureAbortController = null;
@@ -1399,6 +1401,68 @@ export class QuadTreeTile {
         return buildPromise;
     }
 
+    /**
+     * Create a material from parent tile's texture by extracting the appropriate quadrant
+     * @param {QuadTreeTile} parentTile - The parent tile to extract texture from
+     * @returns {Material} A material with the resampled texture from parent
+     */
+    buildMaterialFromParent(parentTile) {
+        if (!parentTile || !parentTile.mesh || !parentTile.mesh.material || !parentTile.mesh.material.map) {
+            console.warn(`Cannot build material from parent for tile ${this.key()}: parent data not available`);
+            return null;
+        }
+
+        // Determine which quadrant of the parent this tile represents
+        // Parent tile coordinates: (parentX, parentY, parentZ)
+        // This tile coordinates: (this.x, this.y, this.z)
+        // This tile's position within parent: (this.x % 2, this.y % 2)
+        const quadrantX = this.x % 2; // 0 = left, 1 = right
+        const quadrantY = this.y % 2; // 0 = top, 1 = bottom
+
+        // Get parent texture
+        const parentTexture = parentTile.mesh.material.map;
+        
+        // Create a canvas to extract and resample the quadrant
+        const canvas = document.createElement('canvas');
+        const size = 256; // Standard tile texture size
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Create a temporary image from the parent texture
+        const img = parentTexture.image;
+        if (!img) {
+            console.warn(`Cannot build material from parent for tile ${this.key()}: parent texture has no image`);
+            return null;
+        }
+
+        // Calculate source rectangle in parent texture (which quadrant to extract)
+        const srcX = quadrantX * (img.width / 2);
+        const srcY = quadrantY * (img.height / 2);
+        const srcWidth = img.width / 2;
+        const srcHeight = img.height / 2;
+
+        // Draw the quadrant scaled up to full size
+        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, size, size);
+
+        // DEBUG: Clear blue channel to make temporary tiles red/yellow
+        // const imageData = ctx.getImageData(0, 0, size, size);
+        // const data = imageData.data;
+        // for (let i = 0; i < data.length; i += 4) {
+        //     data[i + 2] = 0; // Clear blue channel (R, G, B, A)
+        // }
+        // ctx.putImageData(imageData, 0, 0);
+
+        // Create texture from canvas
+        const texture = new CanvasTexture(canvas);
+        texture.needsUpdate = true;
+
+        // Create and return material
+        const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+        
+        return material;
+    }
+
     // Static method to clear the entire material cache
     static clearMaterialCache() {
         // Dispose of all cached materials and their textures
@@ -2240,7 +2304,16 @@ export class QuadTreeTile {
         return new Promise((resolve, reject) => {
             if (this.textureUrl() != null) {
                 this.buildMaterial().then((material) => {
-                     this.mesh.material = material
+                    // Dispose of old material if we're replacing parent data
+                    if (this.usingParentData && this.mesh.material) {
+                        const oldMaterial = this.mesh.material;
+                        if (oldMaterial.map) {
+                            oldMaterial.map.dispose();
+                        }
+                        oldMaterial.dispose();
+                    }
+                    
+                    this.mesh.material = material
                     this.updateSkirtMaterial(); // Update skirt to use the same material
                     if (! this.map.scene) {
                         console.warn("QuadTreeTile.applyMaterial: map.scene is not defined, not adding mesh to scene (changed levels?)")
@@ -2250,7 +2323,15 @@ export class QuadTreeTile {
                         this.updateDebugGeometry();
                         return resolve(material);
                     }
-                    this.addAfterLoaded();
+                    
+                    // Only add to scene if not already added (parent data tiles are already in scene)
+                    if (!this.added) {
+                        this.addAfterLoaded();
+                    } else {
+                        // Already in scene, just mark as loaded with high-res data
+                        this.loaded = true;
+                    }
+                    
                     this.isLoading = false; // Clear loading state
                     this.isCancelling = false; // Clear cancelling state
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
