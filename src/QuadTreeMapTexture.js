@@ -155,9 +155,13 @@ class QuadTreeMapTexture extends QuadTreeMap {
             this.setTileLayerMask(tile, tile.tileLayers);
         }
 
-        // If tile is no longer active in any view, cancel any pending loads
+        // If tile is no longer active in any view, cancel any pending loads and mark timestamp
         if (tile.tileLayers === 0) {
             tile.cancelPendingLoads();
+            // Track when tile became inactive for pruning purposes
+            if (!tile.inactiveSince) {
+                tile.inactiveSince = Date.now();
+            }
         }
 
         if (instant && tile.tileLayers === 0) {
@@ -202,6 +206,9 @@ class QuadTreeMapTexture extends QuadTreeMap {
                 // Default case: activate for all layers
                 tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
             }
+            
+            // Clear inactive timestamp since tile is now active
+            tile.inactiveSince = undefined;
 
             // Update the actual layer mask on the tile
             if (tile.mesh) {

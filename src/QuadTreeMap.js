@@ -24,6 +24,7 @@ export class QuadTreeMap {
         this.dynamic = options.dynamic || false; // if true, we use a dynamic tile grid
         this.maxZoom = options.maxZoom ?? 15; // default max zoom level
         this.lastLoggedStats = new Map(); // Track last logged stats per view to reduce console spam
+        this.inactiveTileTimeout = 10000; // Time in ms before pruning inactive tiles (10 seconds)
 
     }
 
@@ -525,6 +526,11 @@ export class QuadTreeMap {
         // PASS 3: Remove inactive tiles from scene
         this.removeInactiveTilesFromScene();
 
+        // PASS 3.5: Prune complete sets of inactive tiles (texture maps only)
+        if (isTextureMap) {
+            this.pruneInactiveTileSets();
+        }
+
         // PASS 4: Process each tile for subdivision/merging and lazy loading
         this.forEachTile((tile) => {
             if (!this.canSubdivide(tile)) return;
@@ -667,6 +673,66 @@ export class QuadTreeMap {
                 this.refreshDebugGeometry(tile);
             }
         });
+    }
+
+    /**
+     * Prune complete sets of four sibling tiles that have been inactive for too long
+     * Only prunes if all four siblings exist, are inactive, have no children, and have been inactive long enough
+     */
+    pruneInactiveTileSets() {
+        const now = Date.now();
+        let prunedCount = 0;
+        
+        // Iterate through all tiles to find parent tiles with complete sets of inactive children
+        this.forEachTile((tile) => {
+            // Check if this tile has all four children
+            const children = this.getChildren(tile);
+            if (!children) return;
+            
+            // Check if all four children meet pruning criteria:
+            // 1. Inactive (tileLayers === 0)
+            // 2. Have no children of their own
+            // 3. Have been inactive for longer than the timeout
+            const allChildrenPrunable = children.every(child => {
+                if (child.tileLayers !== 0) return false; // Still active
+                if (this.hasAnyChildren(child)) return false; // Has children
+                if (!child.inactiveSince) return false; // No timestamp (shouldn't happen)
+                if (now - child.inactiveSince < this.inactiveTileTimeout) return false; // Not old enough
+                return true;
+            });
+            
+            if (allChildrenPrunable) {
+                // Delete all four children as a set
+                children.forEach(child => {
+                    // Clean up the tile
+                    if (child.mesh) {
+                        this.scene.remove(child.mesh);
+                        // Dispose of geometry and material to free memory
+                        if (child.mesh.geometry) child.mesh.geometry.dispose();
+                        if (child.mesh.material) {
+                            if (child.mesh.material.map) child.mesh.material.map.dispose();
+                            child.mesh.material.dispose();
+                        }
+                    }
+                    if (child.skirtMesh) {
+                        this.scene.remove(child.skirtMesh);
+                        if (child.skirtMesh.geometry) child.skirtMesh.geometry.dispose();
+                        if (child.skirtMesh.material) child.skirtMesh.material.dispose();
+                    }
+                    
+                    // Cancel any pending loads
+                    child.cancelPendingLoads();
+                    
+                    // Remove from cache
+                    this.deleteTile(child.x, child.y, child.z);
+                    prunedCount++;
+                });
+            }
+        });
+        
+        if (prunedCount > 0 && isLocal) {
+            debugLog(`Pruned ${prunedCount} inactive tiles (${prunedCount / 4} sets of 4)`);
+        }
     }
 
     /**
