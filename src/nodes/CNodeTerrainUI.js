@@ -538,7 +538,7 @@ export class CNodeTerrainUI extends CNode {
         // }
 
 
-        if (this.dynamic & !this.disableDynamicSubdivision) {
+        if (this.dynamic && !this.disableDynamicSubdivision) {
 
             const views = [
                 NodeMan.get("lookView"),
