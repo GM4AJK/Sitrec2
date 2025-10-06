@@ -1,6 +1,7 @@
 import {wgs84} from "./LLA-ECEF-ENU";
 import {Matrix4} from "three/src/math/Matrix4";
 import {Frustum} from "three/src/math/Frustum";
+import {Vector3} from "three/src/math/Vector3";
 import {debugLog} from "./Globals";
 import {isLocal} from "./configUtils";
 import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./SphericalMath";
@@ -179,16 +180,28 @@ export class QuadTreeMap {
     }
 
 
-    // go through the tile cache and subdivide or merge each tile if needed
-    // "needed" is based on the zoom level and the tile size on screen
-    // passed in a single view, from which we get the camera and viewport size
-    // this is called once per view to handle per-view subdivision
-    // different quadtrees (i.e. textures and elevations) can have different subdivideSize
-    // which is the screen size (of a bounding sphere) above which we start subdividing tiles
-
     /**
-     * Rewritten subdivideTiles - cleaner architecture with clear separation of concerns
-     * This method manages the quadtree subdivision/merging based on view visibility and screen size
+     * Subdivide or merge tiles based on view visibility and screen size
+     * 
+     * This method is called every frame from the update loop and manages the quadtree
+     * structure by subdividing tiles that are too large on screen and merging tiles
+     * that are too small.
+     * 
+     * LAZY LOADING & RACE CONDITION FIX:
+     * For texture maps, this method implements deferred subdivision to fix a race condition
+     * where child tiles would be created before parent textures finished loading. The fix:
+     * 
+     * 1. When a tile needs subdivision, check if parent is still loading (tile.isLoading)
+     * 2. If loading, defer subdivision by returning early (retry next frame)
+     * 3. Track deferred frames to implement a 60-frame timeout (~1 second)
+     * 4. Once parent loads, subdivision proceeds and children can use parent texture data
+     * 5. This ensures consistent lazy loading behavior regardless of page load speed
+     * 
+     * The deferred subdivision approach works because this method runs every frame,
+     * so deferring just means "try again next frame when parent might be ready".
+     * 
+     * @param {Object} view - The view containing camera and viewport info
+     * @param {number} subdivideSize - Screen size threshold for subdivision (default: 2000)
      */
     subdivideTiles(view, subdivideSize = 2000) {
         // Skip subdivision for flat elevation maps
@@ -247,6 +260,37 @@ export class QuadTreeMap {
             const shouldSubdivide = this.shouldSubdivideTile(tile, visibility, subdivideSize);
 
             if (shouldSubdivide && (tile.tileLayers & tileLayers) && tile.z < this.maxZoom) {
+                // RACE CONDITION FIX: Defer subdivision while parent tile is loading
+                // 
+                // Problem: On page reload (with cached resources), parent tiles are created and
+                // immediately start loading textures asynchronously. If subdivideTiles() runs
+                // before the parent texture finishes loading, child tiles can't extract parent
+                // data and fall back to normal loading (0 lazy tiles).
+                //
+                // Solution: Wait for parent tile to finish loading before subdividing. This gives
+                // child tiles access to the parent's loaded texture for lazy loading.
+                //
+                // Safety: Don't wait forever - after 60 frames (~1 second at 60fps), subdivide
+                // anyway to prevent blocking the UI if a tile load is slow or fails.
+                if (isTextureMap && tile.isLoading) {
+                    // Track how many frames we've deferred subdivision
+                    if (!tile.subdivisionDeferredFrames) {
+                        tile.subdivisionDeferredFrames = 0;
+                    }
+                    tile.subdivisionDeferredFrames++;
+                    
+                    // Timeout: If we've waited 60 frames, proceed anyway
+                    // Most texture loads complete in 1-10 frames, so this is a safety net
+                    if (tile.subdivisionDeferredFrames < 60) {
+                        return; // Defer subdivision until next frame (when parent may be loaded)
+                    }
+                    // Fall through: subdivide without parent data after timeout
+                    // Child tiles will load normally, can still be upgraded later via triggerLazyLoadIfNeeded()
+                }
+                
+                // Reset the deferred frames counter when we actually subdivide
+                tile.subdivisionDeferredFrames = 0;
+                
                 this.subdivideTile(tile, tileLayers, isTextureMap);
                 return; // Process one subdivision at a time
             }
@@ -275,8 +319,8 @@ export class QuadTreeMap {
                 inactiveTileCount++;
             }
             if (tile.isLoading) pendingLoads++;
-            // Only count active tiles in lazy loading count
-            if (tile.usingParentData && tile.needsHighResLoad && (tile.tileLayers & tileLayers)) {
+            // Count active tiles using parent data (whether load is pending or not)
+            if (tile.usingParentData && (tile.tileLayers & tileLayers)) {
                 lazyLoading++;
             }
         });
@@ -448,20 +492,39 @@ export class QuadTreeMap {
         if (frustumIntersects) {
             const radius = worldSphere.radius;
             const distance = camera.position.distanceTo(worldSphere.center);
-            const cameraAltitude = altitudeAboveSphere(camera.position.clone());
-            const closestDistance = Math.max(0, distance - radius);
-            const horizon = distanceToHorizon(cameraAltitude);
-
-            // Check if visible over horizon
-            if (horizon > closestDistance || 
-                hiddenByGlobe(cameraAltitude, closestDistance) <= tile.highestAltitude) {
-                
-                const fov = camera.getEffectiveFOV() * Math.PI / 180;
-                const height = 2 * Math.tan(fov / 2) * distance;
-                const screenFraction = (2 * radius) / height;
-                screenSize = screenFraction * 1024;
+            
+            // Check if sphere center is behind the camera FIRST
+            // Project sphere center onto camera's forward direction
+            const cameraForward = camera.getWorldDirection(new Vector3());
+            const toSphere = worldSphere.center.clone().sub(camera.position);
+            const projectionOnForward = toSphere.dot(cameraForward);
+            
+            // If center is behind camera (negative projection) but frustum intersects,
+            // the tile wraps around the camera - skip horizon checks and force subdivision
+            if (projectionOnForward < 0) {
+                screenSize = 1000000; // Force subdivision for tiles wrapping around camera
                 visible = true;
-                actuallyVisible = true;
+                // Don't mark as actuallyVisible - this prevents premature lazy loading
+                // The visible parts (children) will be actuallyVisible when their centers are in front
+                actuallyVisible = false;
+            } else {
+                // Normal case: center is in front of camera
+                // Now perform horizon and globe occlusion checks
+                const cameraAltitude = altitudeAboveSphere(camera.position.clone());
+                const closestDistance = Math.max(0, distance - radius);
+                const horizon = distanceToHorizon(cameraAltitude);
+
+                // Check if visible over horizon
+                if (horizon > closestDistance || 
+                    hiddenByGlobe(cameraAltitude, closestDistance) <= tile.highestAltitude) {
+                    
+                    const fov = camera.getEffectiveFOV() * Math.PI / 180;
+                    const height = 2 * Math.tan(fov / 2) * distance;
+                    const screenFraction = (2 * radius) / height;
+                    screenSize = screenFraction * 1024;
+                    visible = true;
+                    actuallyVisible = true;
+                }
             }
         }
 
@@ -519,9 +582,19 @@ export class QuadTreeMap {
      * Subdivide a tile into 4 children
      */
     subdivideTile(tile, tileLayers, isTextureMap) {
-        const useParentData = isTextureMap && tile.loaded;
+        // Check if parent tile has usable texture data for lazy loading
+        // We need:
+        // 1. A mesh with material (tile is initialized)
+        // 2. A texture map (material.map exists)
+        // 3. Not a wireframe material (actual texture is loaded, not placeholder)
+        //
+        // This check ensures we only use parent data when the texture has actually loaded.
+        // During loading, tiles have a wireframe material, so this check will be false.
+        // After the deferred subdivision logic above, this should be true (parent loaded).
+        const useParentData = isTextureMap && tile.mesh && tile.mesh.material && 
+                             tile.mesh.material.map && !tile.mesh.material.wireframe;
         
-        // Create 4 child tiles
+        // Create 4 child tiles (standard quadtree subdivision)
         this.activateTile(tile.x * 2, tile.y * 2, tile.z + 1, tileLayers, useParentData);
         this.activateTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1, tileLayers, useParentData);
         this.activateTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1, tileLayers, useParentData);

@@ -270,15 +270,27 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
         const key = `${z}/${x}/${y}`;
 
-        // If useParentData is true, try to create material from parent tile
+        // LAZY LOADING: Try to create child tile using parent's texture data
+        // This allows child tiles to appear instantly with lower-quality parent texture,
+        // then upgrade to high-res later when visible (via triggerLazyLoadIfNeeded)
         if (useParentData && z > 0) {
             const parentX = Math.floor(x / 2);
             const parentY = Math.floor(y / 2);
             const parentZ = z - 1;
             const parentTile = this.getTile(parentX, parentY, parentZ);
             
-            if (parentTile && parentTile.loaded && parentTile.mesh && parentTile.mesh.material) {
-                // Create material from parent
+            // Verify parent has a loaded texture that we can extract data from
+            // Requirements:
+            // 1. Parent tile exists and has a mesh with material
+            // 2. Material has a texture map (material.map)
+            // 3. Material is not wireframe (texture has actually loaded, not placeholder)
+            //
+            // This check is critical for the race condition fix - it ensures we only
+            // attempt to use parent data when the parent texture is actually available.
+            // The deferred subdivision logic in subdivideTiles() ensures this is true.
+            if (parentTile && parentTile.mesh && parentTile.mesh.material && 
+                parentTile.mesh.material.map && !parentTile.mesh.material.wireframe) {
+                // Extract and downsample parent texture for this child tile
                 const parentMaterial = tile.buildMaterialFromParent(parentTile);
                 if (parentMaterial) {
                     tile.mesh.material = parentMaterial;
@@ -287,7 +299,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
                     tile.needsHighResLoad = true; // Mark for high-res loading when visible
                     tile.loaded = true; // Consider it "loaded" with parent data
                     
-                    // Add to scene immediately
+                    // Add to scene immediately - no waiting for texture load!
                     this.scene.add(tile.mesh);
                     if (tile.skirtMesh) {
                         this.scene.add(tile.skirtMesh);
@@ -299,7 +311,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
                     return tile;
                 }
             }
-            // If parent data not available, fall through to normal loading
+            // If parent data not available, fall through to normal loading path
         }
 
         // Track the async texture loading (normal path or fallback if parent data unavailable)
