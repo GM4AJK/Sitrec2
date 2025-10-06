@@ -333,7 +333,8 @@ export class QuadTreeMap {
 
             // First check the frustum intersection with the tile's world sphere
             // this gives us a ROUGH (but conservative) estimate of whether the tile is visible
-            if (camera.viewFrustum.intersectsSphere(worldSphere)) {
+            const frustumIntersects = camera.viewFrustum.intersectsSphere(worldSphere);
+            if (frustumIntersects) {
                 const radius = worldSphere.radius;
                 const distance = camera.position.distanceTo(worldSphere.center);
 
@@ -373,6 +374,7 @@ export class QuadTreeMap {
 
             if (tile.z < 3) {
                 thisViewScreenSize = 10000000000; // force subdivision of first three
+                thisViewVisible = true; // force visibility for first three zoom levels
             }
 
 
