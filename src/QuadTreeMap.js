@@ -24,7 +24,8 @@ export class QuadTreeMap {
         this.dynamic = options.dynamic || false; // if true, we use a dynamic tile grid
         this.maxZoom = options.maxZoom ?? 15; // default max zoom level
         this.lastLoggedStats = new Map(); // Track last logged stats per view to reduce console spam
-        this.inactiveTileTimeout = 10000; // Time in ms before pruning inactive tiles (10 seconds)
+        this.inactiveTileTimeout = 1000; // Time in ms before pruning inactive tiles (1 seconds)
+        this.currentStats = new Map(); // Store current stats per view for debug display
 
     }
 
@@ -586,11 +587,14 @@ export class QuadTreeMap {
             }
         });
 
+        // Store current stats for debug display
+        const viewKey = viewId || 'View';
+        const currentStats = { totalTileCount, activeTileCount, inactiveTileCount, pendingLoads, lazyLoading };
+        this.currentStats.set(viewKey, currentStats);
+        
         // Only log if counts changed from last time
         if (pendingLoads > 0 || lazyLoading > 0) {
-            const viewKey = viewId || 'View';
             const lastStats = this.lastLoggedStats.get(viewKey);
-            const currentStats = { totalTileCount, activeTileCount, inactiveTileCount, pendingLoads, lazyLoading };
             
             // Check if any value changed
             if (!lastStats || 

@@ -13,6 +13,8 @@ import {QuadTreeMapTexture} from "../QuadTreeMapTexture";
 import {QuadTreeMapElevation} from "../QuadTreeMapElevation";
 import * as LAYER from "../LayerMasks";
 import {showError} from "../showError";
+import {ViewMan} from "../CViewManager";
+import {CNodeViewUI} from "./CNodeViewUI";
 
 const terrainGUIColor = "#c0ffc0";
 
@@ -129,6 +131,49 @@ export class CNodeTerrain extends CNode {
 
         this.log("Calling loadMap from constructor with mapType=" + this.UI.mapType)
         this.loadMap(this.UI.mapType, (this.deferLoad !== undefined) ? this.deferLoad : false)
+        
+        // Try to create debug text display
+        this.createDebugTextDisplay();
+    }
+
+    update(f) {
+        super.update(f);
+        this.createDebugTextDisplay()
+    }
+
+    createDebugTextDisplay() {
+        // Add debug text display for terrain tile stats (similar to night sky module)
+        // Only create if mainView exists and we haven't created it yet
+        if (!this.debugTextCreated && ViewMan.list && ViewMan.list.mainView && ViewMan.list.mainView.data) {
+            const labelMainViewTerrain = new CNodeViewUI({id: "labelMainViewTerrain", overlayView: ViewMan.list.mainView.data});
+            const terrain = this;
+            labelMainViewTerrain.addText("terrainTileStats", "",    100, 4, 1.5, "#f0f00080", "right").update(function() {
+                this.text = "";
+                
+                // Get stats from elevation map
+                if (terrain.elevationMap && terrain.elevationMap.currentStats) {
+                    const elevStats = terrain.elevationMap.currentStats.get('mainView');
+                    if (elevStats) {
+                        this.text = `[mainView] Total: ${elevStats.totalTileCount}, Active: ${elevStats.activeTileCount}, Inactive: ${elevStats.inactiveTileCount}, Pending: ${elevStats.pendingLoads}, Lazy: ${elevStats.lazyLoading} `;
+                    }
+                }
+            });
+            
+            // Add lookView stats on the next line
+            labelMainViewTerrain.addText("terrainTileStatsLookView", "", 100, 5.5, 1.5, "#f0f00080", "right").update(function() {
+                this.text = "";
+                
+                // Get stats from elevation map for lookView
+                if (terrain.elevationMap && terrain.elevationMap.currentStats) {
+                    const elevStats = terrain.elevationMap.currentStats.get('lookView');
+                    if (elevStats) {
+                        this.text = `[lookView] Total: ${elevStats.totalTileCount}, Active: ${elevStats.activeTileCount}, Inactive: ${elevStats.inactiveTileCount}, Pending: ${elevStats.pendingLoads}, Lazy: ${elevStats.lazyLoading} `;
+                    }
+                }
+            });
+            
+            this.debugTextCreated = true;
+        }
     }
 
     refreshDebugGrids() {
@@ -297,6 +342,9 @@ export class CNodeTerrain extends CNode {
 
                     EventManager.dispatchEvent("terrainLoaded", this)
                     EventManager.dispatchEvent("elevationChanged", this)
+                    
+                    // Try to create debug text display if it wasn't created in constructor
+                    this.createDebugTextDisplay();
 
 
                 },
