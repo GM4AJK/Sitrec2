@@ -81,6 +81,9 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             // Default case: activate for all layers
             tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         }
+        
+        // Clear inactive timestamp since tile is now active
+        tile.inactiveSince = undefined;
 
         this.refreshDebugGeometry(tile);
 
@@ -101,9 +104,13 @@ export class QuadTreeMapElevation extends QuadTreeMap {
             tile.tileLayers = tile.tileLayers & (~layerMask);
         }
         
-        // If tile is no longer active in any view, cancel any pending loads
+        // If tile is no longer active in any view, cancel any pending loads and mark timestamp
         if (tile.tileLayers === 0) {
             tile.cancelPendingLoads();
+            // Track when tile became inactive for pruning purposes
+            if (!tile.inactiveSince) {
+                tile.inactiveSince = Date.now();
+            }
         }
         
         this.refreshDebugGeometry(tile);

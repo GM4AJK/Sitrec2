@@ -527,10 +527,9 @@ export class QuadTreeMap {
         // PASS 3: Remove inactive tiles from scene
         this.removeInactiveTilesFromScene();
 
-        // PASS 3.5: Prune complete sets of inactive tiles (texture maps only)
-        if (isTextureMap) {
-            this.pruneInactiveTileSets();
-        }
+        // PASS 3.5: Prune complete sets of inactive tiles
+        // Enable for both texture and elevation maps to prevent memory leaks
+        this.pruneInactiveTileSets();
 
         // PASS 4: Process each tile for subdivision/merging and lazy loading
         this.forEachTile((tile) => {

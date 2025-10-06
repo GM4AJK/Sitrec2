@@ -15,6 +15,7 @@ import * as LAYER from "../LayerMasks";
 import {showError} from "../showError";
 import {ViewMan} from "../CViewManager";
 import {CNodeViewUI} from "./CNodeViewUI";
+import {isLocal} from "../configUtils";
 
 const terrainGUIColor = "#c0ffc0";
 
@@ -144,7 +145,7 @@ export class CNodeTerrain extends CNode {
     createDebugTextDisplay() {
         // Add debug text display for terrain tile stats (similar to night sky module)
         // Only create if mainView exists and we haven't created it yet
-        if (!this.debugTextCreated && ViewMan.list && ViewMan.list.mainView && ViewMan.list.mainView.data) {
+        if (isLocal && !this.debugTextCreated && ViewMan.list && ViewMan.list.mainView && ViewMan.list.mainView.data) {
             const labelMainViewTerrain = new CNodeViewUI({id: "labelMainViewTerrain", overlayView: ViewMan.list.mainView.data});
             const terrain = this;
             labelMainViewTerrain.addText("terrainTileStats", "",    100, 4, 1.5, "#f0f00080", "right").update(function() {
