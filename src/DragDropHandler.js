@@ -139,7 +139,11 @@ class CDragDropHandler {
 
         // if it's a video file, that's handled differently
         // as we might (in the future) want to stream it
-        if (file.type.startsWith("video")) {
+        // NOTE: .ts files (MPEG Transport Stream) are NOT treated as video here
+        // because they need special parsing in FileManager to extract multiple streams
+        const isTSFile = /\.(ts|m2ts|mts)$/i.test(file.name);
+
+        if (!isTSFile && file.type.startsWith("video")) {
             console.log("Loading dropped video file: " + file.name);
             if (!NodeMan.exists("video")) {
                 console.warn("No video node found to load video file");
@@ -174,9 +178,9 @@ class CDragDropHandler {
         // later we might support other domains, and load them via proxy
         const urlObject = new URL(url);
         if (!isSubdomain(urlObject.hostname, SITREC_DOMAIN)
-              && !isSubdomain(urlObject.hostname, SITREC_DEV_DOMAIN)
-              && !isSubdomain(urlObject.hostname, "amazonaws.com")
-              ) {
+            && !isSubdomain(urlObject.hostname, SITREC_DEV_DOMAIN)
+            && !isSubdomain(urlObject.hostname, "amazonaws.com")
+        ) {
             // console.warn('The provided URL ' + urlObject.hostname +' is not from ' + SITREC_DOMAIN + " or " + SITREC_DEV_DOMAIN + "or amazonaws.com");
 
             // for non-local URLS, we check for info in the URL itself, like a lat, lon, alt location
@@ -341,7 +345,7 @@ class CDragDropHandler {
     parseResult(filename, result, newStaticURL) {
         FileManager.parseAsset(filename, filename, result)
             .then(parsedResult => {
-                
+
                 // Rehosting would be complicated with multiple results. Ignored for now.
                 // Maybe we need a FILE manager and an ASSET manager
                 // we'll rehost files, not assets
@@ -450,7 +454,7 @@ class CDragDropHandler {
                             // Use FOV column if present, otherwise use Zoom column
                             const dataCol = fovCol !== -1 ? fovCol : zoomCol;
                             const columnName = fovCol !== -1 ? "FOV" : "Zoom";
-                            
+
                             // Create expanded keyframes array (step-wise, not smoothed)
                             const fovArray = ExpandKeyframes(parsedFile, Sit.frames, 0, dataCol, true);
 
@@ -467,10 +471,10 @@ class CDragDropHandler {
                             NodeMan.unlinkDisposeRemove(fovNodeId);
 
                             const fovNode = new CNodeArray({id: fovNodeId, array: fovArray});
-                            
+
                             // Add or replace the option in the fovSwitch
                             fovSwitch.replaceOption(fovNodeId, fovNode);
-                            
+
                             // Select this new FOV source
                             fovSwitch.selectOption(fovNodeId);
                         }
@@ -580,7 +584,7 @@ class CDragDropHandler {
                     console.warn("No video node found to load video data");
                     return;
                 }
-                
+
                 // Check if it's an H.264 stream
                 if (fileExt === "h264") {
                     console.log("H.264 stream detected, attempting to load with specialized handler");
