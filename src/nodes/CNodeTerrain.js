@@ -146,6 +146,11 @@ export class CNodeTerrain extends CNode {
         // Add debug text display for terrain tile stats (similar to night sky module)
         // Only create if mainView exists and we haven't created it yet
         if (isLocal && !this.debugTextCreated && ViewMan.list && ViewMan.list.mainView && ViewMan.list.mainView.data) {
+            // Clean up any existing label from a previous terrain instance
+            if (NodeMan.exists("labelMainViewTerrain")) {
+                NodeMan.unlinkDisposeRemove("labelMainViewTerrain");
+            }
+            
             const labelMainViewTerrain = new CNodeViewUI({id: "labelMainViewTerrain", overlayView: ViewMan.list.mainView.data});
             const terrain = this;
             
@@ -288,6 +293,12 @@ export class CNodeTerrain extends CNode {
         // Clear any pending elevation updates
         if (this.pendingElevationUpdates) {
             this.pendingElevationUpdates = [];
+        }
+
+        // Clean up debug text display if it was created
+        if (this.debugTextCreated && NodeMan.exists("labelMainViewTerrain")) {
+            NodeMan.unlinkDisposeRemove("labelMainViewTerrain");
+            this.debugTextCreated = false;
         }
 
         super.dispose();
