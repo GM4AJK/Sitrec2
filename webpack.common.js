@@ -133,6 +133,9 @@ module.exports = {
                         }
                     };
 
+                    // Ensure output directory exists before converting
+                    await fs.promises.mkdir(outputDir, { recursive: true });
+                    
                     // Convert Markdown files in the `docs` directory
                     await convertMarkdownFiles(docsDir);
 
