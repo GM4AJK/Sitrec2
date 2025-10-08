@@ -16,3 +16,4 @@ tests/__image_snapshots__/
 /rust/target/
 /test-results/
 /dist-standalone/
+/dist/
