@@ -134,7 +134,7 @@ export class CNodeTerrainUI extends CNode {
         }
 
         // map type from the terrain object in a a saved sitch, or default to the first one
-        this.mapType = v.mapType ?? Object.keys(this.mapSources)[0];
+        this.mapType = v.mapType ?? configParams.defaultMapType ?? Object.keys(this.mapSources)[0];
 
         this.gui = guiMenus.terrain;
         this.mapTypeMenu = this.gui.add(this, "mapType", this.mapTypesKV).listen().name("Map Type")
