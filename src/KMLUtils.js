@@ -6,6 +6,7 @@ import {CNodeTrackFromLLAArray} from "./nodes/CNodeTrack";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {NodeMan} from "./Globals";
 import * as LAYERS from "./LayerMasks";
+import {timeStrToEpoch} from "./DateTimeUtils";
 
 export function parseXml(xml, arrayTags)
 {
@@ -145,7 +146,7 @@ export function getKMLTrackWhenCoord(kml, trackIndex, when, coord, info) {
                     }
 
 
-                    when.push(Date.parse(date))
+                    when.push(timeStrToEpoch(date))
 
                     var c = p[i].Point.coordinates["#text"]
                     var cs = c.split(',')
@@ -258,7 +259,9 @@ export function getKMLTrackWhenCoord(kml, trackIndex, when, coord, info) {
             var lat = Number(cs[1])
             var alt = Number(cs[2])
 //                console.log(">>"+w+"    "+lat+","+lon+" - "+alt)
-            when.push(Date.parse(w))  // whenArray is time in MS since 1970
+
+            when.push(timeStrToEpoch(w))  // whenArray is time in MS since 1970
+
             coord.push({lat: lat, lon: lon, alt: alt})
         }
     })
@@ -509,7 +512,7 @@ export function parseSRT1(lines) {
 
         // Extract date
 //        MISBArray[i][SRT['date']] = lines[dataIndex + 3].trim();
-        const date = Date.parse(lines[dataIndex + 3].trim());
+        const date = timeStrToEpoch(lines[dataIndex + 3].trim());
         // convert to milliseconds
         const dateMS = new Date(date).getTime();
         MISBArray[i][MISB.UnixTimeStamp] = dateMS;
