@@ -27,10 +27,22 @@ const patterns = [
 
 // Only copy sitrecServer and config.php in production or non-Docker environments
 if (!isDockerDev) {
+    // Copy sitrecServer directory, but exclude config.php (we'll copy it separately)
+    // This prevents copying the empty placeholder file that Docker creates
     patterns.push(
-        { from: "sitrecServer", to: "./sitrecServer"},
-        // the php configuration file is copied into the server folder for deployment
-        { from: "./config/config.php", to: "./sitrecServer/config.php",}
+        { 
+            from: "sitrecServer", 
+            to: "./sitrecServer",
+            globOptions: {
+                ignore: ['**/config.php']
+            }
+        }
+    );
+    
+    // Copy config.php from the config directory to ensure we get the real file
+    // (not the empty placeholder that Docker creates due to overlapping volume mounts)
+    patterns.push(
+        { from: "./config/config.php", to: "./sitrecServer/config.php"}
     );
 }
 
