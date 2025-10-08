@@ -18,6 +18,7 @@ import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
 import {showError} from "./showError";
+import {processTextureColors} from "./TextureColorProcessor";
 
 //const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020", transparent: true, opacity: 0.5})
 
@@ -1265,8 +1266,10 @@ export class QuadTreeTile {
         }
         
         // For non-static textures or static textures without mipmaps, use the original approach
-        const cacheKey = isStaticTexture ? `static_${url}` : 
-            (sourceDef.generateMipmaps ? `${url}_z${this.z}` : url);
+        // Include processColors flag in cache key to prevent mixing processed and unprocessed textures
+        const processColorsSuffix = sourceDef.processColors ? '_processed' : '';
+        const cacheKey = isStaticTexture ? `static_${url}${processColorsSuffix}` : 
+            (sourceDef.generateMipmaps ? `${url}_z${this.z}${processColorsSuffix}` : `${url}${processColorsSuffix}`);
         
         // Check if we already have a cached material for this cache key
         if (materialCache.has(cacheKey)) {
@@ -1286,12 +1289,18 @@ export class QuadTreeTile {
         const loadPromise = loadTextureWithRetries(url, 3, 100, 0, 0, this.textureAbortController.signal).then((texture) => {
             let finalTexture = texture;
 
+            // Apply color processing if enabled for this source
+            if (sourceDef.processColors && sourceDef.colorProcessingOptions) {
+                finalTexture = processTextureColors(texture, sourceDef.colorProcessingOptions);
+                // Dispose the original texture since we've created a processed version
+                texture.dispose();
+            }
 
             // Generate mipmap if enabled for this source (only for non-static textures here)
             if (sourceDef.generateMipmaps && sourceDef.maxZoom && !isStaticTexture) {
 //                console.log(`QuadTreeTile: Generating mipmap for tile ${this.z}/${this.x}/${this.y}`);
                 finalTexture = globalMipmapGenerator.generateTiledMipmap(
-                    texture, 
+                    finalTexture, 
                     this.z, 
                     sourceDef.maxZoom,
                     false  // Non-static textures
@@ -1322,8 +1331,11 @@ export class QuadTreeTile {
      * Loads the base texture once and generates different mipmap levels from it
      */
     async buildStaticMipmapMaterial(url, sourceDef) {
+        // Include processColors flag in cache keys to prevent mixing processed and unprocessed textures
+        const processColorsSuffix = sourceDef.processColors ? '_processed' : '';
+        
         // Create cache key for the final material (includes zoom level)
-        const materialCacheKey = `static_${url}_z${this.z}`;
+        const materialCacheKey = `static_${url}_z${this.z}${processColorsSuffix}`;
         
         // Check if we already have the final material cached
         if (materialCache.has(materialCacheKey)) {
@@ -1340,7 +1352,7 @@ export class QuadTreeTile {
         this.textureAbortController = new AbortController();
         
         // Create cache key for the base texture (without zoom level)
-        const baseCacheKey = `static_${url}_base`;
+        const baseCacheKey = `static_${url}_base${processColorsSuffix}`;
         
         // Create the material building promise
         const buildPromise = (async () => {
@@ -1358,7 +1370,16 @@ export class QuadTreeTile {
                         
                         // Create and cache the base texture loading promise
                         const baseLoadPromise = loadTextureWithRetries(url, 3, 100, 0, 0, this.textureAbortController.signal).then((texture) => {
-                            const baseMaterial = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+                            let finalTexture = texture;
+                            
+                            // Apply color processing if enabled for this source
+                            if (sourceDef.processColors && sourceDef.colorProcessingOptions) {
+                                finalTexture = processTextureColors(texture, sourceDef.colorProcessingOptions);
+                                // Dispose the original texture since we've created a processed version
+                                texture.dispose();
+                            }
+                            
+                            const baseMaterial = new MeshStandardMaterial({map: finalTexture, color: "#ffffff"});
                             materialCache.set(baseCacheKey, baseMaterial);
                             // Clean up the promise cache once loading is complete
                             textureLoadPromises.delete(baseCacheKey);
