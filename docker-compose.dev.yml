@@ -114,7 +114,7 @@ services:
       
       # Cache directory for map tiles and other cached data
       # Uncomment to persist cache between container restarts
-      # - ./sitrec-cache:/var/www/html/sitrec-cache
+      - ./sitrec-cache:/var/www/html/sitrec-cache
     environment:
       # Node.js environment mode (enables development features)
       - NODE_ENV=development

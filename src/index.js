@@ -650,7 +650,7 @@ async function initializeOnce() {
 
     var _guiShowHide = addGUIMenu("showhide", "Show/Hide").tooltip("Showing or hiding views, object and other elements");
     var _guiShowHideViews = addGUIFolder("showhideviews", "Views", "showhide").tooltip("Show of hide views (windows) like the look view, the video, the main view, and various graphs");
-    var _guiTweaks = addGUIMenu("effects", "Effects" ).tooltip("Special effects like blur, pixelation, and color adjustments that are applied to the final image in the look view");
+    var _guiTweaks = addGUIMenu("effects", "Effects" ).tooltip("S pecial effects like blur, pixelation, and color adjustments that are applied to the final image in the look view");
     addGUIMenu("lighting", "Lighting").tooltip("The lighting of the scene, like the sun and the ambient light");
     addGUIMenu("contents", "Contents").tooltip("The contents of the scene, mostly used for tracks");
 
