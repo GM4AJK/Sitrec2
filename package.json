@@ -9,7 +9,13 @@
     "start": "npx webpack serve --config webpack.dev.js",
     "build": "npx webpack --config webpack.dev.js",
     "deploy": "npx webpack --config webpack.prod.js",
-    "copy": "npx webpack --config webpack.copy-files.js"
+    "copy": "npx webpack --config webpack.copy-files.js",
+    "build-standalone": "npx webpack --config webpack.standalone.js",
+    "build-standalone-debug": "npx webpack --config webpack.standalone.js --mode development",
+    "start-standalone": "node standalone-server.js",
+    "start-standalone-debug": "node --inspect standalone-server.js",
+    "dev-standalone": "npm run build-standalone && npm run start-standalone",
+    "dev-standalone-debug": "npm run build-standalone-debug && npm run start-standalone-debug"
   },
   "jest": {
     "testPathIgnorePatterns": [
