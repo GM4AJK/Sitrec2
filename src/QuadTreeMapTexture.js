@@ -309,6 +309,42 @@ class QuadTreeMapTexture extends QuadTreeMap {
             return tile;
         }
 
+        // If z is above maxZoom, create a dummy tile with black texture
+        if (z > this.maxZoom) {
+            // Create a black texture
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = 'black';
+            ctx.fillRect(0, 0, 256, 256);
+            
+            const blackTexture = new CanvasTexture(canvas);
+            blackTexture.minFilter = NearestFilter;
+            blackTexture.magFilter = NearestFilter;
+            
+            const material = new MeshStandardMaterial({
+                map: blackTexture,
+                metalness: 0,
+                roughness: 1
+            });
+            
+            tile.mesh.material = material;
+            tile.updateSkirtMaterial();
+            tile.loaded = true;
+            
+            // Add to scene immediately
+            this.scene.add(tile.mesh);
+            if (tile.skirtMesh) {
+                this.scene.add(tile.skirtMesh);
+            }
+            tile.added = true;
+            
+            this.refreshDebugGeometry(tile);
+            setRenderOne(true);
+            return tile;
+        }
+
         // LAZY LOADING: Try to create child tile using parent's texture data
         // This allows child tiles to appear instantly with lower-quality parent texture,
         // then upgrade to high-res later when visible (via triggerLazyLoadIfNeeded)

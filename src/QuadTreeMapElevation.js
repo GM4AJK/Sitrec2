@@ -1,6 +1,5 @@
 import {QuadTreeMap} from "./QuadTreeMap";
 import {QuadTreeTile} from "./QuadTreeTile";
-import {assert} from "./assert";
 import * as LAYER from "./LayerMasks";
 import {showError} from "./showError";
 
@@ -46,9 +45,6 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
     activateTile(x,y,z, layerMask = 0) {
 
-
-        assert(z <= this.maxZoom, `activateTile: z (${z}) must be less than of equal to maxZoom (${this.maxZoom})`);
-
 //        console.log("NEW activateTile Elevation ", x, y, z);
         let tile = this.getTile(x, y, z);
         if (tile) {
@@ -76,8 +72,25 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                         this.terrainNode.elevationTileLoaded(tile);
                     }
                 });
+            } else if (z > this.maxZoom) {
+                // If z is above maxZoom, create a dummy tile with zero elevation
+                // Create a zero elevation array with standard tile dimensions (256x256)
+                // This matches the typical elevation tile data size, not the world size
+                const dataSize = 256;
+                const elevation = new Float32Array(dataSize * dataSize);
+                // elevation is already initialized to zeros by Float32Array constructor
+                tile.elevation = elevation;
+                tile.shape = [dataSize, dataSize];
+                tile.elevationLoadFailed = false;
+                tile.isLoadingElevation = false;
+                // Immediately notify that the tile is loaded
+                Promise.resolve().then(() => {
+                    if (!this.controller.signal.aborted) {
+                        this.terrainNode.elevationTileLoaded(tile);
+                    }
+                });
             } else {
-                // Normal tile loading for z >= minZoom
+                // Normal tile loading for minZoom <= z <= maxZoom
                 tile.fetchElevationTile(this.controller.signal).then(tile => {
                     if (this.controller.signal.aborted) {
                         // flag that it's aborted, so we can filter it out later
