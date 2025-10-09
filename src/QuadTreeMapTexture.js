@@ -31,7 +31,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         // Call loadedCallback when all initial tiles have finished loading their materials
         if (this.loadedCallback) {
             // Use setTimeout to allow initTiles() to complete and any initial tiles to be created
-            setTimeout(() => {
+            this.loadedCallbackTimeout = setTimeout(() => {
                 this.checkAndCallLoadedCallback();
             }, 0);
         }
@@ -42,7 +42,8 @@ class QuadTreeMapTexture extends QuadTreeMap {
     // Check if all tiles have finished loading and call the loadedCallback if so
     checkAndCallLoadedCallback() {
         // If there are no pending tile loads and we haven't called the callback yet
-        if (this.pendingTileLoads.size === 0 && !this.loaded && this.loadedCallback) {
+        // Also check that the map hasn't been cleaned up (scene would be null)
+        if (this.pendingTileLoads.size === 0 && !this.loaded && this.loadedCallback && this.scene !== null) {
             this.loaded = true;
             this.loadedCallback();
         }
@@ -92,6 +93,12 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
         // abort the pending loading of tiles
         this.controller.abort();
+        
+        // Cancel any pending loadedCallback timeout
+        if (this.loadedCallbackTimeout) {
+            clearTimeout(this.loadedCallbackTimeout);
+            this.loadedCallbackTimeout = null;
+        }
 
         this.getAllTiles().forEach(tile => {
             tile.removeDebugGeometry(); // any debug arrows, etc
