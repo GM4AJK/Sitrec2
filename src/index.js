@@ -492,6 +492,30 @@ async function initializeOnce() {
         });
     }
 
+
+
+    // Handle webpack Hot Module Replacement (HMR) to prevent "Reload site" dialog during hot reloads
+    // When HMR is active, we listen for status changes and temporarily allow unload during updates
+    if (module.hot) {
+        // Listen for HMR status changes
+        module.hot.addStatusHandler((status) => {
+            console.log('HMR status:', status);
+            // When HMR is preparing to update, allow unload to prevent the dialog
+            if (status === 'prepare' || status === 'check' || status === 'dispose' || status === 'apply') {
+                console.log('HMR: Allowing unload for hot reload');
+                Globals.allowUnload = true;
+            }
+            // After HMR is idle or ready, restore the unload protection
+            else if (status === 'idle' || status === 'ready') {
+                console.log('HMR: Restoring unload protection');
+                // Small delay to ensure any pending reloads complete
+                setTimeout(() => {
+                    Globals.allowUnload = false;
+                }, 100);
+            }
+        });
+    }
+
     Globals.regression = urlParams.get("regression");
 
     setCustomManager(new CCustomManager());

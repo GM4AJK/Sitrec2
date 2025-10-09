@@ -33,7 +33,7 @@
 #
 # HOT RELOAD BEHAVIOR:
 # --------------------
-#   • JavaScript/CSS (src/): Auto-recompiled by webpack, browser updates automatically
+#   • JavaScript/CSS (src/): Auto-recompiled by webpack, manual browser refresh required
 #   • PHP files (sitrecServer/): Immediately available, requires page refresh
 #   • Sitch files (data/): Immediately available, requires page refresh
 #   • Webpack config: Requires container restart
@@ -125,6 +125,13 @@ services:
       
       # Version identifier (fallback since .git directory is not mounted)
       - VERSION=dev
+      
+      # Disable hot reload to avoid "Reload site" dialogs in Docker
+      - DOCKER_BUILD=true
+      
+      # Timezone configuration (inherits from host machine's TZ variable)
+      # Set automatically by docker-compose from host environment
+      - TZ=${TZ:-UTC}
       
     # Enable interactive terminal (useful for debugging)
     stdin_open: true

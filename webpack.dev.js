@@ -10,8 +10,8 @@ module.exports = merge(common, {
             directory: InstallPaths.dev_path,
             publicPath: '/sitrec', // Public path to access the static files
         },
-        hot: true,
-        open: false, // Don't auto-open browser in Docker
+        hot: true, // Hot reload enabled - "Reload site" dialog is handled in index.js via HMR detection
+        open: false, // Don't auto-open browser
         host: '0.0.0.0', // Allow external connections (needed for Docker)
         port: 8080,
         historyApiFallback: {
