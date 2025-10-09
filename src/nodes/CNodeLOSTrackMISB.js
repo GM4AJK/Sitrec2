@@ -21,13 +21,12 @@
 // {position: Vector3, heading: Vector3, matrix: Matrix4}
 // where the matrix is the orientation of the sensor
 // and position heading are the usual LOS values
-import {CNodeEmptyArray} from "./CNodeArray";
 import {getLocalEastVector, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {Matrix4, Vector3} from "three";
 import {radians} from "../utils";
-import {DebugMatrixAxes} from "../threeExt";
+import {CNodeLOS} from "./CNodeLOS";
 
-export class CNodeLOSTrackMISB extends CNodeEmptyArray {
+export class CNodeLOSTrackMISB extends CNodeLOS {
 
     constructor(v) {
         super(v);

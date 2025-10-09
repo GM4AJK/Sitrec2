@@ -1,8 +1,8 @@
-import {CNodeEmptyArray} from "./CNodeArray";
 import {ExpandKeyframes, radians, RollingAverage, tan} from "../utils";
 import {FileManager, Sit} from "../Globals";
 import {V3} from "../threeUtils";
 import {getLocalUpVector} from "../SphericalMath";
+import {CNodeLOS} from "./CNodeLOS";
 
 
 /*
@@ -20,7 +20,7 @@ example usage:
     },
  */
 
-export class CNodeLOSMotionTrack extends CNodeEmptyArray {
+export class CNodeLOSMotionTrack extends CNodeLOS {
     constructor(v) {
         if (!v.frames) {
             v.frames = Sit.frames;

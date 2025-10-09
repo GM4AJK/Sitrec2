@@ -1,10 +1,10 @@
 // given two tracks, join the cameraTrack to the targetTrack to creat a LOS track
 // i.e. a series of lines of sight positions and headings
 // So basically it contains the camera track, and the direction the camera is looking in
-import {CNodeEmptyArray} from "./CNodeArray";
 import {assert} from "../assert.js";
+import {CNodeLOS} from "./CNodeLOS";
 
-export class CNodeLOSTrackTarget extends CNodeEmptyArray {
+export class CNodeLOSTrackTarget extends CNodeLOS {
     constructor(v) {
         super(v);
         this.input("cameraTrack")

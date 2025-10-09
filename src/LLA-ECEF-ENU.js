@@ -284,6 +284,56 @@ export function ECEF2EUS(pos,lat1, lon1, radius, justRotate=false) {
     return new Vector3(enu.x, enu.z, -enu.y)
 }
 
+// Inverse of ECEF2ENU - converts from ENU to ECEF
+export function ENU2ECEF(pos, lat1, lon1, radius, justRotate=false) {
+    assert(radius !== undefined, "ENU2ECEF needs explicit radius")
+    
+    // Create the inverse transformation matrix (ENU to ECEF)
+    var mECEF2ENU = new Matrix3().set(
+        -Math.sin(lon1), Math.cos(lon1), 0,
+        -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
+        Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
+    );
+    
+    var mENU2ECEF = new Matrix3().copy(mECEF2ENU).invert();
+    
+    var ecef;
+    if (!justRotate) {
+        var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0, radius);
+        ecef = pos.clone().applyMatrix3(mENU2ECEF).add(originECEF);
+    } else {
+        ecef = pos.clone().applyMatrix3(mENU2ECEF);
+    }
+    
+    return ecef;
+}
+
+// Inverse of EUSToECEF - converts from ECEF to EUS (at Sit location)
+export function ECEFToEUS(posECEF, radius) {
+    assert(radius === undefined, "unexpected radius in ECEFToEUS")
+    
+    const lat1 = Sit.lat * Math.PI / 180;
+    const lon1 = Sit.lon * Math.PI / 180;
+    
+    var mECEF2ENU = new Matrix3().set(
+        -Math.sin(lon1), Math.cos(lon1), 0,
+        -Math.sin(lat1) * Math.cos(lon1), -Math.sin(lat1) * Math.sin(lon1), Math.cos(lat1),
+        Math.cos(lat1) * Math.cos(lon1), Math.cos(lat1) * Math.sin(lon1), Math.sin(lat1)
+    );
+    
+    // Get the origin in ECEF
+    var originECEF = RLLAToECEFV_Sphere(lat1, lon1, 0);
+    
+    // Subtract origin and apply rotation to get ENU
+    var enu = posECEF.clone().sub(originECEF).applyMatrix3(mECEF2ENU);
+    
+    // Convert from ENU to EUS (reverse of: ENU = (EUS.x, -EUS.z, EUS.y))
+    // So: EUS.x = ENU.x, EUS.y = ENU.z, EUS.z = -ENU.y
+    var eus = new Vector3(enu.x, enu.z, -enu.y);
+    
+    return eus;
+}
+
 // This is a work in progress.
 // export function EUSToECEF(posEUS, lat1, lon1, radius) {
 //     var mECEF2ENU = new Matrix3().set(

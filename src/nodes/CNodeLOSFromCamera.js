@@ -7,8 +7,9 @@ import {Sit} from "../Globals";
 import {CNodeEmptyArray} from "./CNodeArray";
 import {assert} from "../assert.js";
 import {getAzElFromPositionAndForward} from "../SphericalMath";
+import {CNodeLOS} from "./CNodeLOS";
 
-export class CNodeLOSFromCamera extends CNodeEmptyArray {
+export class CNodeLOSFromCamera extends CNodeLOS {
     constructor(v) {
         super(v);
         this.input("cameraNode");

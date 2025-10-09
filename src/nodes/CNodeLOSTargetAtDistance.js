@@ -1,12 +1,12 @@
 // a fixed point track that returns a point on the LOS between a camera and
 // the track at at given frame.
 // can be used to put an object inbetween the camera and the track
-import {CNodeTrack} from "./CNodeTrack";
 import {getLocalUpVector} from "../SphericalMath";
 import {assert} from "../assert.js";
 import {V3} from "../threeUtils";
+import {CNodeLOS} from "./CNodeLOS";
 
-export class CNodeLOSTargetAtDistance extends CNodeTrack {
+export class CNodeLOSTargetAtDistance extends CNodeLOS {
     constructor(v) {
         super(v);
         this.input("track");
