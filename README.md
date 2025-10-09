@@ -99,6 +99,71 @@ start http://localhost:6425/
 
 This will be running on http://localhost:6425/. The "open" or "start" commands above should open a browser window. 
 
+## Docker Development Build (Advanced)
+
+For active Sitrec development with hot reload capabilities, there's an alternative Docker configuration that provides a more interactive development experience.
+
+**Standard Docker vs Development Docker:**
+
+| Feature | Standard Docker (`docker-compose.yml`) | Development Docker (`docker-compose.dev.yml`) |
+|---------|----------------------------------------|----------------------------------------------|
+| **Purpose** | Production-like environment | Active development with hot reload |
+| **Build Time** | ~2-3 minutes | ~5-10 minutes (first build) |
+| **File Changes** | Requires rebuild | Immediate (auto-recompile) |
+| **Ports** | 6425 | 8080 (webpack), 8081 (Apache) |
+| **Source Mounting** | No (files copied into image) | Yes (live editing from host) |
+| **Hot Reload** | No | Yes (webpack dev server) |
+| **Best For** | Testing, demos, production-like setup | Active code development |
+
+**Development Docker Setup:**
+
+Mac/Linux
+```bash
+git clone https://github.com/MickWest/sitrec2 sitrec-test-dev
+cd sitrec-test-dev
+for f in config/*.example; do cp "$f" "${f%.example}"; done
+docker-compose -f docker-compose.dev.yml up -d --build
+open http://localhost:8080/
+```
+
+Windows
+```bat
+git clone https://github.com/mickwest/sitrec2 sitrec-test-dev
+cd sitrec-test-dev
+for %f in (config\*.example) do copy /Y "%f" "%~dpnf"
+docker-compose -f docker-compose.dev.yml up -d --build
+start http://localhost:8080/
+```
+
+**What this provides:**
+- **Webpack Dev Server** on port 8080 with automatic recompilation
+- **Apache/PHP Backend** on port 8081 (proxied by webpack)
+- **Live file editing** - changes to source files are immediately reflected
+- **No rebuild needed** for code changes (only for Dockerfile/dependency changes)
+
+**Hot Reload Behavior:**
+- **JavaScript/CSS** (`src/`): Auto-recompiled by webpack, manual browser refresh required
+- **PHP files** (`sitrecServer/`): Immediately available, requires page refresh
+- **Sitch files** (`data/`): Immediately available, requires page refresh
+- **Webpack config**: Requires container restart
+
+**Useful Commands:**
+```bash
+# View live logs
+docker-compose -f docker-compose.dev.yml logs -f
+
+# Stop containers
+docker-compose -f docker-compose.dev.yml down
+
+# Access container shell
+docker-compose -f docker-compose.dev.yml exec sitrec-dev bash
+
+# Restart after config changes
+docker-compose -f docker-compose.dev.yml restart
+```
+
+See `sitrec-tools/README-DOCKER.md` for additional development Docker utilities and troubleshooting.
+
 # Quick node.js dev server install (Standalone Build)
 
 This method creates a self-contained build and runs it with Node.js and your system's PHP installation. No separate web server (Nginx/Apache) is required.
