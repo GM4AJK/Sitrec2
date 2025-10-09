@@ -53,13 +53,31 @@ Some types of situations covered:
   - From a fixed position
 - Viewing the sky (with accurate planets and satellites)
 
+# Installation Methods
+
+Sitrec can be installed and run in three different ways:
+
+1. **Docker (Recommended for quickest setup)** - Fully containerized, everything included in the container
+2. **Standalone Node.js Server** - Self-contained build using Node.js + your system's PHP, no web server needed
+3. **Local Web Server** - Traditional setup with Nginx/Apache + PHP, for full development environment
+
+Choose the method that best fits your needs:
+
+| Method | Best For | Requirements | Build Time |
+|--------|----------|--------------|------------|
+| Docker | Quick testing, no configuration | **Only Docker Desktop** (no Node.js, PHP, or web server needed) | ~1 minute |
+| Standalone | Development without web server | **Node.js + PHP in PATH** (no web server needed) | ~10 seconds |
+| Local Server | Full development environment | **Node.js + Nginx/Apache + PHP** | ~5 seconds |
+
 ## Quickest Local Install, Using Docker
 
-To install Sitrec locally without having to configure a local web server
+This method requires **only Docker Desktop** - no Node.js, PHP, or web server installation needed. Everything runs inside the Docker container.
 
-Install Git
+**Prerequisites:**
+- Git
+- Docker Desktop from https://www.docker.com/
 
-Install Docker Desktop from https://www.docker.com/ and run it. 
+Install Git and Docker Desktop, then run Docker Desktop. 
 
 Mac/Linux
 ```bash
@@ -81,8 +99,24 @@ start http://localhost:6425/
 
 This will be running on http://localhost:6425/. The "open" or "start" commands above should open a browser window. 
 
-# Quick node.js dev server install 
-**Prerequisites:** Node.js (with npm) and PHP 8.3+
+# Quick node.js dev server install (Standalone Build)
+
+This method creates a self-contained build and runs it with Node.js and your system's PHP installation. No separate web server (Nginx/Apache) is required.
+
+**Prerequisites:** 
+- Node.js (with npm)
+- PHP 8.3+ installed and available in your system PATH
+
+**To check if PHP is available:**
+```bash
+php --version
+```
+If PHP is not installed:
+- **Mac**: Use Homebrew: `brew install php` (or use the built-in PHP if available)
+- **Windows**: Download from https://windows.php.net/download/
+- **Linux**: Use your package manager: `sudo apt install php` or `sudo yum install php`
+
+**Installation:**
 
 Mac/Linux
 ```bash
@@ -102,14 +136,23 @@ npm install
 npm run dev-standalone-debug
 ```
 
-If successfull this will run a temporary server from the CLI, displaying:
+**What this does:**
+1. Builds the application into a `dist-standalone` directory (not your web server)
+2. Starts a Node.js Express server on port 3000
+3. Starts PHP's built-in development server on port 8000 (using your system's PHP)
+4. Proxies requests between the frontend and backend
+
+If successful, you'll see:
 ```
 🚀 Sitrec standalone server is running!
 📱 Frontend: http://localhost:3000/sitrec
 🐘 PHP Backend: http://localhost:8000
 Press Ctrl+C to stop the server
 ```
-So go to: http://localhost:3000/sitrec to test
+
+Then open: http://localhost:3000/sitrec
+
+**Note:** This uses your local PHP installation (the `php` command in your PATH). The standalone server will automatically start and stop PHP's built-in server.
 
 
 # Local Server Installation
@@ -323,6 +366,65 @@ npm install
 
 This will create the folder node_modules, which will (currently) have 218 folders in it. These are the 24 packages that are used, plus their dependencies.  Note you won't be uploading this to the production server, as we use WebPack to only include what is needed.  You will need to do this when you get new code, but not during your own development. 
 
+## Available Build Commands
+
+Sitrec has several build commands for different purposes:
+
+### Development Builds (for local web server)
+
+**`npm run build`** - Build for local development
+- Uses `webpack.dev.js` configuration
+- Builds to the path specified in `config-install.js` as `dev_path`
+- Includes source maps for debugging
+- Not minified (faster builds, easier debugging)
+- Requires a local web server (Nginx/Apache) with PHP
+
+**`npm run start`** - Development server with hot reload
+- Uses webpack-dev-server
+- Automatically rebuilds when you change source files
+- Requires a local web server for PHP backend
+
+**`npm run copy`** - Copy files without rebuilding
+- Uses `webpack.copy-files.js`
+- Only copies data files and PHP files, doesn't rebuild JavaScript
+- Useful when you only changed data files or PHP
+
+### Standalone Builds (self-contained, no web server needed)
+
+**`npm run build-standalone`** - Production standalone build
+- Builds to `dist-standalone` directory
+- Minified and optimized
+- Use with `npm run start-standalone` to run
+
+**`npm run build-standalone-debug`** - Development standalone build
+- Builds to `dist-standalone` directory
+- Includes source maps and debugging info
+- Not minified
+- **Includes circular dependency detection** (will fail if circular dependencies exist)
+- Use with `npm run start-standalone-debug` to run
+
+**`npm run dev-standalone-debug`** - Build and run standalone (debug mode)
+- Combines `build-standalone-debug` + `start-standalone-debug`
+- This is the command used in the "Quick node.js dev server install" section above
+
+**`npm run start-standalone`** - Run the standalone server
+- Starts Node.js Express server on port 3000
+- Starts PHP built-in server on port 8000
+- Serves from `dist-standalone` directory
+
+**`npm run start-standalone-debug`** - Run standalone with Node.js inspector
+- Same as `start-standalone` but with `--inspect` flag
+- Allows debugging the Node.js server code
+
+### Production Build
+
+**`npm run deploy`** - Build for production deployment
+- Uses `webpack.prod.js` configuration
+- Builds to the path specified in `config-install.js` as `prod_path`
+- Fully minified and optimized
+- No source maps or debug info
+- Takes longer to build (~15 seconds vs ~3-4 seconds for dev)
+
 ## Build the dev app with node.js and Webpack
 
 In the sitrec _project_ folder, run 
@@ -330,7 +432,7 @@ In the sitrec _project_ folder, run
 npm run build
 ```
 
-This will build the app in http://localhost/s/sitrec/, which mostly comprises 
+This will build the app to the location specified by `dev_path` in `config-install.js` (e.g., http://localhost/s/sitrec/), which mostly comprises:
 
 ```
 index.html - the entry point
