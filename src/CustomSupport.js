@@ -43,11 +43,12 @@ import {EventManager} from "./CEventManager";
 import {SITREC_APP} from "./configUtils";
 import {CNodeDisplayTrack} from "./nodes/CNodeDisplayTrack";
 import {DebugArrowAB, elevationAtLL} from "./threeExt";
-import {findRootTrack, TrackManager} from "./TrackManager";
+import {TrackManager} from "./TrackManager";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
+import {findRootTrack} from "./FindRootTrack";
 
 
 export class CCustomManager {

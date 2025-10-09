@@ -48,7 +48,8 @@ import {V3} from "../threeUtils";
 import * as BufferGeometryUtils from 'three/addons/utils/BufferGeometryUtils.js';
 import {CNodeLabel3D, CNodeMeasureAB} from "./CNodeLabels3D";
 import {EUSToLLA} from "../LLA-ECEF-ENU";
-import {findRootTrack} from "../TrackManager";
+
+import {findRootTrack} from "../FindRootTrack";
 
 // Note these files are CASE SENSIVE. Mac OS is case insensitive, so be careful. (e.g. F-15.glb will not work on my deployed server)
 export const ModelFiles = {

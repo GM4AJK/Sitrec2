@@ -2,7 +2,7 @@
 // should be agnostic to the source of the data (KML/ADSB, CSV, KLVS, etc)
 import {CNodeScale} from "./nodes/CNodeScale";
 import {CNodeGUIValue} from "./nodes/CNodeGUIValue";
-import {CNodeConstant, CNodeSpecificFrame} from "./nodes/CNode";
+import {CNodeConstant} from "./nodes/CNode";
 import * as LAYER from "./LayerMasks";
 import {Color} from "three";
 import {getFileExtension, scaleF2M} from "./utils";
@@ -31,15 +31,6 @@ import {CNode3DObject, ModelFiles} from "./nodes/CNode3DObject";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {CGeoJSON} from "./geoJSONUtils";
 import {CNodeSmoothedPositionTrack} from "./nodes/CNodeSmoothedPositionTrack";
-import {CNode3D} from "./nodes/CNode3D";
-import {CNodeController} from "./nodes/CNodeController";
-import {CNodeSwitch} from "./nodes/CNodeSwitch";
-import {CNodeTrackAir} from "./nodes/CNodeTrackAir";
-import {CNodeInterpolateTwoFramesTrack} from "./nodes/CNodeInterpolateTwoFramesTrack";
-import {CNodeSatelliteTrack} from "./nodes/CNodeSatelliteTrack";
-import {CNodeTrackFromLLA} from "./nodes/CNodeTrackFromLLA";
-import {CNodeTrack, CNodeTrackFromLLAArray} from "./nodes/CNodeTrack";
-import {CNodeJetTrack} from "./nodes/CNodeJetTrack";
 
 
 class CMetaTrack {
@@ -1148,108 +1139,6 @@ class CTrackManager extends CManager {
         
         return {shortName: uniqueShortName, moreTracks};
     }
-}
-
-
-// find the track an object is moving along, if any
-// this is a recursive function that examines the type of node, and then recurses on the appropriate input nodes
-// Returns the root data source node (typically CNodeMISBDataTrack) or the root track node itself for synthetic tracks
-export function findRootTrack(node) {
-    if (!node) {
-        return null;
-    }
-
-    // Handle 3D objects - search through controller inputs
-    if (node instanceof CNode3D) {
-        // iterate over the inputs, and if one is a controller and returns a result, return it
-        for (const inputID in node.inputs) {
-            const inputNode = node.inputs[inputID];
-            if (inputNode instanceof CNodeController) {
-                const rootTrack = findRootTrack(inputNode);
-                if (rootTrack !== null) {
-                    return rootTrack;
-                }
-            }
-        }
-        // nothing found in the inputs, so just an object with no path
-        return null;
-    }
-
-    // Handle controller that positions objects along a track
-    if (node instanceof CNodeControllerTrackPosition) {
-        const sourceTrack = node.inputs.sourceTrack;
-        return findRootTrack(sourceTrack);
-    }
-
-    // Handle smoothed position tracks - follow the source
-    if (node instanceof CNodeSmoothedPositionTrack) {
-        const source = node.inputs.source;
-        return findRootTrack(source);
-    }
-
-    // Handle track with wind effects - follow the source
-    if (node instanceof CNodeTrackAir) {
-        const source = node.inputs.source;
-        return findRootTrack(source);
-    }
-
-    // Handle interpolated tracks - follow the source
-    if (node instanceof CNodeInterpolateTwoFramesTrack) {
-        const source = node.inputs.source;
-        return findRootTrack(source);
-    }
-
-    // Handle switch nodes - follow the currently selected choice
-    if (node instanceof CNodeSwitch) {
-        const choice = node.choice;
-        const choiceNode = node.inputs[choice];
-        return findRootTrack(choiceNode);
-    }
-
-    // Handle specific frame wrapper - follow the wrapped node
-    if (node instanceof CNodeSpecificFrame) {
-        const wrappedNode = node.inputs.node;
-        return findRootTrack(wrappedNode);
-    }
-
-    // Handle MISB-based tracks - return the MISB data node (the root data source)
-    if (node instanceof CNodeTrackFromMISB) {
-        const misb = node.inputs.misb;
-        // this is the root data track
-        // all data driven tracks are converted to misb data internally.
-        return misb;
-    }
-
-    // Handle synthetic/generated tracks that don't have a data source
-    // These are root tracks themselves
-    if (node instanceof CNodeSatelliteTrack) {
-        // Satellite tracks are generated from TLE data, no MISB source
-        return node;
-    }
-
-    if (node instanceof CNodeTrackFromLLA) {
-        // Track from lat/lon/alt inputs, no MISB source
-        return node;
-    }
-
-    if (node instanceof CNodeTrackFromLLAArray) {
-        // Track from LLA array, no MISB source
-        return node;
-    }
-
-    if (node instanceof CNodeJetTrack) {
-        // Synthetic jet track, no MISB source
-        return node;
-    }
-
-    // For any other CNodeTrack subclass, consider it a root track
-    // This handles various LOS traverse tracks, homing missile tracks, etc.
-    if (node instanceof CNodeTrack) {
-        return node;
-    }
-
-    // Unknown node type or not a track-related node
-    return null;
 }
 
 

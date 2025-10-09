@@ -1,6 +1,7 @@
 const { merge } = require('webpack-merge');
 const common = require('./webpack.common.js');
 const InstallPaths = require('./config/config-install');
+const CircularDependencyPlugin = require('circular-dependency-plugin');
 
 module.exports = merge(common, {
     mode: 'development',
@@ -45,4 +46,20 @@ module.exports = merge(common, {
             },
         ],
     },
+    plugins: [
+        new CircularDependencyPlugin({
+            exclude: /node_modules/,
+            include: /src/,
+            // `onDetected` is called for each module that is cyclical
+            onDetected({ module: webpackModuleRecord, paths, compilation }) {
+                const ignoreModules = ["mathjs"];
+                // return if any of the ignoreModules is a substring of any of the paths
+                if (paths.some(path => ignoreModules.some(ignoreModule => path.includes(ignoreModule)))) {
+                    return;
+                }
+                // `paths` will be an Array of the relative module paths that make up the cycle
+                compilation.errors.push(new Error(paths.join(' -> ')))
+            },
+        }),
+    ],
 });
