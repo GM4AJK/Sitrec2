@@ -2,6 +2,35 @@
 
 This directory contains standalone tools for working with Sitrec data.
 
+## Tile Download Scripts
+
+### ESRI World Imagery Downloader
+
+**File:** `download_esri_imagery.js`
+
+Downloads ESRI World Imagery satellite tiles for offline/local caching.
+
+```bash
+./download_esri_imagery.js
+```
+
+### Elevation Tile Downloader
+
+**File:** `download_elevation_tiles.js`
+
+Downloads AWS Terrarium elevation tiles for offline terrain data.
+
+```bash
+./download_elevation_tiles.js
+```
+
+Both scripts:
+- Support resume capability (re-run to download only missing tiles)
+- Include progress tracking and error handling
+- Save tiles to `sitrec-terrain/imagery/` and `sitrec-terrain/elevation/` respectively
+- Use `__dirname` to automatically find the correct output paths
+- Output directory is in `.gitignore` to avoid committing large tile caches
+
 ## LOS CSV Viewer
 
 **File:** `los-viewer.html`

@@ -251,6 +251,7 @@ mkdir sitrec
 mkdir sitrec-cache
 mkdir sitrec-upload
 mkdir sitrec-videos
+mkdir sitrec-terrain
 popd
 ```
 
@@ -288,6 +289,7 @@ mkdir sitrec
 mkdir sitrec-cache
 mkdir sitrec-upload
 mkdir sitrec-videos
+mkdir sitrec-terrain
 popd
 notepad config\config-install.js
 ```
@@ -358,7 +360,7 @@ Then there are the project build files:
 ## Create the local (and production) server folder structure
 Sitrec can exist at the server root, or in any path. I use the root, but it's maybe neater to have in a folder. Here I'll assume it's in a folder called "s". You do not have to use "s", you can put it in another folder, or in the web root (like I do)
 
-There are five folders in the server structure
+There are six folders in the server structure
 - `sitrec` - the folder containing the Webpack compiled app and the data files (except videos). This is deleted and recreated when rebuilding, so don't edit anything in there, edit the 
 - `sitrec-config` - contains server-side PHP configuration files - you need to edit this. 
 - `sitrec-cache` - a server-side cache for terrain tiles, initially empty
@@ -366,6 +368,7 @@ There are five folders in the server structure
 - `sitrec-videos` - The videos for the sitches. Handled separately as it can get quite large. The videos are subdivided into public (government or other unrestricted files) and private (where the licensing rights are unclear, but are used here under fair-use). So there's two sub-folders that you need to keep
   - `sitrec-videos/public`
   - `sitrec-videos/private`
+- `sitrec-terrain` - Local cache for downloaded terrain tiles (imagery and elevation). Initially empty. See `tools/README_IMAGERY_DOWNLOAD.md` for download scripts.
 
 Note sitrec-cache and sitrec-upload must have write permission.
 

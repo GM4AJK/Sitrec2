@@ -116,6 +116,17 @@ export class CNodeTerrainUI extends CNode {
                     maxZoom: 20,
                 },
 
+                Local: {
+                    name: "Local",
+                    mapURL: (z,x,y) => {
+                        return `${SITREC_APP}../sitrec-terrain/imagery/esri/${z}/${y}/${x}.jpg`
+                    },
+
+                    maxZoom: 7,
+                    minZoom: 0,
+                    tileSize: 256,
+                    attribution: "",
+                }
 
 
 
@@ -159,6 +170,18 @@ export class CNodeTerrainUI extends CNode {
                 tileSize: 256,
                 attribution: "",
             },
+            Local: {
+                name: "Local",
+                // Tiles stored in sitrec-terrain/elevation/z/x/y.png
+                mapURL: (z,x,y) => {
+                    return `${SITREC_APP}../sitrec-terrain/elevation/${z}/${x}/${y}.png`
+                },
+
+                maxZoom: 5,
+                minZoom: 0,
+                tileSize: 256,
+                attribution: "",
+            }
         }
         // and the KV pair for the GUI
         this.elevationTypesKV = {}
