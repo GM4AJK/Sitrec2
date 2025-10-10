@@ -13,6 +13,8 @@ import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
 import {saveAs} from "../js/FileSaver";
 import {Matrix3, Vector3} from "three";
 import {ECEF2ENU, ECEFToEUS, ENU2ECEF, EUSToECEF, EUSToLLA, wgs84} from "../LLA-ECEF-ENU";
+import {extractFOV} from "./CNodeControllerVarious";
+import {elevationAtLL} from "../threeExt";
 
 export class CNodeLOS extends CNodeTrack {
     constructor(v) {
@@ -72,8 +74,18 @@ export class CNodeLOS extends CNodeTrack {
         mEUS2ENU.multiplyMatrices(mECEF2ENU_Origin, mENU2ECEF_Sit);
 
         // Build CSV
-        let csv = "Time, SensorPositionX, SensorPositionY, SensorPositionZ, LOSUnitVectorX, LOSUnitVectorY, LOSUnitVectorZ, maxRange, LOSUncertaintyVertical, LOSUncertaintyHorizontal\n";
+        let csv = "Time, SensorPositionX, SensorPositionY, SensorPositionZ, LOSUnitVectorX, LOSUnitVectorY, LOSUnitVectorZ, maxRange, LOSUncertaintyVertical, LOSUncertaintyHorizontal, OriginLat, OriginLon, BaseAltitude\n";
+
+        const fovSwitch = NodeMan.get("fovSwitch", false);
+        const lookCamera = NodeMan.get("lookCamera", false);
         
+        // Convert origin coordinates to degrees for CSV output
+        const originLatDeg = originLat * 180 / Math.PI;
+        const originLonDeg = originLon * 180 / Math.PI;
+        
+        // Get the base altitude (ground elevation at the origin)
+        const baseAltitude = elevationAtLL(originLatDeg, originLonDeg);
+
         for (let f = 0; f < this.frames; f++) {
             const data = this.getValueFrame(f);
             if (!data || !data.position || !data.heading) {
@@ -115,10 +127,48 @@ export class CNodeLOS extends CNodeTrack {
                 maxRange = -1; // Indicates infinity
             }
             
-            const uncertaintyVertical = 0.1; // placeholder
-            const uncertaintyHorizontal = 0.1; // placeholder
+            // Get FOV for uncertainty values
+            // Try to get fovSwitch node first (for custom sitches with per-frame FOV)
+            let verticalFOV;
+            if (fovSwitch) {
+                // Get vertical FOV for this frame from fovSwitch
+                // note there's different ways to store FOV info in a track
+                // so we use the extractFOV function that works for all cases
+                verticalFOV = extractFOV(fovSwitch.getValue(f));
+            } else {
+                // Fall back to lookCamera's FOV
+                if (lookCamera && lookCamera.camera) {
+                    // fov in Three.js is vertical field of view in degrees
+                    verticalFOV = lookCamera.camera.fov;
+                } else {
+                    // Default fallback if no camera found
+                    verticalFOV = 5.0;
+                }
+            }
             
-            csv += `${timestamp},${posENU.x},${posENU.y},${posENU.z},${headingENU.x},${headingENU.y},${headingENU.z},${maxRange},${uncertaintyVertical},${uncertaintyHorizontal}\n`;
+            // Calculate horizontal FOV from vertical FOV and aspect ratio
+            let horizontalFOV;
+            if (lookCamera && lookCamera.camera) {
+                const aspect = lookCamera.camera.aspect;
+                // Convert vertical FOV to horizontal FOV using aspect ratio
+                // hFOV = 2 * atan(tan(vFOV/2) * aspect)
+                const vFovRad = verticalFOV * Math.PI / 180;
+                const hFovRad = 2 * Math.atan(Math.tan(vFovRad / 2) * aspect);
+                horizontalFOV = hFovRad * 180 / Math.PI;
+            } else {
+                // If no camera, assume square aspect ratio
+                horizontalFOV = verticalFOV;
+            }
+            
+            // Use FOV for uncertainty (values in degrees)
+            const uncertaintyVertical = verticalFOV/2;
+            const uncertaintyHorizontal = horizontalFOV/2;
+            
+            // Format maxRange and baseAltitude to 3 decimal places
+            const maxRangeFormatted = maxRange === -1 ? -1 : maxRange.toFixed(3);
+            const baseAltitudeFormatted = baseAltitude.toFixed(3);
+            
+            csv += `${timestamp},${posENU.x},${posENU.y},${posENU.z},${headingENU.x},${headingENU.y},${headingENU.z},${maxRangeFormatted},${uncertaintyVertical},${uncertaintyHorizontal},${originLatDeg},${originLonDeg},${baseAltitudeFormatted}\n`;
         }
 
         // Save the file
@@ -165,9 +215,9 @@ export class CNodeLOS extends CNodeTrack {
         
         for (let i = 0; i < dataLines.length; i++) {
             const parts = dataLines[i].split(',').map(parseFloat);
-            if (parts.length !== 10) continue;
+            if (parts.length !== 13) continue;
             
-            const [timestamp, x, y, z, dx, dy, dz, maxRange, uncertaintyV, uncertaintyH] = parts;
+            const [timestamp, x, y, z, dx, dy, dz, maxRange, uncertaintyV, uncertaintyH, originLatDeg, originLonDeg, baseAltitude] = parts;
             
             // Get original data
             const originalData = this.getValueFrame(i);

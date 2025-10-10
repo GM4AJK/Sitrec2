@@ -64,6 +64,14 @@
         .stat {
             margin: 3px 0;
         }
+        .checkbox-group {
+            margin: 5px 0;
+        }
+        .checkbox-group label {
+            display: inline;
+            font-weight: normal;
+            margin-left: 5px;
+        }
     </style>
 </head>
 <body>
@@ -75,12 +83,25 @@
             <input type="file" id="fileInput" accept=".csv">
         </div>
         <div class="control-group">
+            <label>Display Options:</label>
+            <div class="checkbox-group">
+                <input type="checkbox" id="showBasePlane" checked>
+                <label for="showBasePlane">Base Altitude Plane</label>
+            </div>
+            <div class="checkbox-group">
+                <input type="checkbox" id="showMSLPlane" checked>
+                <label for="showMSLPlane">MSL Plane (z=0)</label>
+            </div>
+        </div>
+        <div class="control-group">
             <button id="resetCamera">Reset Camera</button>
         </div>
     </div>
     <div id="info">
         <div class="stat">Points: <span id="pointCount">0</span></div>
-        <div class="stat">LOS Vectors: <span id="losCount">0</span></div>
+        <div class="stat">LOS Vectors displayed: <span id="losCount">0</span></div>
+        <div class="stat">Origin: <span id="originLL">-</span></div>
+        <div class="stat">Base Altitude: <span id="baseAlt">-</span> m</div>
         <div class="stat">Controls: Left-click to orbit, Right-click to pan, Scroll to zoom</div>
     </div>
 
@@ -99,7 +120,9 @@
 
         let scene, camera, renderer, controls;
         let trackLine, groundLines, losLines;
+        let mslPlane, basePlane;
         let trackData = [];
+        let originLat = 0, originLon = 0, baseAltitude = 0;
 
         function init() {
             // Scene setup
@@ -110,7 +133,7 @@
             camera = new THREE.PerspectiveCamera(
                 60,
                 window.innerWidth / window.innerHeight,
-                0.1,
+                1,
                 100000
             );
             camera.position.set(2000, 2000, 2000);
@@ -153,17 +176,21 @@
             // Reset camera button
             document.getElementById('resetCamera').addEventListener('click', resetCamera);
 
+            // Checkbox handlers
+            document.getElementById('showMSLPlane').addEventListener('change', (e) => {
+                if (mslPlane) mslPlane.visible = e.target.checked;
+            });
+            document.getElementById('showBasePlane').addEventListener('change', (e) => {
+                if (basePlane) basePlane.visible = e.target.checked;
+            });
+
             // Start animation loop
             animate();
         }
 
         function createGroundGrid() {
-            const gridSize = 50000; // 50km total (25km in each direction)
-            const gridDivisions = 50; // 50 divisions = 1km per division
-            const gridHelper = new THREE.GridHelper(gridSize, gridDivisions, 0xffffff, 0xffffff);
-            gridHelper.position.y = 0;
-            scene.add(gridHelper);
-
+            // Ground grid is now part of the MSL plane, so we only add the axes helper
+            
             // Add axes helper
             const axesHelper = new THREE.AxesHelper(1000);
             scene.add(axesHelper);
@@ -235,6 +262,55 @@
             scene.add(sprite);
         }
 
+        function createGroundPlanes() {
+            // Remove existing planes if any
+            if (mslPlane) scene.remove(mslPlane);
+            if (basePlane) scene.remove(basePlane);
+
+            const planeSize = 50000; // 50km x 50km
+            const gridDivisions = 5; // 50 divisions = 1km per division
+
+            // MSL Plane at z=0 (dimmer and bluer) - this is a group containing plane + grid
+            mslPlane = new THREE.Group();
+            // for MSL we just have a grid
+            // MSL grid (white for visibility) - ignores depth buffer to always render on top
+            const mslGridHelper = new THREE.GridHelper(planeSize, gridDivisions, 0xffffff, 0xffffff);
+            mslGridHelper.material.opacity = 0.5; // Same brightness as base grid
+            mslGridHelper.material.transparent = true;
+            mslPlane.add(mslGridHelper);
+            
+            mslPlane.position.y = 0; // At z=0 in ENU (y in Three.js)
+            mslPlane.visible = document.getElementById('showMSLPlane').checked;
+            scene.add(mslPlane);
+
+            // Base Altitude Plane (white) - this is a group containing plane + grid
+            basePlane = new THREE.Group();
+            
+            // Base plane surface
+            const basePlaneGeometry = new THREE.PlaneGeometry(planeSize, planeSize);
+            const baseMaterial = new THREE.MeshBasicMaterial({
+                color: 0x408040, // greenish color
+                side: THREE.DoubleSide,
+                transparent: false,
+                opacity: 1.0
+            });
+            const basePlaneMesh = new THREE.Mesh(basePlaneGeometry, baseMaterial);
+            basePlaneMesh.rotation.x = -Math.PI / 2; // Rotate to be horizontal
+            basePlane.add(basePlaneMesh);
+            
+            // Base grid (full brightness) - ignores depth buffer to always render on top
+            const baseGridHelper = new THREE.GridHelper(planeSize, gridDivisions, 0xffffff, 0xffffff);
+            baseGridHelper.material.opacity = 0.5; // Full brightness
+            baseGridHelper.material.transparent = true;
+            baseGridHelper.material.depthTest = false; // Ignore depth buffer, always visible
+            basePlane.add(baseGridHelper);
+            
+            // Position at baseAltitude (ENU z-coordinate, which is Three.js y)
+            basePlane.position.y = baseAltitude;
+            basePlane.visible = document.getElementById('showBasePlane').checked;
+            scene.add(basePlane);
+        }
+
         function handleFileSelect(event) {
             const file = event.target.files[0];
             if (!file) return;
@@ -262,7 +338,14 @@
                 const parts = line.split(',').map(s => s.trim());
                 if (parts.length < 10) continue;
 
-                const [timestamp, x, y, z, dx, dy, dz, maxRange, uncertaintyV, uncertaintyH] = parts.map(parseFloat);
+                const [timestamp, x, y, z, dx, dy, dz, maxRange, uncertaintyV, uncertaintyH, originLatVal, originLonVal, baseAltitudeVal] = parts.map(parseFloat);
+                
+                // Store origin and base altitude from first line
+                if (trackData.length === 0) {
+                    originLat = originLatVal || 0;
+                    originLon = originLonVal || 0;
+                    baseAltitude = baseAltitudeVal || 0;
+                }
                 
                 // Handle maxRange: -1 indicates infinity, use 100km (100000m) for visualization
                 const displayMaxRange = maxRange < 0 ? 100000 : maxRange;
@@ -280,6 +363,9 @@
                 return;
             }
 
+            // Create ground planes with the base altitude
+            createGroundPlanes();
+
             // Render track
             renderTrack();
             renderGroundLines();
@@ -288,6 +374,8 @@
             // Update info
             document.getElementById('pointCount').textContent = trackData.length;
             document.getElementById('losCount').textContent = Math.ceil(trackData.length / 30);
+            document.getElementById('originLL').textContent = `${originLat.toFixed(6)}, ${originLon.toFixed(6)}`;
+            document.getElementById('baseAlt').textContent = baseAltitude.toFixed(3);
 
             // Center camera on track
             centerCameraOnTrack();

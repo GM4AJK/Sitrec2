@@ -280,6 +280,8 @@ export function extractFOV(value) {
     if (typeof value === "number") {
         return value;
     } else if (value.misbRow !== undefined) {
+        // Note: some tracks have both misbRow and vFOV
+        // in that case, we'll ignore the vFOV and just use the MISB row
         return value.misbRow[MISB.SensorVerticalFieldofView];
     } else if (value.vFOV !== undefined) {
         // it's a track with a vFOV member
