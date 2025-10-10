@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sitrec Tools</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            line-height: 1.6;
+        }
+        h1 {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+        }
+        h2 {
+            color: #555;
+            margin-top: 30px;
+        }
+        .tool {
+            background: #f8f9fa;
+            border-left: 4px solid #007bff;
+            padding: 15px;
+            margin: 20px 0;
+        }
+        .tool h3 {
+            margin-top: 0;
+            color: #007bff;
+        }
+        .tool a {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 8px 16px;
+            text-decoration: none;
+            border-radius: 4px;
+            margin-top: 10px;
+        }
+        .tool a:hover {
+            background: #0056b3;
+        }
+        ul {
+            margin: 10px 0;
+        }
+        li {
+            margin: 5px 0;
+        }
+        .sample-link {
+            color: #28a745;
+            text-decoration: none;
+        }
+        .sample-link:hover {
+            text-decoration: underline;
+        }
+    </style>
+</head>
+<body>
+    <h1>Sitrec Tools</h1>
+    <p>Standalone tools for working with Sitrec data.</p>
+
+    <div class="tool">
+        <h3>LOS CSV Viewer</h3>
+        <p>Interactive 3D visualization tool for Line of Sight (LOS) CSV data exported from Sitrec.</p>
+        <p><strong>Features:</strong></p>
+        <ul>
+            <li>50km x 50km ground grid (1km divisions) with white lines on grey background</li>
+            <li>Large red north arrow with "N" label at origin</li>
+            <li>3D track visualization with sensor positions</li>
+            <li>Ground projection lines</li>
+            <li>LOS vectors (every 30th frame) extending to maxRange</li>
+            <li>Interactive orbit controls (left-click to orbit, right-click to pan, scroll to zoom)</li>
+        </ul>
+        <a href="los-viewer.html">Open LOS Viewer</a>
+        <p style="margin-top: 10px;">
+            <a href="sample-los.csv" class="sample-link" download>Download Sample CSV</a> for testing
+        </p>
+    </div>
+
+    <h2>Usage</h2>
+    <ol>
+        <li>Export LOS data from Sitrec using the "CSV" button on any LOS node</li>
+        <li>Open the appropriate tool from the list above</li>
+        <li>Load your exported CSV file</li>
+        <li>Interact with the visualization</li>
+    </ol>
+
+    <h2>Documentation</h2>
+    <p>For detailed information about each tool, see the <a href="README.md">README.md</a> file.</p>
+
+    <h2>Technical Details</h2>
+    <p>All tools use a local copy of <strong>Three.js r180</strong> (core module + OrbitControls) in the <code>three.js/</code> directory. This ensures no external CDN dependencies are required.</p>
+
+    <hr style="margin-top: 40px;">
+    <p style="text-align: center; color: #666; font-size: 14px;">
+        Part of <a href="../">Sitrec</a> - Situation Recreation Tool
+    </p>
+</body>
+</html>

@@ -23,6 +23,9 @@ const patterns = [
     // This is currently not used
     { from: "./src/workers/*.js", to:""},
     { from: "./src/PixelFilters.js", to:"./src"},
+    
+    // Copy tools directory
+    { from: "tools", to: "./tools"},
 ];
 
 // Only copy sitrecServer and config.php in production or non-Docker environments

@@ -1,0 +1,434 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LOS CSV Viewer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #container {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+        }
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 15px;
+            border-radius: 5px;
+            z-index: 100;
+            max-width: 300px;
+        }
+        #controls h3 {
+            margin: 0 0 10px 0;
+            font-size: 16px;
+        }
+        #fileInput {
+            margin-bottom: 10px;
+        }
+        #info {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            background: rgba(255, 255, 255, 0.9);
+            padding: 10px;
+            border-radius: 5px;
+            z-index: 100;
+            font-size: 12px;
+            max-width: 300px;
+        }
+        .control-group {
+            margin-bottom: 10px;
+        }
+        label {
+            display: block;
+            margin-bottom: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+        input[type="file"] {
+            font-size: 12px;
+        }
+        button {
+            padding: 5px 10px;
+            font-size: 12px;
+            cursor: pointer;
+        }
+        .stat {
+            margin: 3px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="container"></div>
+    <div id="controls">
+        <h3>LOS CSV Viewer</h3>
+        <div class="control-group">
+            <label for="fileInput">Load CSV File:</label>
+            <input type="file" id="fileInput" accept=".csv">
+        </div>
+        <div class="control-group">
+            <button id="resetCamera">Reset Camera</button>
+        </div>
+    </div>
+    <div id="info">
+        <div class="stat">Points: <span id="pointCount">0</span></div>
+        <div class="stat">LOS Vectors: <span id="losCount">0</span></div>
+        <div class="stat">Controls: Left-click to orbit, Right-click to pan, Scroll to zoom</div>
+    </div>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "./three.js/three.module.js",
+            "three/addons/": "./three.js/addons/"
+        }
+    }
+    </script>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+        let scene, camera, renderer, controls;
+        let trackLine, groundLines, losLines;
+        let trackData = [];
+
+        function init() {
+            // Scene setup
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x808080); // Grey
+
+            // Camera setup
+            camera = new THREE.PerspectiveCamera(
+                60,
+                window.innerWidth / window.innerHeight,
+                0.1,
+                100000
+            );
+            camera.position.set(2000, 2000, 2000);
+            camera.lookAt(0, 0, 0);
+
+            // Renderer setup
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('container').appendChild(renderer.domElement);
+
+            // Controls setup
+            controls = new OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            controls.screenSpacePanning = false;
+            controls.minDistance = 10;
+            controls.maxDistance = 50000;
+
+            // Lighting
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6);
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+            directionalLight.position.set(100, 200, 100);
+            scene.add(directionalLight);
+
+            // Create ground grid (1km = 1000m)
+            createGroundGrid();
+            
+            // Create north arrow
+            createNorthArrow();
+
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+
+            // File input handler
+            document.getElementById('fileInput').addEventListener('change', handleFileSelect);
+
+            // Reset camera button
+            document.getElementById('resetCamera').addEventListener('click', resetCamera);
+
+            // Start animation loop
+            animate();
+        }
+
+        function createGroundGrid() {
+            const gridSize = 50000; // 50km total (25km in each direction)
+            const gridDivisions = 50; // 50 divisions = 1km per division
+            const gridHelper = new THREE.GridHelper(gridSize, gridDivisions, 0xffffff, 0xffffff);
+            gridHelper.position.y = 0;
+            scene.add(gridHelper);
+
+            // Add axes helper
+            const axesHelper = new THREE.AxesHelper(1000);
+            scene.add(axesHelper);
+        }
+
+        function createNorthArrow() {
+            // Create a big red arrow pointing north (negative Z direction in Three.js)
+            const arrowLength = 500; // 500m long arrow (1/10th of original 5km)
+            const arrowHeadLength = 100; // 100m arrow head (1/10th of original 1km)
+            const arrowHeadWidth = 25; // 25m arrow head width (1/10th of original 500m, then halved)
+            const shaftRadius = arrowHeadWidth * 0.1; // 10% of arrowhead width = 2.5m
+            
+            const arrowGroup = new THREE.Group();
+            const redMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            
+            // Create cylinder shaft
+            const shaftGeometry = new THREE.CylinderGeometry(
+                shaftRadius,
+                shaftRadius,
+                arrowLength,
+                16
+            );
+            const shaft = new THREE.Mesh(shaftGeometry, redMaterial);
+            // Position shaft: cylinder is created along Y axis, we need it along Z
+            // Rotate 90 degrees around X axis to point along -Z
+            shaft.rotation.x = Math.PI / 2;
+            shaft.position.z = -arrowLength / 2; // Center the shaft
+            arrowGroup.add(shaft);
+            
+            // Create cone arrowhead
+            const coneGeometry = new THREE.ConeGeometry(
+                arrowHeadWidth,
+                arrowHeadLength,
+                16
+            );
+            const cone = new THREE.Mesh(coneGeometry, redMaterial);
+            // Rotate cone to point along -Z (cone points up by default, so rotate -90° around X)
+            cone.rotation.x = -Math.PI / 2;
+            cone.position.z = -(arrowLength + arrowHeadLength / 2);
+            arrowGroup.add(cone);
+            
+            scene.add(arrowGroup);
+            
+            // Create "N" text using a canvas texture
+            const canvas = document.createElement('canvas');
+            canvas.width = 256;
+            canvas.height = 256;
+            const context = canvas.getContext('2d');
+            
+            // Draw "N" on canvas
+            context.fillStyle = 'red';
+            context.font = 'bold 200px Arial';
+            context.textAlign = 'center';
+            context.textBaseline = 'middle';
+            context.fillText('N', 128, 128);
+            
+            // Create texture from canvas
+            const texture = new THREE.CanvasTexture(canvas);
+            
+            // Create sprite with the texture
+            const spriteMaterial = new THREE.SpriteMaterial({ 
+                map: texture,
+                depthTest: false,
+                depthWrite: false
+            });
+            const sprite = new THREE.Sprite(spriteMaterial);
+            sprite.position.set(0, 50, -(arrowLength + arrowHeadLength + 50)); // Position at end of arrow, 50m above ground
+            sprite.scale.set(100, 100, 1); // 100m x 100m sprite (1/10th of original 1km)
+            scene.add(sprite);
+        }
+
+        function handleFileSelect(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                const csvContent = e.target.result;
+                parseAndRenderCSV(csvContent);
+            };
+            reader.readAsText(file);
+        }
+
+        function parseAndRenderCSV(csvContent) {
+            // Clear existing track data
+            trackData = [];
+            if (trackLine) scene.remove(trackLine);
+            if (groundLines) scene.remove(groundLines);
+            if (losLines) scene.remove(losLines);
+
+            // Parse CSV
+            const lines = csvContent.split('\n');
+            const dataLines = lines.slice(1).filter(line => line.trim().length > 0);
+
+            for (const line of dataLines) {
+                const parts = line.split(',').map(s => s.trim());
+                if (parts.length < 10) continue;
+
+                const [timestamp, x, y, z, dx, dy, dz, maxRange, uncertaintyV, uncertaintyH] = parts.map(parseFloat);
+                
+                // Handle maxRange: -1 indicates infinity, use 100km (100000m) for visualization
+                const displayMaxRange = maxRange < 0 ? 100000 : maxRange;
+                
+                trackData.push({
+                    position: new THREE.Vector3(x, z, -y), // Convert ENU to Three.js (x=east, y=up->z, z=north->-y)
+                    direction: new THREE.Vector3(dx, dz, -dy).normalize(),
+                    maxRange: displayMaxRange,
+                    timestamp: timestamp
+                });
+            }
+
+            if (trackData.length === 0) {
+                alert('No valid data found in CSV file');
+                return;
+            }
+
+            // Render track
+            renderTrack();
+            renderGroundLines();
+            renderLOSVectors();
+
+            // Update info
+            document.getElementById('pointCount').textContent = trackData.length;
+            document.getElementById('losCount').textContent = Math.ceil(trackData.length / 30);
+
+            // Center camera on track
+            centerCameraOnTrack();
+        }
+
+        function renderTrack() {
+            // Create track line (3px thick)
+            const points = trackData.map(d => d.position);
+            const geometry = new THREE.BufferGeometry().setFromPoints(points);
+            const material = new THREE.LineBasicMaterial({ 
+                color: 0xff0000, 
+                linewidth: 3 // Note: linewidth > 1 only works with WebGLRenderer on Windows
+            });
+            trackLine = new THREE.Line(geometry, material);
+            scene.add(trackLine);
+
+            // Add spheres at each point for better visibility
+            const sphereGeometry = new THREE.SphereGeometry(2, 8, 8);
+            const sphereMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 });
+            
+            for (const data of trackData) {
+                const sphere = new THREE.Mesh(sphereGeometry, sphereMaterial);
+                sphere.position.copy(data.position);
+                trackLine.add(sphere);
+            }
+        }
+
+        function renderGroundLines() {
+            // Create lines from each track point to the ground (1px)
+            const groundLinesGroup = new THREE.Group();
+            
+            for (const data of trackData) {
+                const points = [
+                    data.position,
+                    new THREE.Vector3(data.position.x, 0, data.position.z)
+                ];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const material = new THREE.LineBasicMaterial({ 
+                    color: 0x0000ff,
+                    opacity: 0.3,
+                    transparent: true
+                });
+                const line = new THREE.Line(geometry, material);
+                groundLinesGroup.add(line);
+            }
+            
+            groundLines = groundLinesGroup;
+            scene.add(groundLines);
+        }
+
+        function renderLOSVectors() {
+            // Render every 30th LOS vector extending to maxRange
+            const losLinesGroup = new THREE.Group();
+            
+            for (let i = 0; i < trackData.length; i += 30) {
+                const data = trackData[i];
+                const endPoint = data.position.clone().add(
+                    data.direction.clone().multiplyScalar(data.maxRange)
+                );
+                
+                const points = [data.position, endPoint];
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const material = new THREE.LineBasicMaterial({ 
+                    color: 0x00ff00,
+                    opacity: 0.6,
+                    transparent: true
+                });
+                const line = new THREE.Line(geometry, material);
+                losLinesGroup.add(line);
+
+                // Add arrow head
+                const arrowHelper = new THREE.ArrowHelper(
+                    data.direction,
+                    data.position,
+                    data.maxRange,
+                    0x00ff00,
+                    20, // arrow head length
+                    10  // arrow head width
+                );
+                arrowHelper.line.material.opacity = 0.6;
+                arrowHelper.line.material.transparent = true;
+                arrowHelper.cone.material.opacity = 0.6;
+                arrowHelper.cone.material.transparent = true;
+                losLinesGroup.add(arrowHelper);
+            }
+            
+            losLines = losLinesGroup;
+            scene.add(losLines);
+        }
+
+        function centerCameraOnTrack() {
+            if (trackData.length === 0) return;
+
+            // Calculate bounding box
+            const box = new THREE.Box3();
+            for (const data of trackData) {
+                box.expandByPoint(data.position);
+            }
+
+            const center = box.getCenter(new THREE.Vector3());
+            const size = box.getSize(new THREE.Vector3());
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = camera.fov * (Math.PI / 180);
+            let cameraZ = Math.abs(maxDim / 2 / Math.tan(fov / 2));
+            cameraZ *= 2; // Add some padding
+
+            camera.position.set(
+                center.x + cameraZ * 0.5,
+                center.y + cameraZ * 0.5,
+                center.z + cameraZ * 0.5
+            );
+            camera.lookAt(center);
+            controls.target.copy(center);
+            controls.update();
+        }
+
+        function resetCamera() {
+            if (trackData.length > 0) {
+                centerCameraOnTrack();
+            } else {
+                camera.position.set(2000, 2000, 2000);
+                camera.lookAt(0, 0, 0);
+                controls.target.set(0, 0, 0);
+                controls.update();
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            controls.update();
+            renderer.render(scene, camera);
+        }
+
+        // Initialize the application
+        init();
+    </script>
+</body>
+</html>

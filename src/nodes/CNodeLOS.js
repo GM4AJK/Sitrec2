@@ -100,8 +100,21 @@ export class CNodeLOS extends CNodeTrack {
             const startMS = GlobalDateTimeNode.dateStart.valueOf();
             const timestamp = Math.round(startMS + f * 1000 * (Sit.simSpeed ?? 1) / Sit.fps);
             
-            // Add to CSV - placeholder values for maxRange and uncertainties
-            const maxRange = 10000; // 10km default max range
+            // Calculate maxRange based on ground plane collision
+            // Ground plane is at z=0 in ENU coordinates
+            // Ray equation: P = posENU + t * headingENU
+            // For ground intersection: posENU.z + t * headingENU.z = 0
+            // Solve for t: t = -posENU.z / headingENU.z
+            let maxRange;
+            if (headingENU.z < 0 && posENU.z > 0) {
+                // Ray is pointing downward and position is above ground
+                const t = -posENU.z / headingENU.z;
+                maxRange = t; // Distance to ground intersection
+            } else {
+                // Ray doesn't intersect ground (pointing up or parallel, or already below ground)
+                maxRange = -1; // Indicates infinity
+            }
+            
             const uncertaintyVertical = 0.1; // placeholder
             const uncertaintyHorizontal = 0.1; // placeholder
             
