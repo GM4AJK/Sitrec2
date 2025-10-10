@@ -1,15 +1,14 @@
-import {par} from "./par";
 import {utcDate} from "./utils";
 import {GlobalDateTimeNode} from "./Globals";
 
 export function AddTimeDisplayToUI(viewUI, x, y, size, color, align = "center") {
 
-    viewUI.addText("videoTimeLabelUTC", "2022-08-18T07:16:15.540Z", x, y, size, color, align).listen(par, "frame", function (v) {
+    viewUI.addText("videoTimeLabelUTC", "2022-08-18T07:16:15.540Z", x, y, size, color, align).update(function () {
         var nowDate = GlobalDateTimeNode.dateNow;
         this.text = utcDate(nowDate);
     });
 
-    viewUI.addText("videoTimeLabelTZ", "", x, y + 100 * ((Math.abs(size)) / viewUI.heightPx + 2), size, "pink", align).listen(par, "frame", function (v) {
+    viewUI.addText("videoTimeLabelTZ", "", x, y + 100 * ((Math.abs(size)) / viewUI.heightPx + 2), size, "pink", align).update(function () {
         var nowDate = GlobalDateTimeNode.dateNow;
 
         this.y = (y + 100 * (Math.abs(size)+2) / viewUI.heightPx)/100; // PATCH Update y position to match the new text element
@@ -18,12 +17,12 @@ export function AddTimeDisplayToUI(viewUI, x, y, size, color, align = "center") 
             " " + GlobalDateTimeNode.getTimeZoneName();
     });
 
-    viewUI.addInput("dateTimeStart", "dateTimeStart"); // Adding dateTimeStart as in input force this to update when dateTimeStart is updated
+//    viewUI.addInput("dateTimeStart", "dateTimeStart"); // Adding dateTimeStart as in input force this to update when dateTimeStart is updated
 }
 
 export function AddTimeDisplayToUIOld(viewUI, x, y, size, color, align = "center") {
 
-    viewUI.addText("videoTimeLabel", "2022-08-18T07:16:15.540Z", x, y, size, color, align).listen(par, "frame", function (v) {
+    viewUI.addText("videoTimeLabel", "2022-08-18T07:16:15.540Z", x, y, size, color, align).update(function () {
         var nowDate = GlobalDateTimeNode.dateNow;
 
 //        this.text = utcDate(nowDate) + "  (" + localDate(nowDate)+")"
@@ -32,7 +31,7 @@ export function AddTimeDisplayToUIOld(viewUI, x, y, size, color, align = "center
             +" "+GlobalDateTimeNode.getTimeZoneName()
             +")"
     })
-    viewUI.addInput("dateTimeStart", "dateTimeStart") // Adding dateTimeStart as in input force this to update when dateTimeStart is updated
+  //  viewUI.addInput("dateTimeStart", "dateTimeStart") // Adding dateTimeStart as in input force this to update when dateTimeStart is updated
 }
 
 
