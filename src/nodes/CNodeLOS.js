@@ -86,7 +86,11 @@ export class CNodeLOS extends CNodeTrack {
         // Get the base altitude (ground elevation at the origin)
         const baseAltitude = elevationAtLL(originLatDeg, originLonDeg);
 
-        for (let f = 0; f < this.frames; f++) {
+        // Use Sit.aFrame and Sit.bFrame to limit the export range
+        const startFrame = Sit.aFrame ?? 0;
+        const endFrame = Sit.bFrame ?? (this.frames - 1);
+
+        for (let f = startFrame; f <= endFrame; f++) {
             const data = this.getValueFrame(f);
             if (!data || !data.position || !data.heading) {
                 continue;

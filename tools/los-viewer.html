@@ -100,6 +100,8 @@
     <div id="info">
         <div class="stat">Points: <span id="pointCount">0</span></div>
         <div class="stat">LOS Vectors displayed: <span id="losCount">0</span></div>
+        <div class="stat">Start Time (UTC): <span id="startTime">-</span></div>
+        <div class="stat">Duration: <span id="duration">-</span> seconds</div>
         <div class="stat">Origin: <span id="originLL">-</span></div>
         <div class="stat">Base Altitude: <span id="baseAlt">-</span> m</div>
         <div class="stat">Controls: Left-click to orbit, Right-click to pan, Scroll to zoom</div>
@@ -371,9 +373,20 @@
             renderGroundLines();
             renderLOSVectors();
 
+            // Calculate start time and duration
+            const firstTimestamp = trackData[0].timestamp;
+            const lastTimestamp = trackData[trackData.length - 1].timestamp;
+            const durationSeconds = ((lastTimestamp - firstTimestamp) / 1000).toFixed(2);
+            
+            // Format start time as UTC string
+            const startDate = new Date(firstTimestamp);
+            const startTimeUTC = startDate.toISOString().replace('T', ' ').replace('Z', ' UTC');
+            
             // Update info
             document.getElementById('pointCount').textContent = trackData.length;
             document.getElementById('losCount').textContent = Math.ceil(trackData.length / 30);
+            document.getElementById('startTime').textContent = startTimeUTC;
+            document.getElementById('duration').textContent = durationSeconds;
             document.getElementById('originLL').textContent = `${originLat.toFixed(6)}, ${originLon.toFixed(6)}`;
             document.getElementById('baseAlt').textContent = baseAltitude.toFixed(3);
 
