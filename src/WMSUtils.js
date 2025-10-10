@@ -2,8 +2,6 @@
 // and name,
 
 
-import {assert} from "./assert";
-
 export class CTileMapping {
 
 // Latitude is common to both GoogleMapsCompatible and GoogleCRS84Quad
@@ -66,7 +64,7 @@ export class CTileMapping {
             "&WIDTH=256&HEIGHT=256" +
             "&STYLES=";
 
-        console.log("URL = " + url);
+//        console.log("URL = " + url);
         return url;
 
     }
