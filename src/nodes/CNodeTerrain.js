@@ -120,11 +120,13 @@ export class CNodeTerrain extends CNode {
 
         // Create a black sphere positioned at the center of the Earth
         // Radius is 1km less than the globe radius to prevent z-fighting
+        // Only visible when Globals.dynamicSubdivision is true
         const blackSphereRadius = wgs84.RADIUS - 1000;
         const blackSphereGeometry = new SphereGeometry(blackSphereRadius, 32, 32);
         const blackSphereMaterial = new MeshBasicMaterial({ color: 0x808080 });
         this.blackSphere = new Mesh(blackSphereGeometry, blackSphereMaterial);
         this.blackSphere.position.set(0, -wgs84.RADIUS, 0);
+        this.blackSphere.visible = Globals.dynamicSubdivision === true;
         GlobalScene.add(this.blackSphere);
 
         this.maps = []
@@ -318,6 +320,13 @@ export class CNodeTerrain extends CNode {
         }
 
         super.dispose();
+    }
+
+    updateBlackSphereVisibility() {
+        // Black sphere should only be visible when Globals.dynamicSubdivision is true
+        if (this.blackSphere) {
+            this.blackSphere.visible = Globals.dynamicSubdivision === true;
+        }
     }
 
     unloadMap(mapID) {

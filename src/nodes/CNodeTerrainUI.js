@@ -328,6 +328,9 @@ export class CNodeTerrainUI extends CNode {
             
             // Update globe visibility based on new state
             this.updateGlobeVisibility();
+            
+            // Update black sphere visibility based on new state
+            this.terrainNode.updateBlackSphereVisibility();
         });
 
         // setMapType is async because it loads the capabilities
