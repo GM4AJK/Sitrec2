@@ -1484,6 +1484,152 @@ export class QuadTreeTile {
         return material;
     }
 
+    /**
+     * Create a material from ancestor tile's texture by extracting the appropriate region
+     * This handles cases where the ancestor is multiple zoom levels away (not just immediate parent)
+     * @param {QuadTreeTile} ancestorTile - The ancestor tile at maxZoom to extract texture from
+     * @returns {Material} A material with the resampled texture from ancestor
+     */
+    buildMaterialFromAncestor(ancestorTile) {
+        if (!ancestorTile || !ancestorTile.mesh || !ancestorTile.mesh.material || !ancestorTile.mesh.material.map) {
+            console.warn(`Cannot build material from ancestor for tile ${this.key()}: ancestor data not available`);
+            return null;
+        }
+
+        // Calculate zoom level difference
+        const zoomDiff = this.z - ancestorTile.z;
+        if (zoomDiff <= 0) {
+            console.warn(`Cannot build material from ancestor for tile ${this.key()}: invalid zoom difference ${zoomDiff}`);
+            return null;
+        }
+
+        // Calculate which region of the ancestor tile this tile corresponds to
+        // For example, if ancestor is at zoom 7 and this tile is at zoom 9 (diff=2):
+        // - The ancestor covers a 4x4 grid of tiles at zoom 9 (2^2 = 4)
+        // - We need to find which cell in that 4x4 grid this tile occupies
+        const scale = Math.pow(2, zoomDiff); // e.g., 2^2 = 4 for zoom diff of 2
+        
+        // Calculate this tile's position relative to the ancestor's coverage area
+        const relativeX = this.x - (ancestorTile.x * scale);
+        const relativeY = this.y - (ancestorTile.y * scale);
+        
+        // Normalize to 0-1 range to get the region within the ancestor texture
+        const regionX = relativeX / scale; // e.g., 0, 0.25, 0.5, 0.75 for scale=4
+        const regionY = relativeY / scale;
+        const regionWidth = 1 / scale; // e.g., 0.25 for scale=4
+        const regionHeight = 1 / scale;
+
+        // Get ancestor texture
+        const ancestorTexture = ancestorTile.mesh.material.map;
+        const img = ancestorTexture.image;
+        if (!img) {
+            console.warn(`Cannot build material from ancestor for tile ${this.key()}: ancestor texture has no image`);
+            return null;
+        }
+
+        // Create a canvas to extract and resample the region
+        const canvas = document.createElement('canvas');
+        const size = 256; // Standard tile texture size
+        canvas.width = size;
+        canvas.height = size;
+        const ctx = canvas.getContext('2d');
+
+        // Calculate source rectangle in ancestor texture
+        const srcX = regionX * img.width;
+        const srcY = regionY * img.height;
+        const srcWidth = regionWidth * img.width;
+        const srcHeight = regionHeight * img.height;
+
+        // Draw the region scaled up to full size
+        ctx.drawImage(img, srcX, srcY, srcWidth, srcHeight, 0, 0, size, size);
+
+        // Create texture from canvas
+        const texture = new CanvasTexture(canvas);
+        texture.needsUpdate = true;
+
+        // Create and return material
+        const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+        
+        return material;
+    }
+
+    /**
+     * Create elevation data from ancestor tile's elevation by extracting and resampling the appropriate region
+     * This handles cases where the ancestor is multiple zoom levels away (not just immediate parent)
+     * @param {QuadTreeTile} ancestorTile - The ancestor tile at maxZoom to extract elevation from
+     * @param {number} dataSize - The size of the output elevation array (typically 256)
+     * @returns {Object} Object with {elevation: Float32Array, shape: [width, height]} or null if failed
+     */
+    buildElevationFromAncestor(ancestorTile, dataSize = 256) {
+        if (!ancestorTile || !ancestorTile.elevation || !ancestorTile.shape) {
+            console.warn(`Cannot build elevation from ancestor for tile ${this.key()}: ancestor data not available`);
+            return null;
+        }
+
+        // Calculate zoom level difference
+        const zoomDiff = this.z - ancestorTile.z;
+        if (zoomDiff <= 0) {
+            console.warn(`Cannot build elevation from ancestor for tile ${this.key()}: invalid zoom difference ${zoomDiff}`);
+            return null;
+        }
+
+        // Calculate which region of the ancestor tile this tile corresponds to
+        const scale = Math.pow(2, zoomDiff); // e.g., 2^2 = 4 for zoom diff of 2
+        
+        // Calculate this tile's position relative to the ancestor's coverage area
+        const relativeX = this.x - (ancestorTile.x * scale);
+        const relativeY = this.y - (ancestorTile.y * scale);
+        
+        // Get ancestor elevation data dimensions
+        const [ancestorWidth, ancestorHeight] = ancestorTile.shape;
+        
+        // Calculate the region within the ancestor elevation data
+        const regionStartX = Math.floor((relativeX / scale) * ancestorWidth);
+        const regionStartY = Math.floor((relativeY / scale) * ancestorHeight);
+        const regionWidth = Math.ceil(ancestorWidth / scale);
+        const regionHeight = Math.ceil(ancestorHeight / scale);
+        
+        // Create output elevation array
+        const elevation = new Float32Array(dataSize * dataSize);
+        
+        // Resample the ancestor elevation data to the output size
+        // Use bilinear interpolation for smoother results
+        for (let y = 0; y < dataSize; y++) {
+            for (let x = 0; x < dataSize; x++) {
+                // Map output coordinates to ancestor region coordinates
+                const srcX = regionStartX + (x / dataSize) * regionWidth;
+                const srcY = regionStartY + (y / dataSize) * regionHeight;
+                
+                // Bilinear interpolation
+                const x0 = Math.floor(srcX);
+                const x1 = Math.min(x0 + 1, ancestorWidth - 1);
+                const y0 = Math.floor(srcY);
+                const y1 = Math.min(y0 + 1, ancestorHeight - 1);
+                
+                const fx = srcX - x0;
+                const fy = srcY - y0;
+                
+                // Get the four surrounding elevation values
+                const e00 = ancestorTile.elevation[y0 * ancestorWidth + x0];
+                const e10 = ancestorTile.elevation[y0 * ancestorWidth + x1];
+                const e01 = ancestorTile.elevation[y1 * ancestorWidth + x0];
+                const e11 = ancestorTile.elevation[y1 * ancestorWidth + x1];
+                
+                // Bilinear interpolation
+                const e0 = e00 * (1 - fx) + e10 * fx;
+                const e1 = e01 * (1 - fx) + e11 * fx;
+                const e = e0 * (1 - fy) + e1 * fy;
+                
+                elevation[y * dataSize + x] = e;
+            }
+        }
+        
+        return {
+            elevation: elevation,
+            shape: [dataSize, dataSize]
+        };
+    }
+
     // Static method to clear the entire material cache
     static clearMaterialCache() {
         // Dispose of all cached materials and their textures
@@ -2381,20 +2527,22 @@ export class QuadTreeTile {
         
         this.loaded = true; // mark the tile as loaded
 
-        this.map.scene.add(this.mesh); // add the mesh to the scene
-        if (this.skirtMesh) {
-            this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
-        }
-        this.added = true; // mark the tile as added to the scene
-        
-//        console.log(`addAfterLoaded: ${this.key()} - AFTER scene.add: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
-        
-        // Apply current layer mask (use tileLayers which may have been combined from multiple views)
+        // Only add to scene if tileLayers > 0 (tile should be visible)
+        // tileLayers=0 means tile is loaded for data only (e.g., ancestor tiles for resampling)
         if (this.tileLayers > 0) {
+            this.map.scene.add(this.mesh); // add the mesh to the scene
+            if (this.skirtMesh) {
+                this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
+            }
+            this.added = true; // mark the tile as added to the scene
+            
+//            console.log(`addAfterLoaded: ${this.key()} - AFTER scene.add: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
+            
+            // Apply current layer mask (use tileLayers which may have been combined from multiple views)
             this.map.setTileLayerMask(this, this.tileLayers);
+            
+//            console.log(`addAfterLoaded: ${this.key()} - FINAL: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
         }
-        
-//        console.log(`addAfterLoaded: ${this.key()} - FINAL: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
     }
 
     buildMesh() {

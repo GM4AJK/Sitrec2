@@ -45,7 +45,7 @@ export class QuadTreeMapElevation extends QuadTreeMap {
 
     activateTile(x,y,z, layerMask = 0) {
 
-//        console.log("NEW activateTile Elevation ", x, y, z);
+//        console.log(`activateTile Elevation ${z}/${x}/${y} layerMask=${layerMask} maxZoom=${this.maxZoom}`);
         let tile = this.getTile(x, y, z);
         if (tile) {
             // Tile already exists, just reactivate it
@@ -73,22 +73,151 @@ export class QuadTreeMapElevation extends QuadTreeMap {
                     }
                 });
             } else if (z > this.maxZoom) {
-                // If z is above maxZoom, create a dummy tile with zero elevation
-                // Create a zero elevation array with standard tile dimensions (256x256)
-                // This matches the typical elevation tile data size, not the world size
-                const dataSize = 256;
-                const elevation = new Float32Array(dataSize * dataSize);
-                // elevation is already initialized to zeros by Float32Array constructor
-                tile.elevation = elevation;
-                tile.shape = [dataSize, dataSize];
-                tile.elevationLoadFailed = false;
-                tile.isLoadingElevation = false;
-                // Immediately notify that the tile is loaded
-                Promise.resolve().then(() => {
-                    if (!this.controller.signal.aborted) {
-                        this.terrainNode.elevationTileLoaded(tile);
+                // If z is above maxZoom, try to create tile from ancestor elevation data at maxZoom
+                // Calculate which tile at maxZoom would contain this tile
+                const zoomDiff = z - this.maxZoom;
+                const scale = Math.pow(2, zoomDiff);
+                const ancestorX = Math.floor(x / scale);
+                const ancestorY = Math.floor(y / scale);
+                const ancestorZ = this.maxZoom;
+                
+                // Check if the ancestor tile at maxZoom exists and has elevation loaded
+                let ancestorTile = this.getTile(ancestorX, ancestorY, ancestorZ);
+                
+                // If ancestor doesn't exist or hasn't loaded elevation yet, force-load it
+                if (!ancestorTile || !ancestorTile.elevation || ancestorTile.elevationLoadFailed) {
+                    
+                    // Activate the ancestor tile to trigger loading (if it doesn't exist)
+                    // Pass layerMask=0 so ancestor is loaded but NOT visible in the scene
+                    if (!ancestorTile) {
+                        ancestorTile = this.activateTile(ancestorX, ancestorY, ancestorZ, 0);
                     }
-                });
+                    
+                    // If ancestor is still loading elevation, mark this tile as pending
+                    if (ancestorTile.isLoadingElevation || !ancestorTile.elevation) {
+                        
+                        // Mark tile as pending ancestor load
+                        tile.pendingAncestorLoad = true;
+                        tile.ancestorTileKey = `${ancestorZ}/${ancestorX}/${ancestorY}`;
+                        tile.isLoadingElevation = true;
+                        
+                        // Set up a callback to retry once ancestor loads
+                        const checkAncestorLoaded = () => {
+                            const loadedAncestor = this.getTile(ancestorX, ancestorY, ancestorZ);
+                            if (loadedAncestor && loadedAncestor.elevation && 
+                                !loadedAncestor.elevationLoadFailed && 
+                                !loadedAncestor.isLoadingElevation) {
+                                
+                                // Ancestor elevation is now loaded, extract data
+                                const dataSize = 256;
+                                const ancestorData = tile.buildElevationFromAncestor(loadedAncestor, dataSize);
+                                if (ancestorData) {
+                                    tile.elevation = ancestorData.elevation;
+                                    tile.shape = ancestorData.shape;
+                                    tile.usingParentData = true;
+                                    tile.elevationLoadFailed = false;
+                                    tile.isLoadingElevation = false;
+                                    tile.pendingAncestorLoad = false;
+                                    
+                                    // Notify that the tile is loaded
+                                    if (!this.controller.signal.aborted) {
+                                        this.terrainNode.elevationTileLoaded(tile);
+                                    }
+                                } else {
+                                    // Fallback to zero elevation if extraction failed
+                                    const elevation = new Float32Array(dataSize * dataSize);
+                                    tile.elevation = elevation;
+                                    tile.shape = [dataSize, dataSize];
+                                    tile.elevationLoadFailed = false;
+                                    tile.isLoadingElevation = false;
+                                    tile.pendingAncestorLoad = false;
+                                    
+                                    if (!this.controller.signal.aborted) {
+                                        this.terrainNode.elevationTileLoaded(tile);
+                                    }
+                                }
+                            }
+                        };
+                        
+                        // Poll for ancestor elevation completion
+                        if (ancestorTile.isLoadingElevation) {
+                            const pollInterval = setInterval(() => {
+                                if (!ancestorTile.isLoadingElevation) {
+                                    clearInterval(pollInterval);
+                                    checkAncestorLoaded();
+                                }
+                            }, 100);
+                            
+                            // Timeout after 10 seconds
+                            setTimeout(() => {
+                                clearInterval(pollInterval);
+                                // If still pending after timeout, fallback to zero elevation
+                                if (tile.pendingAncestorLoad) {
+                                    const dataSize = 256;
+                                    const elevation = new Float32Array(dataSize * dataSize);
+                                    tile.elevation = elevation;
+                                    tile.shape = [dataSize, dataSize];
+                                    tile.elevationLoadFailed = false;
+                                    tile.isLoadingElevation = false;
+                                    tile.pendingAncestorLoad = false;
+                                    
+                                    if (!this.controller.signal.aborted) {
+                                        this.terrainNode.elevationTileLoaded(tile);
+                                    }
+                                }
+                            }, 10000);
+                        }
+                        
+                        // Return early - tile will be completed when ancestor loads
+                        return tile;
+                    }
+                }
+                
+                // Ancestor is loaded, try to extract elevation from it
+                if (ancestorTile && ancestorTile.elevation && !ancestorTile.elevationLoadFailed) {
+                    // Extract elevation from ancestor tile
+                    const dataSize = 256;
+                    const ancestorData = tile.buildElevationFromAncestor(ancestorTile, dataSize);
+                    if (ancestorData) {
+                        tile.elevation = ancestorData.elevation;
+                        tile.shape = ancestorData.shape;
+                        tile.usingParentData = true; // Mark as using ancestor data
+                        tile.elevationLoadFailed = false;
+                        tile.isLoadingElevation = false;
+                        // Immediately notify that the tile is loaded
+                        Promise.resolve().then(() => {
+                            if (!this.controller.signal.aborted) {
+                                this.terrainNode.elevationTileLoaded(tile);
+                            }
+                        });
+                    } else {
+                        // Fallback to zero elevation if extraction failed
+                        const dataSize = 256;
+                        const elevation = new Float32Array(dataSize * dataSize);
+                        tile.elevation = elevation;
+                        tile.shape = [dataSize, dataSize];
+                        tile.elevationLoadFailed = false;
+                        tile.isLoadingElevation = false;
+                        Promise.resolve().then(() => {
+                            if (!this.controller.signal.aborted) {
+                                this.terrainNode.elevationTileLoaded(tile);
+                            }
+                        });
+                    }
+                } else {
+                    // Fallback: Create a zero elevation array if no ancestor data available
+                    const dataSize = 256;
+                    const elevation = new Float32Array(dataSize * dataSize);
+                    tile.elevation = elevation;
+                    tile.shape = [dataSize, dataSize];
+                    tile.elevationLoadFailed = false;
+                    tile.isLoadingElevation = false;
+                    Promise.resolve().then(() => {
+                        if (!this.controller.signal.aborted) {
+                            this.terrainNode.elevationTileLoaded(tile);
+                        }
+                    });
+                }
             } else {
                 // Normal tile loading for minZoom <= z <= maxZoom
                 tile.fetchElevationTile(this.controller.signal).then(tile => {
@@ -120,6 +249,8 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         tile.inactiveSince = undefined;
 
         this.refreshDebugGeometry(tile);
+        
+        return tile;
 
     }
 

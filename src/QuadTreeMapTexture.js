@@ -3,7 +3,6 @@ import {assert} from "./assert";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
 import {setRenderOne} from "./Globals";
-import * as LAYER from "./LayerMasks";
 import {showError} from "./showError";
 import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
@@ -188,6 +187,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
     // if tile exists, activate it, otherwise create it
     activateTile(x, y, z, layerMask = 0, useParentData = false) {
+        console.log(`activateTile Texture ${z}/${x}/${y} layerMask=${layerMask} useParentData=${useParentData} maxZoom=${this.maxZoom}`);
         let tile = this.getTile(x, y, z);
 
 
@@ -200,21 +200,21 @@ class QuadTreeMapTexture extends QuadTreeMap {
             // tile already exists, just activate it
             // maybe later rebuild a mesh if we unloaded it
 
-            if (tile.tileLayers === 0) {
-                // Tile was deactivated, re-add to scene
-                this.scene.add(tile.mesh); // add the mesh to the scene
-                if (tile.skirtMesh) {
-                    this.scene.add(tile.skirtMesh); // add the skirt mesh to the scene
-                }
-                tile.added = true; // mark the tile as added to the scene
-            }
-            
             // Combine the new layer mask with existing layers (don't overwrite)
             if (layerMask > 0) {
                 tile.tileLayers = (tile.tileLayers || 0) | layerMask;
+                
+                // If tile was deactivated (tileLayers was 0), re-add to scene
+                if (!tile.added) {
+                    this.scene.add(tile.mesh); // add the mesh to the scene
+                    if (tile.skirtMesh) {
+                        this.scene.add(tile.skirtMesh); // add the skirt mesh to the scene
+                    }
+                    tile.added = true; // mark the tile as added to the scene
+                }
             } else {
-                // Default case: activate for all layers
-                tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+                // layerMask=0 means load tile data but don't make it visible (e.g., for ancestor tiles)
+                tile.tileLayers = 0;
             }
             
             // Clear inactive timestamp since tile is now active
@@ -257,9 +257,9 @@ class QuadTreeMapTexture extends QuadTreeMap {
             tile.tileLayers = (tile.tileLayers || 0) | layerMask;
      //       console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via layerMask`);
         } else {
-            // Default case: activate for all layers
-            tile.tileLayers = LAYER.MASK_MAIN | LAYER.MASK_LOOK;
-     //       console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via default`);
+            // layerMask=0 means load tile data but don't make it visible (e.g., for ancestor tiles)
+            tile.tileLayers = 0;
+     //       console.log(`activateTile: ${key} - set tileLayers to ${tile.tileLayers.toString(2)} (${tile.tileLayers}) via layerMask=0`);
         }
 
         // Apply the layer mask to the tile's mesh objects immediately
@@ -316,31 +316,130 @@ class QuadTreeMapTexture extends QuadTreeMap {
             return tile;
         }
 
-        // If z is above maxZoom, create a dummy tile with black texture
+        // If z is above maxZoom, try to create tile from ancestor data at maxZoom
         if (z > this.maxZoom) {
-            // Create a black texture
-            const canvas = document.createElement('canvas');
-            canvas.width = 256;
-            canvas.height = 256;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, 256, 256);
+            // Calculate which tile at maxZoom would contain this tile
+            const zoomDiff = z - this.maxZoom;
+            const scale = Math.pow(2, zoomDiff);
+            const ancestorX = Math.floor(x / scale);
+            const ancestorY = Math.floor(y / scale);
+            const ancestorZ = this.maxZoom;
             
-            const blackTexture = new CanvasTexture(canvas);
-            blackTexture.minFilter = NearestFilter;
-            blackTexture.magFilter = NearestFilter;
+            // Check if the ancestor tile at maxZoom exists and is loaded
+            let ancestorTile = this.getTile(ancestorX, ancestorY, ancestorZ);
             
-            const material = new MeshStandardMaterial({
-                map: blackTexture,
-                metalness: 0,
-                roughness: 1
-            });
+            // If ancestor doesn't exist or isn't loaded yet, force-load it
+            if (!ancestorTile || !ancestorTile.loaded || 
+                !ancestorTile.mesh?.material?.map || ancestorTile.mesh.material.wireframe) {
+                
+                // Activate the ancestor tile to trigger loading (if it doesn't exist)
+                // Pass layerMask=0 so ancestor is loaded but NOT visible in the scene
+                if (!ancestorTile) {
+                    ancestorTile = this.activateTile(ancestorX, ancestorY, ancestorZ, 0, false);
+                }
+                
+                // If ancestor is still loading, mark this tile as pending and return
+                // The tile will be reactivated once the ancestor loads
+                if (!ancestorTile.loaded || !ancestorTile.mesh?.material?.map || 
+                    ancestorTile.mesh.material.wireframe) {
+                    
+                    // Mark tile as pending ancestor load
+                    tile.pendingAncestorLoad = true;
+                    tile.ancestorTileKey = `${ancestorZ}/${ancestorX}/${ancestorY}`;
+                    
+                    // Set up a callback to retry once ancestor loads
+                    // We'll check periodically or use a promise-based approach
+                    const checkAncestorLoaded = () => {
+                        const loadedAncestor = this.getTile(ancestorX, ancestorY, ancestorZ);
+                        if (loadedAncestor && loadedAncestor.loaded && 
+                            loadedAncestor.mesh?.material?.map && 
+                            !loadedAncestor.mesh.material.wireframe) {
+                            
+                            // Ancestor is now loaded, extract texture and update this tile
+                            const currentTile = this.getTile(x, y, z);
+                            if (currentTile && currentTile.pendingAncestorLoad) {
+                                const ancestorMaterial = currentTile.buildMaterialFromAncestor(loadedAncestor);
+                                if (ancestorMaterial) {
+                                    // Dispose old wireframe material
+                                    if (currentTile.mesh.material) {
+                                        currentTile.mesh.material.dispose();
+                                    }
+                                    
+                                    // Apply new material from ancestor
+                                    currentTile.mesh.material = ancestorMaterial;
+                                    currentTile.updateSkirtMaterial();
+                                    currentTile.usingParentData = true;
+                                    currentTile.loaded = true;
+                                    currentTile.pendingAncestorLoad = false;
+                                    
+                                    this.refreshDebugGeometry(currentTile);
+                                    setRenderOne(true);
+                                }
+                            }
+                        }
+                    };
+                    
+                    // If ancestor has a loading promise, wait for it
+                    if (ancestorTile.isLoading) {
+                        // Poll for completion (simple approach)
+                        const pollInterval = setInterval(() => {
+                            if (!ancestorTile.isLoading) {
+                                clearInterval(pollInterval);
+                                checkAncestorLoaded();
+                            }
+                        }, 100);
+                        
+                        // Timeout after 10 seconds to prevent infinite polling
+                        setTimeout(() => clearInterval(pollInterval), 10000);
+                    }
+                    
+                    // Add tile to scene with wireframe material as placeholder
+                    // This ensures the tile occupies space and old tiles are properly replaced
+                    tile.updateWireframeMaterial();
+                    tile.loaded = false; // Mark as not fully loaded
+                    
+                    this.scene.add(tile.mesh);
+                    if (tile.skirtMesh) {
+                        this.scene.add(tile.skirtMesh);
+                    }
+                    tile.added = true;
+                    
+                    this.refreshDebugGeometry(tile);
+                    setRenderOne(true);
+                    return tile;
+                }
+            }
             
-            tile.mesh.material = material;
-            tile.updateSkirtMaterial();
-            tile.loaded = true;
+            // Ancestor is loaded, try to extract texture from it
+            if (ancestorTile && ancestorTile.mesh && ancestorTile.mesh.material && 
+                ancestorTile.mesh.material.map && !ancestorTile.mesh.material.wireframe) {
+                // Extract texture from ancestor tile
+                const ancestorMaterial = tile.buildMaterialFromAncestor(ancestorTile);
+                if (ancestorMaterial) {
+                    tile.mesh.material = ancestorMaterial;
+                    tile.updateSkirtMaterial();
+                    tile.usingParentData = true; // Mark as using ancestor data
+                    tile.loaded = true;
+                    
+                    // Add to scene immediately
+                    this.scene.add(tile.mesh);
+                    if (tile.skirtMesh) {
+                        this.scene.add(tile.skirtMesh);
+                    }
+                    tile.added = true;
+                    
+                    this.refreshDebugGeometry(tile);
+                    setRenderOne(true);
+                    return tile;
+                }
+            }
             
-            // Add to scene immediately
+            // Fallback: If we still can't get ancestor data, add tile with wireframe
+            // This ensures the tile occupies space and old tiles are properly replaced
+            tile.pendingAncestorLoad = true;
+            tile.updateWireframeMaterial();
+            tile.loaded = false;
+            
             this.scene.add(tile.mesh);
             if (tile.skirtMesh) {
                 this.scene.add(tile.skirtMesh);
