@@ -3,7 +3,7 @@ import {pointAbove} from "../threeExt";
 import {cos, radians} from "../utils";
 import {Globals, NodeMan, Sit} from "../Globals";
 import {EUSToLLA, RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
-import {Group, Raycaster} from "three";
+import {Group, Mesh, MeshBasicMaterial, Raycaster, SphereGeometry} from "three";
 import {GlobalScene} from "../LocalFrame";
 import {V3} from "../threeUtils";
 import {assert} from "../assert";
@@ -117,6 +117,15 @@ export class CNodeTerrain extends CNode {
         // Create a single group that will be reused for all QuadTreeMapTexture objects
         this.group = new Group();
         GlobalScene.add(this.group);
+
+        // Create a black sphere positioned at the center of the Earth
+        // Radius is 1km less than the globe radius to prevent z-fighting
+        const blackSphereRadius = wgs84.RADIUS - 1000;
+        const blackSphereGeometry = new SphereGeometry(blackSphereRadius, 32, 32);
+        const blackSphereMaterial = new MeshBasicMaterial({ color: 0x808080 });
+        this.blackSphere = new Mesh(blackSphereGeometry, blackSphereMaterial);
+        this.blackSphere.position.set(0, -wgs84.RADIUS, 0);
+        GlobalScene.add(this.blackSphere);
 
         this.maps = []
         for (const mapName in this.UI.mapTypesKV) {
@@ -281,6 +290,14 @@ export class CNodeTerrain extends CNode {
         if (this.group !== undefined) {
             GlobalScene.remove(this.group);
             this.group = undefined;
+        }
+
+        // Clean up the black sphere
+        if (this.blackSphere !== undefined) {
+            GlobalScene.remove(this.blackSphere);
+            this.blackSphere.geometry.dispose();
+            this.blackSphere.material.dispose();
+            this.blackSphere = undefined;
         }
 
         if (this.elevationMap !== undefined) {
