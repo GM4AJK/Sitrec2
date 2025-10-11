@@ -50,6 +50,59 @@ import {configParams} from "./login";
 import {showError} from "./showError";
 import {findRootTrack} from "./FindRootTrack";
 
+// Cookie helper functions for settings
+function setCookie(name, value, days) {
+    const expires = new Date(Date.now() + days * 864e5).toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+}
+
+function getCookie(name) {
+    return document.cookie.split('; ').reduce((r, v) => {
+        const parts = v.split('=');
+        return parts[0] === name ? decodeURIComponent(parts[1]) : r
+    }, null);
+}
+
+// Sanitize settings to prevent exploits
+function sanitizeSettings(settings) {
+    const sanitized = {};
+    
+    // Only allow specific known settings with type checking
+    if (settings.maxDetails !== undefined) {
+        const maxDetails = Number(settings.maxDetails);
+        // Clamp to valid range
+        sanitized.maxDetails = Math.max(5, Math.min(30, maxDetails));
+    }
+    
+    return sanitized;
+}
+
+// Load settings from cookie
+function loadSettingsFromCookie() {
+    const cookieValue = getCookie("sitrecSettings");
+    if (cookieValue) {
+        try {
+            const parsed = JSON.parse(cookieValue);
+            const sanitized = sanitizeSettings(parsed);
+            console.log("Loaded settings from cookie:", sanitized);
+            return sanitized;
+        } catch (e) {
+            console.warn("Failed to parse settings cookie", e);
+        }
+    }
+    return null;
+}
+
+// Save settings to cookie
+function saveSettingsToCookie(settings) {
+    try {
+        const sanitized = sanitizeSettings(settings);
+        setCookie("sitrecSettings", JSON.stringify(sanitized), 365); // Save for 1 year
+        console.log("Saved settings to cookie:", sanitized);
+    } catch (e) {
+        console.warn("Failed to save settings cookie", e);
+    }
+}
 
 export class CCustomManager {
     constructor() {
@@ -57,7 +110,76 @@ export class CCustomManager {
         document.addEventListener('gui-order-changed', (event) => {
             this.handleGUIOrderChange(event.detail.gui);
         });
+        
+        // Initialize settings
+        this.initializeSettings();
     }
+    
+    initializeSettings() {
+        // Initialize Globals.settings with defaults
+        if (!Globals.settings) {
+            Globals.settings = {
+                maxDetails: 15 // Default value
+            };
+        }
+        
+        // Load settings from cookie
+        const savedSettings = loadSettingsFromCookie();
+        if (savedSettings) {
+            Object.assign(Globals.settings, savedSettings);
+        }
+    }
+    
+    saveSettings() {
+        saveSettingsToCookie(Globals.settings);
+    }
+    
+    setupSettingsMenu() {
+        // Create Settings folder in the Sitrec menu
+        const settingsFolder = guiMenus.main.addFolder("Settings")
+            .tooltip("Per-user settings that are saved in browser cookies");
+        
+        // Add Max Details slider
+        settingsFolder.add(Globals.settings, "maxDetails", 5, 30, 1)
+            .name("Max Details")
+            .tooltip("Maximum level of detail for terrain subdivision (5-30)")
+            .onChange((value) => {
+                // Sanitize and save on change
+                Globals.settings.maxDetails = Math.max(5, Math.min(30, Math.round(value)));
+                this.saveSettings();
+                
+                // Prune tiles that exceed the new maxDetails limit
+                // this.pruneTerrainTilesForMaxDetails();
+            })
+            .listen();
+    }
+    
+    // /**
+    //  * Prune terrain tiles that exceed the current maxDetails setting
+    //  * This is called when maxDetails changes to immediately remove tiles beyond the new limit
+    //  */
+    // pruneTerrainTilesForMaxDetails() {
+    //     // Get the terrain node if it exists
+    //     const terrainNode = NodeMan.get("TerrainModel", false);
+    //     if (!terrainNode) {
+    //         return; // No terrain loaded yet
+    //     }
+    //
+    //     // Prune tiles from the elevation map
+    //     if (terrainNode.elevationMap) {
+    //         terrainNode.elevationMap.pruneMaxDetailsTiles();
+    //     }
+    //
+    //     // Prune tiles from all texture maps
+    //     if (terrainNode.maps && terrainNode.UI) {
+    //         for (const mapID in terrainNode.maps) {
+    //             const mapData = terrainNode.maps[mapID];
+    //             if (mapData && mapData.map) {
+    //                 mapData.map.pruneMaxDetailsTiles();
+    //             }
+    //         }
+    //     }
+    // }
 
     /**
      * Handle GUI order change events by refreshing any mirrors that depend on the changed GUI
@@ -114,6 +236,8 @@ export class CCustomManager {
 
     setup() {
 
+        // Add Settings folder to Sitrec menu
+        this.setupSettingsMenu();
 
         if (Sit.canMod) {
             // we have "SAVE MOD", but "SAVE CUSTOM" is no more, replaced by standard "Save", "Save As", etc.
