@@ -46,6 +46,13 @@ export class QuadTreeMapElevation extends QuadTreeMap {
     activateTile(x,y,z, layerMask = 0) {
 
 //        console.log(`activateTile Elevation ${z}/${x}/${y} layerMask=${layerMask} maxZoom=${this.maxZoom}`);
+        
+        // Don't create tiles beyond the effective max zoom (considering maxDetails)
+        const effectiveMaxZoom = this.getEffectiveMaxZoom();
+        if (z > effectiveMaxZoom) {
+            return null;
+        }
+        
         let tile = this.getTile(x, y, z);
         if (tile) {
             // Tile already exists, just reactivate it

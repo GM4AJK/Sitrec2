@@ -137,7 +137,8 @@ export class CCustomManager {
     setupSettingsMenu() {
         // Create Settings folder in the Sitrec menu
         const settingsFolder = guiMenus.main.addFolder("Settings")
-            .tooltip("Per-user settings that are saved in browser cookies");
+            .tooltip("Per-user settings that are saved in browser cookies")
+            .close();
         
         // Add Max Details slider
         settingsFolder.add(Globals.settings, "maxDetails", 5, 30, 1)
@@ -145,41 +146,23 @@ export class CCustomManager {
             .tooltip("Maximum level of detail for terrain subdivision (5-30)")
             .onChange((value) => {
                 // Sanitize and save on change
-                Globals.settings.maxDetails = Math.max(5, Math.min(30, Math.round(value)));
+                const newValue = Math.max(5, Math.min(30, Math.round(value)));
+                Globals.settings.maxDetails = newValue;
                 this.saveSettings();
-                
-                // Prune tiles that exceed the new maxDetails limit
-                // this.pruneTerrainTilesForMaxDetails();
+
+            })
+            .onFinishChange(()=>{
+                // when we release the slider, recalculate everything
+                // A bit of a patch to avoid holes in the terrain
+                // which we get when we go from high to low detail
+                const terrainNode = NodeMan.get("terrainUI", false);
+                if (terrainNode) {
+                    console.log("Calling terrainNode.doRefresh()");
+                    terrainNode.doRefresh();
+                }
             })
             .listen();
     }
-    
-    // /**
-    //  * Prune terrain tiles that exceed the current maxDetails setting
-    //  * This is called when maxDetails changes to immediately remove tiles beyond the new limit
-    //  */
-    // pruneTerrainTilesForMaxDetails() {
-    //     // Get the terrain node if it exists
-    //     const terrainNode = NodeMan.get("TerrainModel", false);
-    //     if (!terrainNode) {
-    //         return; // No terrain loaded yet
-    //     }
-    //
-    //     // Prune tiles from the elevation map
-    //     if (terrainNode.elevationMap) {
-    //         terrainNode.elevationMap.pruneMaxDetailsTiles();
-    //     }
-    //
-    //     // Prune tiles from all texture maps
-    //     if (terrainNode.maps && terrainNode.UI) {
-    //         for (const mapID in terrainNode.maps) {
-    //             const mapData = terrainNode.maps[mapID];
-    //             if (mapData && mapData.map) {
-    //                 mapData.map.pruneMaxDetailsTiles();
-    //             }
-    //         }
-    //     }
-    // }
 
     /**
      * Handle GUI order change events by refreshing any mirrors that depend on the changed GUI

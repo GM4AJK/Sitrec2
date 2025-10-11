@@ -2,7 +2,7 @@ import {wgs84} from "./LLA-ECEF-ENU";
 import {Matrix4} from "three/src/math/Matrix4";
 import {Frustum} from "three/src/math/Frustum";
 import {Vector3} from "three/src/math/Vector3";
-import {debugLog} from "./Globals";
+import {debugLog, Globals} from "./Globals";
 import {isLocal} from "./configUtils";
 import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./SphericalMath";
 import * as LAYER from "./LayerMasks";
@@ -101,6 +101,18 @@ export class QuadTreeMap {
                 }
             }
         }
+    }
+
+    /**
+     * Get the effective maximum zoom level considering both maxZoom and maxDetails settings
+     * @returns {number} The effective max zoom level
+     */
+    getEffectiveMaxZoom() {
+        // If maxDetails is set in Globals.settings, use it as an additional limit
+        if (Globals.settings && typeof Globals.settings.maxDetails === 'number') {
+            return Math.min(this.maxZoom, Globals.settings.maxDetails);
+        }
+        return this.maxZoom;
     }
 
     initTiles() {
@@ -576,6 +588,12 @@ export class QuadTreeMap {
      * Determine if a tile should be subdivided
      */
     shouldSubdivideTile(tile, visibility, subdivideSize) {
+        // Don't subdivide if we're at or beyond the effective max zoom
+        const effectiveMaxZoom = this.getEffectiveMaxZoom();
+        if (tile.z >= effectiveMaxZoom) {
+            return false;
+        }
+        
         return visibility.visible && visibility.screenSize > subdivideSize;
     }
 

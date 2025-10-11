@@ -188,6 +188,13 @@ class QuadTreeMapTexture extends QuadTreeMap {
     // if tile exists, activate it, otherwise create it
     activateTile(x, y, z, layerMask = 0, useParentData = false) {
 //        console.log(`activateTile Texture ${z}/${x}/${y} layerMask=${layerMask} useParentData=${useParentData} maxZoom=${this.maxZoom}`);
+        
+        // Don't create tiles beyond the effective max zoom (considering maxDetails)
+        const effectiveMaxZoom = this.getEffectiveMaxZoom();
+        if (z > effectiveMaxZoom) {
+            return null;
+        }
+        
         let tile = this.getTile(x, y, z);
 
 
