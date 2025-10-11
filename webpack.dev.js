@@ -21,6 +21,7 @@ module.exports = merge(common, {
                 { from: /^\/sitrecServer/, to: context => context.parsedUrl.pathname },
                 { from: /^\/sitrec-videos/, to: context => context.parsedUrl.pathname },
                 { from: /^\/sitrec-cache/, to: context => context.parsedUrl.pathname },
+                { from: /^\/sitrec-terrain/, to: context => context.parsedUrl.pathname },
             ]
         },
         allowedHosts: 'all', // Allow connections from any host
@@ -40,6 +41,12 @@ module.exports = merge(common, {
             },
             {
                 context: ['/sitrec-cache'],
+                target: 'http://localhost:8081',
+                changeOrigin: true,
+                secure: false,
+            },
+            {
+                context: ['/sitrec-terrain'],
                 target: 'http://localhost:8081',
                 changeOrigin: true,
                 secure: false,

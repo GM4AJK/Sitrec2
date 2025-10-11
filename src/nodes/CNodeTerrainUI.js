@@ -2,7 +2,7 @@ import {CNode} from "./CNode";
 import {Globals, guiMenus, NodeMan} from "../Globals";
 import {assert} from "../assert";
 import {configParams} from "../login";
-import {isLocal, SITREC_APP} from "../configUtils";
+import {isLocal, SITREC_APP, SITREC_TERRAIN} from "../configUtils";
 import {CNodeSwitch} from "./CNodeSwitch";
 import {EUSToLLA} from "../LLA-ECEF-ENU";
 import {CNodeTerrain} from "./CNodeTerrain";
@@ -119,7 +119,7 @@ export class CNodeTerrainUI extends CNode {
                 Local: {
                     name: "Local",
                     mapURL: (z,x,y) => {
-                        return `${SITREC_APP}../sitrec-terrain/imagery/esri/${z}/${y}/${x}.jpg`
+                        return `${SITREC_TERRAIN}/imagery/esri/${z}/${y}/${x}.jpg`
                     },
 
                     maxZoom: 7,
@@ -174,7 +174,7 @@ export class CNodeTerrainUI extends CNode {
                 name: "Local",
                 // Tiles stored in sitrec-terrain/elevation/z/x/y.png
                 mapURL: (z,x,y) => {
-                    return `${SITREC_APP}../sitrec-terrain/elevation/${z}/${x}/${y}.png`
+                    return `${SITREC_TERRAIN}/elevation/${z}/${x}/${y}.png`
                 },
 
                 maxZoom: 5,

@@ -143,6 +143,15 @@ async function startServer() {
             }
         }));
 
+        app.use('/sitrec-terrain', createProxyMiddleware({
+            target: 'http://localhost',
+            changeOrigin: true,
+            onError: (err, req, res) => {
+                console.log('Terrain proxy error (this is normal if you don\'t have a local web server):', err.message);
+                res.status(404).send('Terrain not found');
+            }
+        }));
+
         // Enable debugging features
         if (process.env.NODE_ENV !== 'production') {
             // Log all requests for debugging

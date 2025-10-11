@@ -82,6 +82,9 @@ $UPLOAD_URL  = $FILE_URL  . "sitrec-upload/";
 $CACHE_PATH  = $FILE_PATH . "sitrec-cache/";
 $CACHE_URL   = $FILE_URL  . "sitrec-cache/";
 
+$TERRAIN_PATH = $FILE_PATH . "sitrec-terrain/";
+$TERRAIN_URL  = $FILE_URL  . "sitrec-terrain/";
+
 // From shortener.php, for the short URLs
 // to make as short as possible, we use a single letter for the directory
 // you might want to consider using the server root instead of $FILE_PATH
@@ -91,8 +94,10 @@ $SHORTENER_URL = $FILE_URL  . "u/";
 $server_config = [
 "UPLOAD"     => $UPLOAD_URL,
 "CACHE"      => $CACHE_URL,
+"TERRAIN"    => $TERRAIN_URL,
 "UPLOAD_PATH" => $UPLOAD_PATH,
 "CACHE_PATH"  => $CACHE_PATH,
+"TERRAIN_PATH" => $TERRAIN_PATH,
 "ROOT"       => $ROOT_URL,
 "ROOT_PATH"  => $ROOT_PATH,
 "APP"        => $APP_URL,

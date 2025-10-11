@@ -44,6 +44,7 @@ export let SITREC_APP;
 export let SITREC_SERVER;
 export let SITREC_UPLOAD;
 export let SITREC_CACHE;
+export let SITREC_TERRAIN;
 export let SITREC_DEV_DOMAIN;
 
 export async function setupConfigPaths() {
@@ -94,17 +95,21 @@ export async function setupConfigPaths() {
 
 
     if (isConsole) {
+        // For console applications, use relative paths
+        SITREC_TERRAIN = "../sitrec-terrain/";
         return;
     }
 
 
     SITREC_UPLOAD = null;
     SITREC_CACHE = null;
+    SITREC_TERRAIN = null;
 
     const serverConfig = await getConfigFromServer();
     if (serverConfig !== null) {
         SITREC_UPLOAD = serverConfig.UPLOAD;
         SITREC_CACHE = serverConfig.CACHE;
+        SITREC_TERRAIN = serverConfig.TERRAIN;
 
         // log all the exported variables
         console.log("SITREC_DOMAIN: ", SITREC_DOMAIN);
@@ -113,6 +118,7 @@ export async function setupConfigPaths() {
         console.log("SITREC_SERVER: ", SITREC_SERVER);
         console.log("SITREC_UPLOAD: ", SITREC_UPLOAD);
         console.log("SITREC_CACHE: ", SITREC_CACHE);
+        console.log("SITREC_TERRAIN: ", SITREC_TERRAIN);
         console.log("SITREC_DEV_DOMAIN: ", SITREC_DEV_DOMAIN);
 
         return;
@@ -139,14 +145,17 @@ export async function setupConfigPaths() {
 
     let UPLOAD_PATH = SITREC_DATA_PATH + "sitrec-upload/";
     let CACHE_PATH = SITREC_DATA_PATH + "sitrec-cache/";
+    let TERRAIN_PATH = SITREC_DATA_PATH + "sitrec-terrain/";
 
     SITREC_UPLOAD = SITREC_DOMAIN + port + UPLOAD_PATH;
     SITREC_CACHE = SITREC_DOMAIN + port + CACHE_PATH;
+    SITREC_TERRAIN = SITREC_DOMAIN + port + TERRAIN_PATH;
 
     console.log("SITREC_DOMAIN: ", SITREC_DOMAIN);
     console.log("SITREC_APP: ", SITREC_APP);
     console.log("SITREC_SERVER: ", SITREC_SERVER);
     console.log("SITREC_UPLOAD: ", SITREC_UPLOAD);
     console.log("SITREC_CACHE: ", SITREC_CACHE);
+    console.log("SITREC_TERRAIN: ", SITREC_TERRAIN);
     console.log("SITREC_DEV_DOMAIN: ", SITREC_DEV_DOMAIN);
 }
