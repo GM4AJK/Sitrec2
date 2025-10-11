@@ -102,7 +102,7 @@ services:
       - ./sitrec-videos:/var/www/html/sitrec-videos
       
       # Terrain tiles directory (served by Apache)
-      - ./sitrec-terrain:/var/www/html/sitrec-terrain
+      - ../sitrec-terrain:/var/www/html/sitrec-terrain
       
       # Webpack build output (served by Apache as fallback/static files)
       - ./dist:/var/www/html

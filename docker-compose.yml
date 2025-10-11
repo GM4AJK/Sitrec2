@@ -10,4 +10,4 @@ services:
 # We mount the videos as a volume to avoid having to include them in the docker image      -
       - ./sitrec-videos:/var/www/html/sitrec-videos
 #      - ./sitrec-cache:/var/www/html/sitrec-cache
-      - ./sitrec-terrain:/var/www/html/sitrec-terrain
+      - ../sitrec-terrain:/var/www/html/sitrec-terrain

@@ -46,7 +46,7 @@ module.exports = merge(common, {
                 secure: false,
             },
             {
-                context: ['/sitrec-terrain'],
+                context: ['/sitrec-terrain/**'],
                 target: 'http://localhost:8081',
                 changeOrigin: true,
                 secure: false,

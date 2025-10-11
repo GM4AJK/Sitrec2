@@ -91,6 +91,16 @@ $TERRAIN_URL  = $FILE_URL  . "sitrec-terrain/";
 $SHORTENER_PATH = $FILE_PATH . 'u/';
 $SHORTENER_URL = $FILE_URL  . "u/";
 
+// In Docker development mode, use relative URLs to avoid CORS issues
+// The webpack dev server on port 8080 will proxy requests to Apache on port 8081
+$isDockerBuild = getenv('DOCKER_BUILD') === 'true';
+if ($isDockerBuild) {
+    $UPLOAD_URL = "/sitrec-upload/";
+    $CACHE_URL = "/sitrec-cache/";
+    $TERRAIN_URL = "/sitrec-terrain/";
+    $SHORTENER_URL = "/u/";
+}
+
 $server_config = [
 "UPLOAD"     => $UPLOAD_URL,
 "CACHE"      => $CACHE_URL,
