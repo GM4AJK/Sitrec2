@@ -26,6 +26,12 @@ export class CNodeTerrainUI extends CNode {
         this.nTiles = v.nTiles;
         this.zoom = v.zoom;
         this.elevationScale = v.elevationScale ?? 1;
+        this.textureDetail = v.textureDetail ?? 1;
+        this.elevationDetail = v.elevationDetail ?? 1;
+        
+        // Default subdivision sizes (can be overridden by mapTypes)
+        this.elevationSubSize = 2000 * 1.414;
+        this.textureSubSize = 2000;
 
         this.adjustable = v.adjustable ?? true;
 
@@ -126,6 +132,7 @@ export class CNodeTerrainUI extends CNode {
                     minZoom: 0,
                     tileSize: 256,
                     attribution: "",
+                    textureSubSize: 500,
                 }
 
 
@@ -285,6 +292,13 @@ export class CNodeTerrainUI extends CNode {
 
         this.disableDynamicSubdivision = false;
         if (isLocal) {
+
+            this.textureDetailController = this.gui.add(this, "textureDetail", 0.5, 2, 0.1)
+                .tooltip("Detail level for texture subdivision. Higher values = more detail. 1 is normal, 0.5 is less detail, 2 is more detail")
+
+            this.elevationDetailController = this.gui.add(this, "elevationDetail", 0.5, 2, 0.1)
+                .tooltip("Detail level for elevation subdivision. Higher values = more detail. 1 is normal, 0.5 is less detail, 2 is more detail")
+
             this.disableDynamicSubdivisionController = this.gui.add(this, "disableDynamicSubdivision").name("Disable Dynamic Subdivision")
                 .tooltip("Disable dynamic subdivision of terrain tiles. Freezes the terrain at the current level of detail. Useful for debugging.")
         }
@@ -576,16 +590,20 @@ export class CNodeTerrainUI extends CNode {
                 // as the tiles are 100x100
                 for (const view of views) {
                     if (view && view.visible) {
-                        this.terrainNode.elevationMap.subdivideTiles(view, 2000*1.414);
+                        this.terrainNode.elevationMap.subdivideTiles(view, this.elevationSubSize * this.elevationDetail);
                     }
                 }
             }
 
             // For texture maps, call subdivideTiles separately for each view
             if (this.terrainNode.maps[this.mapType].map !== undefined) {
+                // Get the current map definition to check for textureSubSize override
+                const mapDef = this.mapSources[this.mapType];
+                const textureSubSize = mapDef?.textureSubSize ?? this.textureSubSize;
+                
                 for (const view of views) {
                     if (view && view.visible) {
-                        this.terrainNode.maps[this.mapType].map.subdivideTiles(view, 2000);
+                        this.terrainNode.maps[this.mapType].map.subdivideTiles(view, textureSubSize * this.textureDetail);
                     }
                 }
             }
