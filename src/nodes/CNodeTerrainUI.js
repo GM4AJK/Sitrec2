@@ -146,9 +146,10 @@ export class CNodeTerrainUI extends CNode {
         // key is the name, value is the id
         this.mapTypesKV = {}
         for (const mapType in this.mapSources) {
-            const mapDef = this.mapSources[mapType]
-            this.mapTypesKV[mapDef.name] = mapType
-
+            if (!this.mapSources[mapType].excludeFromMenu) {
+                const mapDef = this.mapSources[mapType]
+                this.mapTypesKV[mapDef.name] = mapType
+            }
         }
 
         // map type from the terrain object in a a saved sitch, or default to the first one
@@ -293,10 +294,10 @@ export class CNodeTerrainUI extends CNode {
         this.disableDynamicSubdivision = false;
         if (isLocal) {
 
-            this.textureDetailController = this.gui.add(this, "textureDetail", 0.5, 2, 0.1)
+            this.textureDetailController = this.gui.add(this, "textureDetail", 0.1, 3, 0.1)
                 .tooltip("Detail level for texture subdivision. Higher values = more detail. 1 is normal, 0.5 is less detail, 2 is more detail")
 
-            this.elevationDetailController = this.gui.add(this, "elevationDetail", 0.5, 2, 0.1)
+            this.elevationDetailController = this.gui.add(this, "elevationDetail", 0.1, 3, 0.1)
                 .tooltip("Detail level for elevation subdivision. Higher values = more detail. 1 is normal, 0.5 is less detail, 2 is more detail")
 
             this.disableDynamicSubdivisionController = this.gui.add(this, "disableDynamicSubdivision").name("Disable Dynamic Subdivision")
@@ -590,7 +591,7 @@ export class CNodeTerrainUI extends CNode {
                 // as the tiles are 100x100
                 for (const view of views) {
                     if (view && view.visible) {
-                        this.terrainNode.elevationMap.subdivideTiles(view, this.elevationSubSize * this.elevationDetail);
+                        this.terrainNode.elevationMap.subdivideTiles(view, this.elevationSubSize / this.elevationDetail);
                     }
                 }
             }
@@ -603,7 +604,7 @@ export class CNodeTerrainUI extends CNode {
                 
                 for (const view of views) {
                     if (view && view.visible) {
-                        this.terrainNode.maps[this.mapType].map.subdivideTiles(view, textureSubSize * this.textureDetail);
+                        this.terrainNode.maps[this.mapType].map.subdivideTiles(view, textureSubSize / this.textureDetail);
                     }
                 }
             }
