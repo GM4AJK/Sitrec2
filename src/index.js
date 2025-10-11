@@ -97,10 +97,9 @@ console.log ("SITREC START - index.js after imports")
 // before this code is executed.
 // Building sitrec as a console application uses indexCommon instead.
 
-// We NOW default to starlink on the public version
-// as it's now the most popular usage.
-// "nightsky" has been deprecated, but still works for URL parameter based sitches
-let situation = "starlink";
+// We NOW default to "Custom" unless overridden by a URL parameter
+// otherwise we get lots of sitches with unnecessary satellites
+let situation = "custom";
 
 // Some (essentially) global variables
 let urlParams;
@@ -1065,7 +1064,9 @@ async function setupFunctions() {
     }
 
 
-    if (Sit.useGlobe) {
+    // Only load globe if useGlobe is true AND dynamicSubdivision is false
+    // If dynamicSubdivision is true, the globe will be loaded later when it's turned off
+    if (Sit.useGlobe && !Globals.dynamicSubdivision) {
 //        console.log("addAlignedGlobe()")
 
         // if a globe scale is set, then use that

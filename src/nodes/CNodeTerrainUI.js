@@ -1,11 +1,14 @@
 import {CNode} from "./CNode";
-import {Globals, guiMenus, NodeMan} from "../Globals";
+import {Globals, guiMenus, NodeMan, Sit} from "../Globals";
 import {assert} from "../assert";
 import {configParams} from "../login";
 import {isLocal, SITREC_APP, SITREC_TERRAIN} from "../configUtils";
 import {CNodeSwitch} from "./CNodeSwitch";
 import {EUSToLLA} from "../LLA-ECEF-ENU";
 import {CNodeTerrain} from "./CNodeTerrain";
+import {par} from "../par";
+import {addAlignedGlobe} from "../Globe";
+import {showHider} from "../KeyBoardHandler";
 
 export class CNodeTerrainUI extends CNode {
     constructor(v) {
@@ -312,9 +315,19 @@ export class CNodeTerrainUI extends CNode {
         // this.addSimpleSerial("elevationType")
 
         this.dynamic = v.dynamic ?? false;
+        
+        // Mirror this.dynamic to Globals.dynamicSubdivision
+        Globals.dynamicSubdivision = this.dynamic;
+        
         this.dynamicController = this.gui.add(this, "dynamic").name("Dynamic Subdivision").onChange(v => {
+            // Update the global mirror
+            Globals.dynamicSubdivision = v;
+            
             this.updateUIVisibility();
-            this.terrainNode.reloadMap(this.mapType)
+            this.terrainNode.reloadMap(this.mapType);
+            
+            // Update globe visibility based on new state
+            this.updateGlobeVisibility();
         });
 
         // setMapType is async because it loads the capabilities
@@ -374,6 +387,27 @@ export class CNodeTerrainUI extends CNode {
             if (this.disableDynamicSubdivisionController) {
                 this.disableDynamicSubdivisionController.domElement.style.display = 'none';
             }
+        }
+    }
+
+    updateGlobeVisibility() {
+        // Globe should only be loaded/displayed when:
+        // 1. Sit.useGlobe is true
+        // 2. Globals.dynamicSubdivision is false
+        const shouldShowGlobe = Sit.useGlobe && !Globals.dynamicSubdivision;
+        
+        if (shouldShowGlobe && !par.globe) {
+            // Need to load the globe
+            console.log("Loading globe (useGlobe=true, dynamicSubdivision=false)");
+            par.globe = addAlignedGlobe(Sit.globeScale ?? (Sit.terrain !== undefined ? 0.9999 : 1.0));
+            showHider(par.globe, "[G]lobe", true, "g");
+        } else if (!shouldShowGlobe && par.globe) {
+            // Need to hide/remove the globe
+            console.log("Hiding globe (useGlobe=" + Sit.useGlobe + ", dynamicSubdivision=" + Globals.dynamicSubdivision + ")");
+            par.globe.visible = false;
+        } else if (shouldShowGlobe && par.globe) {
+            // Globe exists and should be visible
+            par.globe.visible = true;
         }
     }
 
