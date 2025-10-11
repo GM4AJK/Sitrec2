@@ -119,7 +119,7 @@ export class CNodeTerrainUI extends CNode {
                 Local: {
                     name: "Local",
                     mapURL: (z,x,y) => {
-                        return `${SITREC_TERRAIN}/imagery/esri/${z}/${y}/${x}.jpg`
+                        return `${SITREC_TERRAIN}imagery/esri/${z}/${y}/${x}.jpg`
                     },
 
                     maxZoom: 7,
@@ -174,7 +174,7 @@ export class CNodeTerrainUI extends CNode {
                 name: "Local",
                 // Tiles stored in sitrec-terrain/elevation/z/x/y.png
                 mapURL: (z,x,y) => {
-                    return `${SITREC_TERRAIN}/elevation/${z}/${x}/${y}.png`
+                    return `${SITREC_TERRAIN}elevation/${z}/${x}/${y}.png`
                 },
 
                 maxZoom: 5,

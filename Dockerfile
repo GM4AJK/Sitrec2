@@ -12,6 +12,7 @@ WORKDIR /build
 COPY data ./data
 COPY src ./src
 COPY docs ./docs
+COPY tools ./tools
 COPY sitrecServer ./sitrecServer
 COPY package.json .
 COPY package-lock.json .

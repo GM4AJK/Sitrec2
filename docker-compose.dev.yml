@@ -65,6 +65,7 @@ services:
       - ./src:/app/src
       - ./data:/app/data
       - ./docs:/app/docs
+      - ./tools:/app/tools
       - ./config:/app/config
       - ./sitrecServer:/app/sitrecServer
       
@@ -88,6 +89,9 @@ services:
       
       # Data directory (required by getsitches.php to scan for sitches)
       - ./data:/var/www/html/data
+      
+      # Tools directory (utilities and helper scripts)
+      - ./tools:/var/www/html/tools
       
       # PHP configuration files (read-only to prevent accidental modification)
       # Note: These override any config files in sitrecServer/
