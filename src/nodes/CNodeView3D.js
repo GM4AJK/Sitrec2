@@ -1,5 +1,5 @@
 import {par} from "../par";
-import {f2m, normalizeLayerType} from "../utils";
+import {normalizeLayerType} from "../utils";
 import {XYZ2EA, XYZJ2PR} from "../SphericalMath";
 import {CustomManager, Globals, guiMenus, guiTweaks, keyHeld, NodeMan, setRenderOne, Sit} from "../Globals";
 import {GlobalDaySkyScene, GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene} from "../LocalFrame";
@@ -12,7 +12,6 @@ import {
     Mesh,
     NearestFilter,
     NormalBlending,
-    Plane,
     PlaneGeometry,
     Raycaster,
     RGBAFormat,
@@ -1166,24 +1165,9 @@ export class CNodeView3D extends CNodeViewCanvas {
             } else {
                 var possibleTarget = V3()
                 this.raycaster.setFromCamera(mouseRay, this.camera);
-
-
-                //   CONVERTO TO Sit.useGlobe
-
-                if (1 || this.useGlobe) {
-                    const dragSphere = new Sphere(new Vector3(0, -wgs84.RADIUS, 0), wgs84.RADIUS /* + f2m(this.defaultTargetHeight) */)
-                    if (this.raycaster.ray.intersectSphere(dragSphere, possibleTarget)) {
-                        //     console.log("dragSphere  HIT: " + possibleTarget.x + "," + possibleTarget.y + "," + possibleTarget.z + "<br>")
-                        target = possibleTarget.clone()
-                    }
-                } else {
-
-                    // Not found a collision with anything in the GlobalScene, so just collide with the 25,000 foot plane
-                    const selectPlane = new Plane(new Vector3(0, -1, 0), f2m(this.defaultTargetHeight))
-
-                    if (this.raycaster.ray.intersectPlane(selectPlane, possibleTarget)) {
-                        target = possibleTarget.clone()
-                    }
+                const dragSphere = new Sphere(new Vector3(0, -wgs84.RADIUS, 0), wgs84.RADIUS /* + f2m(this.defaultTargetHeight) */)
+                if (this.raycaster.ray.intersectSphere(dragSphere, possibleTarget)) {
+                    target = possibleTarget.clone()
                 }
             }
 
@@ -1548,6 +1532,31 @@ export class CNodeView3D extends CNodeViewCanvas {
         return closestObject;
     }
 
+    // Helper method to show track menu (extracted to avoid duplication)
+    showTrackMenu(closestTrack, event) {
+        console.log(`Found track near mouse: ${closestTrack.trackID}`);
+        
+        // Mirror the track's GUI folder from the Contents menu
+        if (closestTrack.guiFolder) {
+            const menuTitle = `Track: ${closestTrack.trackOb?.menuText || closestTrack.trackID}`;
+            
+            // Create a standalone menu and mirror the track's GUI folder
+            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
+            
+            // Set up dynamic mirroring for the track's GUI folder
+            CustomManager.setupDynamicMirroring(closestTrack.guiFolder, standaloneMenu);
+            
+            // Add a method to manually refresh the mirror
+            standaloneMenu.refreshMirror = () => {
+                CustomManager.updateMirror(standaloneMenu);
+            };
+            
+            // Open the menu by default
+            standaloneMenu.open();
+            console.log(`Created standalone menu for track: ${closestTrack.trackID}`);
+        }
+    }
+
     onContextMenu(event, mouseX, mouseY) {
         if (!this.mouseEnabled) return;
         
@@ -1614,46 +1623,19 @@ export class CNodeView3D extends CNodeViewCanvas {
                 }
                 
                 // If we didn't find an object with nodeId, but we hit something (like terrain/ground)
-                // Check for tracks before showing ground menu
+                // Ground/sphere collision takes priority over celestial objects
                 if (!foundObject) {
                     // Check if we're close to any track in screen space
                     // Tracks are too thin to pick with raycasting, so we check screen space distance
                     const closestTrack = this.findClosestTrack(mouseX, mouseY, 10);
                     
                     if (closestTrack) {
-                        console.log(`Found track near mouse: ${closestTrack.trackID}`);
-                        
-                        // Mirror the track's GUI folder from the Contents menu
-                        if (closestTrack.guiFolder) {
-                            const menuTitle = `Track: ${closestTrack.trackID}`;
-                            
-                            // Create a standalone menu and mirror the track's GUI folder
-                            const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
-                            
-                            // Set up dynamic mirroring for the track's GUI folder
-                            CustomManager.setupDynamicMirroring(closestTrack.guiFolder, standaloneMenu);
-                            
-                            // Add a method to manually refresh the mirror
-                            standaloneMenu.refreshMirror = () => {
-                                CustomManager.updateMirror(standaloneMenu);
-                            };
-                            
-                            // Open the menu by default
-                            standaloneMenu.open();
-                            console.log(`Created standalone menu for track: ${closestTrack.trackID}`);
-                        }
+                        this.showTrackMenu(closestTrack, event);
                         return; // Found a track, don't show ground menu
                     }
                     
-                    // No object or track found, check for celestial objects before showing ground menu
-                    const celestialObject = this.findClosestCelestialObject(mouseRay);
-                    
-                    if (celestialObject) {
-                        this.showCelestialObjectMenu(celestialObject, event.clientX, event.clientY);
-                        return; // Found celestial object, don't show ground menu
-                    }
-                    
-                    // No object, track, or celestial object found, show ground context menu if in custom sitch
+                    // We hit something (ground/terrain), show ground context menu if in custom sitch
+                    // Ground/sphere takes priority over celestial objects
                     if (Sit.isCustom) {
                         // Get the first intersection point (closest to camera)
                         const groundPoint = intersects[0].point;
@@ -1661,43 +1643,24 @@ export class CNodeView3D extends CNodeViewCanvas {
                         
                         // Show the ground context menu
                         CustomManager.showGroundContextMenu(mouseX, mouseY, groundPoint);
+                        return; // Ground menu shown, don't check celestial objects
                     }
                 }
-            } else {
-                // No intersections at all, check for tracks
-                const closestTrack = this.findClosestTrack(mouseX, mouseY, 10);
-                
-                if (closestTrack) {
-                    console.log(`Found track near mouse: ${closestTrack.trackID}`);
-                    
-                    // Mirror the track's GUI folder from the Contents menu
-                    if (closestTrack.guiFolder) {
-                        const menuTitle = `Track: ${closestTrack.trackOb.menuText || closestTrack.trackID}`;
-                        
-                        // Create a standalone menu and mirror the track's GUI folder
-                        const standaloneMenu = Globals.menuBar.createStandaloneMenu(menuTitle, event.clientX, event.clientY);
-                        
-                        // Set up dynamic mirroring for the track's GUI folder
-                        CustomManager.setupDynamicMirroring(closestTrack.guiFolder, standaloneMenu);
-                        
-                        // Add a method to manually refresh the mirror
-                        standaloneMenu.refreshMirror = () => {
-                            CustomManager.updateMirror(standaloneMenu);
-                        };
-                        
-                        // Open the menu by default
-                        standaloneMenu.open();
-                        console.log(`Created standalone menu for track: ${closestTrack.trackID}`);
-                    }
-                    return; // Found a track, don't check celestial objects
-                }
-                
-                // No tracks found, check for celestial objects (stars, planets, satellites)
-                const celestialObject = this.findClosestCelestialObject(mouseRay);
-                
-                if (celestialObject) {
-                    this.showCelestialObjectMenu(celestialObject, event.clientX, event.clientY);
-                }
+            }
+            
+            // No intersections with 3D objects or ground, check for tracks
+            const closestTrack = this.findClosestTrack(mouseX, mouseY, 10);
+            
+            if (closestTrack) {
+                this.showTrackMenu(closestTrack, event);
+                return; // Found a track, don't check celestial objects
+            }
+            
+            // No tracks found, check for celestial objects (stars, planets, satellites)
+            const celestialObject = this.findClosestCelestialObject(mouseRay);
+            
+            if (celestialObject) {
+                this.showCelestialObjectMenu(celestialObject, event.clientX, event.clientY);
             }
         }
     }
