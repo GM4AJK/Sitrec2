@@ -49,60 +49,7 @@ import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
 import {findRootTrack} from "./FindRootTrack";
-
-// Cookie helper functions for settings
-function setCookie(name, value, days) {
-    const expires = new Date(Date.now() + days * 864e5).toUTCString();
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
-}
-
-function getCookie(name) {
-    return document.cookie.split('; ').reduce((r, v) => {
-        const parts = v.split('=');
-        return parts[0] === name ? decodeURIComponent(parts[1]) : r
-    }, null);
-}
-
-// Sanitize settings to prevent exploits
-function sanitizeSettings(settings) {
-    const sanitized = {};
-    
-    // Only allow specific known settings with type checking
-    if (settings.maxDetails !== undefined) {
-        const maxDetails = Number(settings.maxDetails);
-        // Clamp to valid range
-        sanitized.maxDetails = Math.max(5, Math.min(30, maxDetails));
-    }
-    
-    return sanitized;
-}
-
-// Load settings from cookie
-function loadSettingsFromCookie() {
-    const cookieValue = getCookie("sitrecSettings");
-    if (cookieValue) {
-        try {
-            const parsed = JSON.parse(cookieValue);
-            const sanitized = sanitizeSettings(parsed);
-            console.log("Loaded settings from cookie:", sanitized);
-            return sanitized;
-        } catch (e) {
-            console.warn("Failed to parse settings cookie", e);
-        }
-    }
-    return null;
-}
-
-// Save settings to cookie
-function saveSettingsToCookie(settings) {
-    try {
-        const sanitized = sanitizeSettings(settings);
-        setCookie("sitrecSettings", JSON.stringify(sanitized), 365); // Save for 1 year
-        console.log("Saved settings to cookie:", sanitized);
-    } catch (e) {
-        console.warn("Failed to save settings cookie", e);
-    }
-}
+import {initializeSettings, SettingsSaver} from "./SettingsManager";
 
 export class CCustomManager {
     constructor() {
@@ -111,33 +58,34 @@ export class CCustomManager {
             this.handleGUIOrderChange(event.detail.gui);
         });
         
-        // Initialize settings
-        this.initializeSettings();
-    }
-    
-    initializeSettings() {
-        // Initialize Globals.settings with defaults
-        if (!Globals.settings) {
-            Globals.settings = {
-                maxDetails: 15 // Default value
-            };
-        }
+        // Settings will be initialized in setup() after login check
+        this.settingsInitialized = false;
         
-        // Load settings from cookie
-        const savedSettings = loadSettingsFromCookie();
-        if (savedSettings) {
-            Object.assign(Globals.settings, savedSettings);
-        }
+        // Settings saver with intelligent debouncing (5 second delay)
+        this.settingsSaver = new SettingsSaver(5000);
     }
     
-    saveSettings() {
-        saveSettingsToCookie(Globals.settings);
+    async initializeSettings() {
+        await initializeSettings();
+    }
+    
+    /**
+     * Save settings with intelligent debouncing
+     * Delegates to SettingsSaver for all debouncing logic
+     * @param {boolean} immediate - Force immediate save, bypassing debounce
+     */
+    async saveSettings(immediate = false) {
+        await this.settingsSaver.save(immediate);
     }
     
     setupSettingsMenu() {
         // Create Settings folder in the Sitrec menu
+        const tooltipText = Globals.userID > 0 
+            ? "Per-user settings saved to server (with cookie backup)"
+            : "Per-user settings saved in browser cookies";
+        
         const settingsFolder = guiMenus.main.addFolder("Settings")
-            .tooltip("Per-user settings that are saved in browser cookies")
+            .tooltip(tooltipText)
             .close();
         
         // Add Max Details slider
@@ -145,16 +93,17 @@ export class CCustomManager {
             .name("Max Details")
             .tooltip("Maximum level of detail for terrain subdivision (5-30)")
             .onChange((value) => {
-                // Sanitize and save on change
+                // Sanitize the value
                 const newValue = Math.max(5, Math.min(30, Math.round(value)));
                 Globals.settings.maxDetails = newValue;
+                // Save settings (will debounce automatically if needed)
                 this.saveSettings();
-
             })
             .onFinishChange(()=>{
-                // when we release the slider, recalculate everything
-                // A bit of a patch to avoid holes in the terrain
-                // which we get when we go from high to low detail
+                // When we release the slider, force immediate save and recalculate everything
+                this.saveSettings(true);
+                
+                // Recalculate terrain to avoid holes when going from high to low detail
                 const terrainNode = NodeMan.get("terrainUI", false);
                 if (terrainNode) {
                     console.log("Calling terrainNode.doRefresh()");
@@ -217,7 +166,12 @@ export class CCustomManager {
         return false;
     }
 
-    setup() {
+    async setup() {
+        // Initialize settings first (after login check)
+        if (!this.settingsInitialized) {
+            await this.initializeSettings();
+            this.settingsInitialized = true;
+        }
 
         // Add Settings folder to Sitrec menu
         this.setupSettingsMenu();

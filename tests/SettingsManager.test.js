@@ -1,0 +1,388 @@
+/**
+ * @jest-environment jsdom
+ */
+
+// SettingsManager.test.js
+// Unit tests for the SettingsManager module
+
+import {
+    initializeSettings,
+    loadSettingsFromCookie,
+    loadSettingsFromServer,
+    sanitizeSettings,
+    saveSettings,
+    saveSettingsToCookie,
+    saveSettingsToServer
+} from '../src/SettingsManager';
+import {Globals} from '../src/Globals';
+
+// Mock document.cookie
+let mockCookies = {};
+Object.defineProperty(document, 'cookie', {
+    get: function() {
+        return Object.entries(mockCookies)
+            .map(([key, value]) => `${key}=${value}`)
+            .join('; ');
+    },
+    set: function(cookieString) {
+        const [nameValue] = cookieString.split(';');
+        const [name, value] = nameValue.split('=');
+        mockCookies[name.trim()] = value.trim();
+    },
+    configurable: true
+});
+
+// Mock fetch
+global.fetch = jest.fn();
+
+describe('SettingsManager', () => {
+    beforeEach(() => {
+        // Reset mocks before each test
+        mockCookies = {};
+        jest.clearAllMocks();
+        
+        // Reset Globals.settings
+        Globals.settings = undefined;
+        Globals.userID = 0;
+    });
+
+    describe('sanitizeSettings', () => {
+        it('should sanitize maxDetails within valid range', () => {
+            const settings = { maxDetails: 15 };
+            const sanitized = sanitizeSettings(settings);
+            expect(sanitized.maxDetails).toBe(15);
+        });
+
+        it('should clamp maxDetails to minimum value', () => {
+            const settings = { maxDetails: 2 };
+            const sanitized = sanitizeSettings(settings);
+            expect(sanitized.maxDetails).toBe(5);
+        });
+
+        it('should clamp maxDetails to maximum value', () => {
+            const settings = { maxDetails: 50 };
+            const sanitized = sanitizeSettings(settings);
+            expect(sanitized.maxDetails).toBe(30);
+        });
+
+        it('should handle string numbers', () => {
+            const settings = { maxDetails: "20" };
+            const sanitized = sanitizeSettings(settings);
+            expect(sanitized.maxDetails).toBe(20);
+        });
+
+        it('should ignore unknown settings', () => {
+            const settings = { maxDetails: 15, unknownSetting: "malicious" };
+            const sanitized = sanitizeSettings(settings);
+            expect(sanitized.maxDetails).toBe(15);
+            expect(sanitized.unknownSetting).toBeUndefined();
+        });
+
+        it('should return empty object for empty input', () => {
+            const settings = {};
+            const sanitized = sanitizeSettings(settings);
+            expect(Object.keys(sanitized).length).toBe(0);
+        });
+    });
+
+    describe('Cookie operations', () => {
+        it('should save settings to cookie', () => {
+            const settings = { maxDetails: 20 };
+            saveSettingsToCookie(settings);
+            
+            const cookieValue = mockCookies['sitrecSettings'];
+            expect(cookieValue).toBeDefined();
+            
+            const decoded = JSON.parse(decodeURIComponent(cookieValue));
+            expect(decoded.maxDetails).toBe(20);
+        });
+
+        it('should load settings from cookie', () => {
+            const settings = { maxDetails: 25 };
+            saveSettingsToCookie(settings);
+            
+            const loaded = loadSettingsFromCookie();
+            expect(loaded).toBeDefined();
+            expect(loaded.maxDetails).toBe(25);
+        });
+
+        it('should return null when no cookie exists', () => {
+            const loaded = loadSettingsFromCookie();
+            expect(loaded).toBeNull();
+        });
+
+        it('should handle corrupted cookie data', () => {
+            mockCookies['sitrecSettings'] = 'invalid-json';
+            const loaded = loadSettingsFromCookie();
+            expect(loaded).toBeNull();
+        });
+
+        it('should sanitize settings when loading from cookie', () => {
+            // Manually set a cookie with out-of-range value
+            mockCookies['sitrecSettings'] = encodeURIComponent(JSON.stringify({ maxDetails: 100 }));
+            
+            const loaded = loadSettingsFromCookie();
+            expect(loaded.maxDetails).toBe(30); // Should be clamped
+        });
+    });
+
+    describe('Server operations', () => {
+        it('should load settings from server successfully', async () => {
+            const mockSettings = { maxDetails: 18 };
+            global.fetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ success: true, settings: mockSettings })
+            });
+
+            const loaded = await loadSettingsFromServer();
+            expect(loaded).toBeDefined();
+            expect(loaded.maxDetails).toBe(18);
+            expect(global.fetch).toHaveBeenCalledWith(
+                './sitrecServer/settings.php',
+                expect.objectContaining({ method: 'GET' })
+            );
+        });
+
+        it('should return null when server returns error', async () => {
+            global.fetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ error: 'Not found' })
+            });
+
+            const loaded = await loadSettingsFromServer();
+            expect(loaded).toBeNull();
+        });
+
+        it('should return null when server request fails', async () => {
+            global.fetch.mockResolvedValueOnce({
+                ok: false,
+                status: 500
+            });
+
+            const loaded = await loadSettingsFromServer();
+            expect(loaded).toBeNull();
+        });
+
+        it('should handle network errors gracefully', async () => {
+            global.fetch.mockRejectedValueOnce(new Error('Network error'));
+
+            const loaded = await loadSettingsFromServer();
+            expect(loaded).toBeNull();
+        });
+
+        it('should save settings to server successfully', async () => {
+            const settings = { maxDetails: 22 };
+            global.fetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ success: true, settings })
+            });
+
+            const result = await saveSettingsToServer(settings);
+            expect(result).toBe(true);
+            expect(global.fetch).toHaveBeenCalledWith(
+                './sitrecServer/settings.php',
+                expect.objectContaining({
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ settings })
+                })
+            );
+        });
+
+        it('should return false when server save fails', async () => {
+            global.fetch.mockResolvedValueOnce({
+                ok: false,
+                status: 500
+            });
+
+            const result = await saveSettingsToServer({ maxDetails: 15 });
+            expect(result).toBe(false);
+        });
+
+        it('should sanitize settings before sending to server', async () => {
+            const settings = { maxDetails: 100 }; // Out of range
+            global.fetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ success: true, settings: { maxDetails: 30 } })
+            });
+
+            await saveSettingsToServer(settings);
+            
+            const callArgs = global.fetch.mock.calls[0][1];
+            const sentData = JSON.parse(callArgs.body);
+            expect(sentData.settings.maxDetails).toBe(30); // Should be clamped
+        });
+    });
+
+    describe('initializeSettings', () => {
+        it('should initialize with defaults when no saved settings exist', async () => {
+            Globals.userID = 0;
+            
+            const result = await initializeSettings();
+            
+            expect(Globals.settings).toBeDefined();
+            expect(Globals.settings.maxDetails).toBe(15); // Default value
+        });
+
+        it('should load from server when user is logged in', async () => {
+            Globals.userID = 99999999; // Test user ID for local setup
+            
+            const mockSettings = { maxDetails: 20 };
+            global.fetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ success: true, settings: mockSettings })
+            });
+
+            await initializeSettings();
+            
+            expect(Globals.settings.maxDetails).toBe(20);
+            expect(global.fetch).toHaveBeenCalledWith(
+                './sitrecServer/settings.php',
+                expect.objectContaining({ method: 'GET' })
+            );
+        });
+
+        it('should fall back to cookies when server fails', async () => {
+            Globals.userID = 99999999;
+            
+            // Server fails
+            global.fetch.mockResolvedValueOnce({
+                ok: false,
+                status: 500
+            });
+            
+            // But cookie exists
+            saveSettingsToCookie({ maxDetails: 18 });
+            
+            await initializeSettings();
+            
+            expect(Globals.settings.maxDetails).toBe(18);
+        });
+
+        it('should use cookies when user is not logged in', async () => {
+            Globals.userID = 0;
+            
+            saveSettingsToCookie({ maxDetails: 12 });
+            
+            await initializeSettings();
+            
+            expect(Globals.settings.maxDetails).toBe(12);
+            expect(global.fetch).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('saveSettings', () => {
+        it('should save to server when user is logged in', async () => {
+            Globals.userID = 99999999;
+            Globals.settings = { maxDetails: 25 };
+            
+            global.fetch.mockResolvedValueOnce({
+                ok: true,
+                json: async () => ({ success: true, settings: { maxDetails: 25 } })
+            });
+
+            const result = await saveSettings(Globals.settings);
+            
+            expect(result).toBe(true);
+            expect(global.fetch).toHaveBeenCalledWith(
+                './sitrecServer/settings.php',
+                expect.objectContaining({ method: 'POST' })
+            );
+            
+            // Should also save to cookie as backup
+            const cookieValue = mockCookies['sitrecSettings'];
+            expect(cookieValue).toBeDefined();
+        });
+
+        it('should fall back to cookies when server fails', async () => {
+            Globals.userID = 99999999;
+            Globals.settings = { maxDetails: 16 };
+            
+            global.fetch.mockResolvedValueOnce({
+                ok: false,
+                status: 500
+            });
+
+            const result = await saveSettings(Globals.settings);
+            
+            expect(result).toBe(true); // Still returns true (saved to cookie)
+            
+            // Should save to cookie
+            const loaded = loadSettingsFromCookie();
+            expect(loaded.maxDetails).toBe(16);
+        });
+
+        it('should save to cookies only when user is not logged in', async () => {
+            Globals.userID = 0;
+            Globals.settings = { maxDetails: 14 };
+
+            const result = await saveSettings(Globals.settings);
+            
+            expect(result).toBe(true);
+            expect(global.fetch).not.toHaveBeenCalled();
+            
+            const loaded = loadSettingsFromCookie();
+            expect(loaded.maxDetails).toBe(14);
+        });
+    });
+
+    describe('Integration test - Full workflow', () => {
+        it('should handle complete save and load cycle with local user', async () => {
+            // Simulate local setup with test user ID
+            Globals.userID = 99999999;
+            
+            // Mock server responses
+            global.fetch
+                .mockResolvedValueOnce({
+                    // First load - no settings exist yet
+                    ok: true,
+                    json: async () => ({ success: true, settings: {} })
+                })
+                .mockResolvedValueOnce({
+                    // Save response
+                    ok: true,
+                    json: async () => ({ success: true, settings: { maxDetails: 22 } })
+                })
+                .mockResolvedValueOnce({
+                    // Second load response - settings now exist
+                    ok: true,
+                    json: async () => ({ success: true, settings: { maxDetails: 22 } })
+                });
+
+            // Initialize with defaults (server has no settings yet)
+            await initializeSettings();
+            expect(Globals.settings.maxDetails).toBe(15); // Default
+            
+            // Change and save settings
+            Globals.settings.maxDetails = 22;
+            await saveSettings(Globals.settings);
+            
+            // Reset and reload
+            Globals.settings = undefined;
+            await initializeSettings();
+            
+            // Should load the saved value
+            expect(Globals.settings.maxDetails).toBe(22);
+        });
+
+        it('should handle complete save and load cycle with cookies only', async () => {
+            // User not logged in
+            Globals.userID = 0;
+            
+            // Initialize with defaults
+            await initializeSettings();
+            expect(Globals.settings.maxDetails).toBe(15);
+            
+            // Change and save settings
+            Globals.settings.maxDetails = 19;
+            await saveSettings(Globals.settings);
+            
+            // Reset and reload
+            Globals.settings = undefined;
+            await initializeSettings();
+            
+            // Should load the saved value from cookie
+            expect(Globals.settings.maxDetails).toBe(19);
+        });
+    });
+});

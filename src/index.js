@@ -1012,7 +1012,7 @@ async function setupFunctions() {
 
 
     if (Sit.isCustom || Sit.canMod) {
-        CustomManager.setup()
+        await CustomManager.setup()
     }
 
 // Each sitch can have a setup() and setup2() function
