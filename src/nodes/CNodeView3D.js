@@ -431,8 +431,10 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (this.isIR && this.effectsEnabled) {
                     lightingNode.setIR(true);
                 }
-                lightingNode.recalculate((this.id === "mainView"));
-                sharedUniforms.useDayNight.value = !lightingNode.noMainLighting;
+                const isMainView = (this.id === "mainView");
+                lightingNode.recalculate(isMainView);
+                // Only disable day/night lighting if noMainLighting is enabled AND this is the main view
+                sharedUniforms.useDayNight.value = !(lightingNode.noMainLighting && isMainView);
 
 
 

@@ -93,7 +93,9 @@ export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 
                 if (useDayNight) {
                     finalColor = mix(nightColor, dayColor, blendFactor);
                 } else {
-                    finalColor = dayColor;
+                    // When day/night is disabled (noMainLighting mode), use plain texture
+                    // with no lighting calculations at all for true debugging
+                    finalColor = textureColor;
                 }
                 
                 // Set alpha to 1.0
