@@ -1,12 +1,11 @@
 import {LLAToEUS} from "./LLA-ECEF-ENU";
-import {assert} from "./assert";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {QuadTreeMap} from "./QuadTreeMap";
 import {setRenderOne} from "./Globals";
 import {showError} from "./showError";
 import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
-import {MeshStandardMaterial} from "three/src/materials/MeshStandardMaterial";
+import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
 
 class QuadTreeMapTexture extends QuadTreeMap {
     constructor(scene, terrainNode, geoLocation, options = {}) {
@@ -104,15 +103,12 @@ class QuadTreeMapTexture extends QuadTreeMap {
             if (tile.mesh !== undefined) {
                 this.scene.remove(tile.mesh)
                 tile.mesh.geometry.dispose();
-                if (tile.mesh.material.uniforms !== undefined) {
-                    assert(tile.mesh.material.uniforms !== undefined, 'Uniforms not defined');
-
-                    ['mapSW', 'mapNW', 'mapSE', 'mapNE'].forEach(key => {
-                        tile.mesh.material.uniforms[key].value.dispose();
-                    });
-
+                
+                // Dispose the texture if it exists
+                if (tile.mesh.material.uniforms?.map?.value) {
+                    tile.mesh.material.uniforms.map.value.dispose();
                 }
-
+                
                 tile.mesh.material.dispose()
             }
             
@@ -308,11 +304,8 @@ class QuadTreeMapTexture extends QuadTreeMap {
             blackTexture.minFilter = NearestFilter;
             blackTexture.magFilter = NearestFilter;
             
-            const material = new MeshStandardMaterial({
-                map: blackTexture,
-                metalness: 0,
-                roughness: 1
-            });
+            // Use the same shader material as regular tiles for consistency
+            const material = createTerrainDayNightMaterial(blackTexture, 0.3);
             
             tile.mesh.material = material;
             tile.updateSkirtMaterial();

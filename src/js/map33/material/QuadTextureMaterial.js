@@ -1,6 +1,5 @@
-import {CanvasTexture, Color, MeshStandardMaterial, TextureLoader,} from "three";
-//import vertexShader from './quadtexture_vert.glsl'
-//import fragmentShader from './quadtexture_frag.glsl'
+import {CanvasTexture, TextureLoader} from "three";
+import {createTerrainDayNightMaterial} from "./TerrainDayNightMaterial";
 
 const loader = new TextureLoader()
 
@@ -123,51 +122,26 @@ export function loadTextureWithRetries(url, maxRetries = 3, delay = 100, current
 
 const QuadTextureMaterial = (urls) => {
   return Promise.all(urls.map(url => loadTextureWithRetries(url))).then(maps => {
-
-
-
-    // set       texture.colorSpace = SRGBColorSpace; on each map
-    // to avoid gamma correction
-//    maps.forEach(map => map.colorSpace = SRGBColorSpace)
-
-    // intead of a custom material, use the built-in MeshBasicMaterial
-    // and make a new single texture from the 4 textures
-    // so creating a single double resolution texture
+    // Combine the 4 texture tiles into a single double resolution texture
+    // Maps are arranged as: [SW, NW, SE, NE]
     const canvas = document.createElement('canvas')
     const ctx = canvas.getContext('2d')
     canvas.width = maps[0].image.width * 2
     canvas.height = maps[0].image.height * 2
-    ctx.drawImage(maps[0].image, 0, 0)
-    ctx.drawImage(maps[1].image, 0, maps[0].image.height)
-    ctx.drawImage(maps[2].image, maps[0].image.width, 0)
-    ctx.drawImage(maps[3].image, maps[0].image.width, maps[0].image.height)
+    ctx.drawImage(maps[0].image, 0, 0)  // SW - bottom left
+    ctx.drawImage(maps[1].image, 0, maps[0].image.height)  // NW - top left
+    ctx.drawImage(maps[2].image, maps[0].image.width, 0)  // SE - bottom right
+    ctx.drawImage(maps[3].image, maps[0].image.width, maps[0].image.height)  // NE - top right
+    
     const texture = new CanvasTexture(canvas)
-//    texture.colorSpace = SRGBColorSpace;
-
     texture.needsUpdate = true
-    // destroy the canvas and original textures
+    
+    // Clean up temporary resources
     canvas.remove()
     maps.forEach(map => map.dispose())
 
-
-    // using a standard material means it gets lighting
-    // Seems to be giving significantly brighter colors in SWR
-    // in Area6 we can adjust the time of day to see this effect
-    // all the lights add together to make it brighter
-
-    return new MeshStandardMaterial({map: texture,
-      emissive: new Color(0xffffff),  // Set emissive color to white
-      emissiveMap: texture,                 // Use the same texture for emissive map
-      emissiveIntensity: 0.0,                // Full intensity for emissive
-      //colorSpace: SRGBColorSpace
-       })
-
-
-    // for now use this basic material
-    // // basic material for no lighting, just render the original colors.
-    // return new MeshBasicMaterial({map: texture})
-
-
+    // Use custom terrain shader with day/night lighting and terrain shading
+    return createTerrainDayNightMaterial(texture, 0.3);
   })
 }
 

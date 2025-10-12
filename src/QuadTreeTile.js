@@ -19,6 +19,7 @@ import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
 import {showError} from "./showError";
 import {processTextureColors} from "./TextureColorProcessor";
+import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
 
 //const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020", transparent: true, opacity: 0.5})
 
@@ -1320,7 +1321,7 @@ export class QuadTreeTile {
                 );
             }
 
-            const material = new MeshStandardMaterial({map: finalTexture, color: "#ffffff"});
+            const material = createTerrainDayNightMaterial(finalTexture, 0.3);
             // Cache the material for future use
             materialCache.set(cacheKey, material);
             // Clean up the promise cache once loading is complete
@@ -1392,7 +1393,7 @@ export class QuadTreeTile {
                                 texture.dispose();
                             }
 
-                            const baseMaterial = new MeshStandardMaterial({map: finalTexture, color: "#ffffff"});
+                            const baseMaterial = createTerrainDayNightMaterial(finalTexture, 0.3);
                             materialCache.set(baseCacheKey, baseMaterial);
                             // Clean up the promise cache once loading is complete
                             textureLoadPromises.delete(baseCacheKey);
@@ -1413,7 +1414,7 @@ export class QuadTreeTile {
                     true  // isSeamless = true for static textures
                 );
 
-                const material = new MeshStandardMaterial({map: mipmapTexture, color: "#ffffff"});
+                const material = createTerrainDayNightMaterial(mipmapTexture, 0.3);
 
                 // Cache the final material
                 materialCache.set(materialCacheKey, material);
@@ -1492,7 +1493,7 @@ export class QuadTreeTile {
         texture.needsUpdate = true;
 
         // Create and return material
-        const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+        const material = createTerrainDayNightMaterial(texture, 0.3);
 
         return material;
     }
@@ -1561,7 +1562,7 @@ export class QuadTreeTile {
         texture.needsUpdate = true;
 
         // Create and return material
-        const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
+        const material = createTerrainDayNightMaterial(texture, 0.3);
 
         return material;
     }
@@ -1861,7 +1862,7 @@ export class QuadTreeTile {
         const texture = new CanvasTexture(canvas);
         texture.minFilter = NearestFilter;
         texture.magFilter = NearestFilter;
-        const material = new MeshStandardMaterial({map: texture});
+        const material = createTerrainDayNightMaterial(texture, 0.3);
 
 
         this.mesh.material = material;
@@ -2269,7 +2270,7 @@ export class QuadTreeTile {
         }
 
         // Create new material
-        const material = new MeshStandardMaterial({map: texture});
+        const material = createTerrainDayNightMaterial(texture, 0.3);
 
         // Dispose of the old material properly
         const oldMaterial = this.mesh.material;
