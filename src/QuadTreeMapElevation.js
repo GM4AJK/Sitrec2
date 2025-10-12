@@ -60,6 +60,14 @@ export class QuadTreeMapElevation extends QuadTreeMap {
         } else {
             tile = new QuadTreeTile(this, z, x, y);
             this.setTile(x, y, z, tile);
+            
+            // Set up parent relationship in tree structure
+            const parent = this.getParent(tile);
+            if (parent) {
+                tile.parent = parent;
+                // Note: children array is set up in subdivideTile when all 4 children are created
+            }
+            
             const key = `${z}/${x}/${y}`;
             
             // If z is below minZoom, create a dummy tile with zero elevation

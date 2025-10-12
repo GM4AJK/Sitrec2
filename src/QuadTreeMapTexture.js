@@ -284,6 +284,13 @@ class QuadTreeMapTexture extends QuadTreeMap {
         tile.setPosition(center); // ???
         tile.recalculateCurve()
         this.setTile(x, y, z, tile);
+        
+        // Set up parent relationship in tree structure
+        const parent = this.getParent(tile);
+        if (parent) {
+            tile.parent = parent;
+            // Note: children array is set up in subdivideTile when all 4 children are created
+        }
 
         const key = `${z}/${x}/${y}`;
 
@@ -462,10 +469,7 @@ class QuadTreeMapTexture extends QuadTreeMap {
         // This allows child tiles to appear instantly with lower-quality parent texture,
         // then upgrade to high-res later when visible (via triggerLazyLoadIfNeeded)
         if (useParentData && z > 0) {
-            const parentX = Math.floor(x / 2);
-            const parentY = Math.floor(y / 2);
-            const parentZ = z - 1;
-            const parentTile = this.getTile(parentX, parentY, parentZ);
+            const parentTile = tile.parent;
             
             // Verify parent has a loaded texture that we can extract data from
             // Requirements:

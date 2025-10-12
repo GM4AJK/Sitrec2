@@ -554,18 +554,12 @@ export class CNodeTerrain extends CNode {
             return;
         }
 
-        // caclulate the parent tile from tile.x, tile.y, tile.z
-        // if the tile is at the root, then it has no parent
-        if (tile.z === 0) {
+        // Use the tree structure to get the parent tile
+        const parentTile = tile.parent;
+        
+        if (!parentTile) {
             return; // no parent for root tile
         }
-
-        const parentX = Math.floor(tile.x / 2);
-        const parentY = Math.floor(tile.y / 2);
-        const parentZ = tile.z - 1;
-        const parentTile = terrainMap.getTile(parentX, parentY, parentZ);
-
-
 
         // apply elevation to the parent tile
         parentTile.recalculateCurve();
@@ -599,10 +593,13 @@ export class CNodeTerrain extends CNode {
             // this is recursive, so we can just call this function on the children
             // undefined children will be ignored
             // since we don't dispose the higher level elevation tiles, this should generally only be one deep
-            this.applyElevationToTile(terrainMap.getTile(tile.x * 2, tile.y * 2, tile.z + 1), terrainMap);
-            this.applyElevationToTile(terrainMap.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1), terrainMap);
-            this.applyElevationToTile(terrainMap.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1), terrainMap);
-            this.applyElevationToTile(terrainMap.getTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1), terrainMap);
+            
+            // Use tree structure to iterate through children
+            if (tile.children) {
+                tile.children.forEach(child => {
+                    if (child) this.applyElevationToTile(child, terrainMap);
+                });
+            }
         }
     }
 

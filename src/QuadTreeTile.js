@@ -60,12 +60,16 @@ export class QuadTreeTile {
         this.highestAltitude = 0;
         this.usingParentData = false; // Track if this tile is using resampled parent texture/elevation
         this.needsHighResLoad = false; // Track if this tile needs to load high-res data when visible
-        
+
         // AbortController for cancelling texture loading
         this.textureAbortController = null;
-        
+
         // Private property to store tileLayers value
         this._tileLayers = undefined;
+
+        // Tree structure: parent and children references
+        this.parent = null; // Reference to parent tile (null if root)
+        this.children = null; // Array of four child tiles [child1, child2, child3, child4] or null if no children
     }
 
     // Getter and setter for tileLayers to track changes
@@ -178,7 +182,7 @@ export class QuadTreeTile {
         const segments = this.map.options.tileSegments;
         const halfSize = this.size / 2;
         const skirtDepth = this.size * 0.1; // 1/10 the width of the tile
-        
+
         // Calculate the center position of the tile in world coordinates
         const lat1 = this.map.options.mapProjection.getNorthLatitude(this.y, this.z);
         const lon1 = this.map.options.mapProjection.getLeftLongitude(this.x, this.z);
@@ -187,28 +191,28 @@ export class QuadTreeTile {
         const centerLat = (lat1 + lat2) / 2;
         const centerLon = (lon1 + lon2) / 2;
         const centerPosition = LLAToEUS(centerLat, centerLon, 0);
-        
+
         // Get the local down vector for this tile's center position
         const downVector = getLocalDownVector(centerPosition);
-        
+
         const vertices = [];
         const indices = [];
         const uvs = [];
         const normals = [];
-        
+
         // Get the edge vertices from the main tile geometry
         const mainPositions = this.geometry.attributes.position.array;
         const mainUvs = this.geometry.attributes.uv.array;
-        
+
         // Ensure main geometry has normals computed
         if (!this.geometry.attributes.normal) {
             fastComputeVertexNormals(this.geometry);
         }
         const mainNormals = this.geometry.attributes.normal.array;
-        
+
         // Helper function to get vertex index in the main geometry
         const getVertexIndex = (x, y) => (y * (segments + 1) + x);
-        
+
         // Helper function to add a vertex to our skirt arrays
         const addVertex = (x, y, z, u, v, nx, ny, nz) => {
             vertices.push(x, y, z);
@@ -216,73 +220,73 @@ export class QuadTreeTile {
             normals.push(nx, ny, nz);
             return (vertices.length / 3) - 1;
         };
-        
+
         let vertexIndex = 0;
-        
+
         // Create skirt for each edge
         const edges = [
             // Bottom edge (y = 0)
-            { start: [0, 0], end: [segments, 0], direction: [1, 0] },
+            {start: [0, 0], end: [segments, 0], direction: [1, 0]},
             // Right edge (x = segments)
-            { start: [segments, 0], end: [segments, segments], direction: [0, 1] },
+            {start: [segments, 0], end: [segments, segments], direction: [0, 1]},
             // Top edge (y = segments)
-            { start: [segments, segments], end: [0, segments], direction: [-1, 0] },
+            {start: [segments, segments], end: [0, segments], direction: [-1, 0]},
             // Left edge (x = 0)
-            { start: [0, segments], end: [0, 0], direction: [0, -1] }
+            {start: [0, segments], end: [0, 0], direction: [0, -1]}
         ];
-        
+
         // Create vertices and triangles for each edge
         for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
             const edge = edges[edgeIndex];
             const [startX, startY] = edge.start;
             const [endX, endY] = edge.end;
             const [dirX, dirY] = edge.direction;
-            
+
             const edgeLength = Math.abs(endX - startX) + Math.abs(endY - startY);
-            
+
             // Create vertices for this edge
             for (let i = 0; i <= edgeLength; i++) {
                 const x = startX + dirX * i;
                 const y = startY + dirY * i;
-                
+
                 const mainVertexIndex = getVertexIndex(x, y);
                 const mainX = mainPositions[mainVertexIndex * 3];
                 const mainY = mainPositions[mainVertexIndex * 3 + 1];
                 const mainZ = mainPositions[mainVertexIndex * 3 + 2];
                 const mainU = mainUvs[mainVertexIndex * 2];
                 const mainV = mainUvs[mainVertexIndex * 2 + 1];
-                
+
                 // Get the normal from the main tile surface for fake lighting
                 const mainNx = mainNormals[mainVertexIndex * 3];
                 const mainNy = mainNormals[mainVertexIndex * 3 + 1];
                 const mainNz = mainNormals[mainVertexIndex * 3 + 2];
-                
+
                 // Add top vertex (at tile edge level) with main tile normal
                 addVertex(mainX, mainY, mainZ, mainU, mainV, mainNx, mainNy, mainNz);
-                
+
                 // Add bottom vertex (extended downward) with same normal for consistent lighting
                 const bottomX = mainX + downVector.x * skirtDepth;
                 const bottomY = mainY + downVector.y * skirtDepth;
                 const bottomZ = mainZ + downVector.z * skirtDepth;
                 addVertex(bottomX, bottomY, bottomZ, mainU, mainV, mainNx, mainNy, mainNz);
             }
-            
+
             // Create triangles for this edge
             const edgeStartVertexIndex = vertexIndex;
             for (let i = 0; i < edgeLength; i++) {
                 const currentVertexIndex = edgeStartVertexIndex + i * 2;
                 const nextVertexIndex = currentVertexIndex + 2;
-                
+
                 // Two triangles per segment (clockwise winding for outward-facing normals)
                 // Triangle 1: current top, next top, current bottom
                 indices.push(currentVertexIndex, nextVertexIndex, currentVertexIndex + 1);
                 // Triangle 2: current bottom, next top, next bottom
                 indices.push(currentVertexIndex + 1, nextVertexIndex, nextVertexIndex + 1);
             }
-            
+
             vertexIndex += (edgeLength + 1) * 2;
         }
-        
+
         // Create the skirt geometry
         const skirtGeometry = new BufferGeometry();
         skirtGeometry.setAttribute('position', new Float32BufferAttribute(vertices, 3));
@@ -290,17 +294,17 @@ export class QuadTreeTile {
         skirtGeometry.setAttribute('normal', new Float32BufferAttribute(normals, 3));
         skirtGeometry.setIndex(indices);
         // Don't compute vertex normals - use our fake normals for consistent lighting
-        
+
         this.skirtGeometry = skirtGeometry;
     }
 
     // Update skirt geometry to match the current main tile geometry after elevation changes
     updateSkirtGeometry() {
         if (!this.geometry || !this.skirtGeometry) return;
-        
+
         const segments = this.map.options.tileSegments;
         const skirtDepth = this.size * 0.1; // 1/10 the width of the tile
-        
+
         // Calculate the center position of the tile in world coordinates
         const lat1 = this.map.options.mapProjection.getNorthLatitude(this.y, this.z);
         const lon1 = this.map.options.mapProjection.getLeftLongitude(this.x, this.z);
@@ -309,86 +313,86 @@ export class QuadTreeTile {
         const centerLat = (lat1 + lat2) / 2;
         const centerLon = (lon1 + lon2) / 2;
         const centerPosition = LLAToEUS(centerLat, centerLon, 0);
-        
+
         // Get the local down vector for this tile's center position
         const downVector = getLocalDownVector(centerPosition);
-        
+
         // Get the updated edge vertices from the main tile geometry
         const mainPositions = this.geometry.attributes.position.array;
         const skirtPositions = this.skirtGeometry.attributes.position.array;
-        
+
         // Ensure main geometry has normals computed
         if (!this.geometry.attributes.normal) {
             fastComputeVertexNormals(this.geometry);
         }
         const mainNormals = this.geometry.attributes.normal.array;
         const skirtNormals = this.skirtGeometry.attributes.normal.array;
-        
+
         // Helper function to get vertex index in the main geometry
         const getVertexIndex = (x, y) => (y * (segments + 1) + x);
-        
+
         let skirtVertexIndex = 0;
-        
+
         // Update skirt vertices for each edge
         const edges = [
             // Bottom edge (y = 0)
-            { start: [0, 0], end: [segments, 0], direction: [1, 0] },
+            {start: [0, 0], end: [segments, 0], direction: [1, 0]},
             // Right edge (x = segments)
-            { start: [segments, 0], end: [segments, segments], direction: [0, 1] },
+            {start: [segments, 0], end: [segments, segments], direction: [0, 1]},
             // Top edge (y = segments)
-            { start: [segments, segments], end: [0, segments], direction: [-1, 0] },
+            {start: [segments, segments], end: [0, segments], direction: [-1, 0]},
             // Left edge (x = 0)
-            { start: [0, segments], end: [0, 0], direction: [0, -1] }
+            {start: [0, segments], end: [0, 0], direction: [0, -1]}
         ];
-        
+
         // Update vertices for each edge (matching the creation logic)
         for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
             const edge = edges[edgeIndex];
             const [startX, startY] = edge.start;
             const [endX, endY] = edge.end;
             const [dirX, dirY] = edge.direction;
-            
+
             const edgeLength = Math.abs(endX - startX) + Math.abs(endY - startY);
-            
+
             // Update vertices for this edge
             for (let i = 0; i <= edgeLength; i++) {
                 const x = startX + dirX * i;
                 const y = startY + dirY * i;
-                
+
                 const mainVertexIndex = getVertexIndex(x, y);
                 const mainX = mainPositions[mainVertexIndex * 3];
                 const mainY = mainPositions[mainVertexIndex * 3 + 1];
                 const mainZ = mainPositions[mainVertexIndex * 3 + 2];
-                
+
                 // Get the normal from the main tile surface for fake lighting
                 const mainNx = mainNormals[mainVertexIndex * 3];
                 const mainNy = mainNormals[mainVertexIndex * 3 + 1];
                 const mainNz = mainNormals[mainVertexIndex * 3 + 2];
-                
+
                 // Update top vertex (at tile edge level)
                 skirtPositions[skirtVertexIndex * 3] = mainX;
                 skirtPositions[skirtVertexIndex * 3 + 1] = mainY;
                 skirtPositions[skirtVertexIndex * 3 + 2] = mainZ;
-                
+
                 // Update top vertex normal (fake normal from main tile)
                 skirtNormals[skirtVertexIndex * 3] = mainNx;
                 skirtNormals[skirtVertexIndex * 3 + 1] = mainNy;
                 skirtNormals[skirtVertexIndex * 3 + 2] = mainNz;
-                
+
                 // Update bottom vertex (extended downward using local down vector)
                 skirtPositions[(skirtVertexIndex + 1) * 3] = mainX + downVector.x * skirtDepth;
                 skirtPositions[(skirtVertexIndex + 1) * 3 + 1] = mainY + downVector.y * skirtDepth;
                 skirtPositions[(skirtVertexIndex + 1) * 3 + 2] = mainZ + downVector.z * skirtDepth;
-                
+
                 // Update bottom vertex normal (same fake normal for consistent lighting)
                 skirtNormals[(skirtVertexIndex + 1) * 3] = mainNx;
                 skirtNormals[(skirtVertexIndex + 1) * 3 + 1] = mainNy;
                 skirtNormals[(skirtVertexIndex + 1) * 3 + 2] = mainNz;
-                
+
                 skirtVertexIndex += 2;
             }
         }
-        
+
         // Mark the attributes as needing update
         this.skirtGeometry.attributes.position.needsUpdate = true;
         this.skirtGeometry.attributes.normal.needsUpdate = true;
@@ -405,7 +409,7 @@ export class QuadTreeTile {
             })
         }
         this.debugArrows = []
-        
+
         // Remove loading indicators if they exist
         if (this.loadingIndicator !== undefined) {
             GlobalScene.remove(this.loadingIndicator);
@@ -413,14 +417,14 @@ export class QuadTreeTile {
             this.loadingIndicator.material.dispose();
             this.loadingIndicator = undefined;
         }
-        
+
         if (this.elevationLoadingIndicator !== undefined) {
             GlobalScene.remove(this.elevationLoadingIndicator);
             this.elevationLoadingIndicator.geometry.dispose();
             this.elevationLoadingIndicator.material.dispose();
             this.elevationLoadingIndicator = undefined;
         }
-        
+
         // Remove layer mask indicators if they exist
         if (this.mainLayerIndicator !== undefined) {
             GlobalScene.remove(this.mainLayerIndicator);
@@ -428,21 +432,21 @@ export class QuadTreeTile {
             this.mainLayerIndicator.material.dispose();
             this.mainLayerIndicator = undefined;
         }
-        
+
         if (this.lookLayerIndicator !== undefined) {
             GlobalScene.remove(this.lookLayerIndicator);
             this.lookLayerIndicator.geometry.dispose();
             this.lookLayerIndicator.material.dispose();
             this.lookLayerIndicator = undefined;
         }
-        
+
         if (this.worldLayerIndicator !== undefined) {
             GlobalScene.remove(this.worldLayerIndicator);
             this.worldLayerIndicator.geometry.dispose();
             this.worldLayerIndicator.material.dispose();
             this.worldLayerIndicator = undefined;
         }
-        
+
         if (this.activeIndicator !== undefined) {
             GlobalScene.remove(this.activeIndicator);
             this.activeIndicator.geometry.dispose();
@@ -455,43 +459,43 @@ export class QuadTreeTile {
     dispose() {
         // Remove debug geometry first
         this.removeDebugGeometry();
-        
+
         // Remove mesh from scene if it exists
         if (this.mesh) {
             if (this.mesh.parent) {
                 this.mesh.parent.remove(this.mesh);
             }
-            
+
             // Dispose geometry (but not material since it's cached)
             if (this.mesh.geometry) {
                 this.mesh.geometry.dispose();
             }
-            
+
             // Note: We don't dispose the material here since it's cached
             // and may be used by other tiles. Use static methods to manage cache.
-            
+
             this.mesh = undefined;
         }
-        
+
         // Remove skirt mesh from scene if it exists
         if (this.skirtMesh) {
             if (this.skirtMesh.parent) {
                 this.skirtMesh.parent.remove(this.skirtMesh);
             }
-            
+
             // Dispose skirt geometry
             if (this.skirtMesh.geometry) {
                 this.skirtMesh.geometry.dispose();
             }
-            
+
             // Dispose skirt material if it's a cloned material (not the shared tileMaterial)
             if (this.skirtMesh.material && this.skirtMesh.material !== tileMaterial) {
                 this.skirtMesh.material.dispose();
             }
-            
+
             this.skirtMesh = undefined;
         }
-        
+
         // Clear other references
         this.geometry = undefined;
         this.skirtGeometry = undefined;
@@ -513,8 +517,7 @@ export class QuadTreeTile {
     }
 
 
-
-    buildDebugGeometry(color ="#FF00FF", altitude = 0) {
+    buildDebugGeometry(color = "#FF00FF", altitude = 0) {
         // patch in a debug rectangle around the tile using arrows
         // this is useful for debugging the tile positions - especially elevation vs map
         // arrows are good as they are more visible than lines
@@ -599,93 +602,93 @@ export class QuadTreeTile {
         // Add loading indicators in top-left corner
         const offsetFactor = 0.1; // 10% inward from corner
         const indicatorSize = Math.abs(vertexNE.x - vertexNW.x) * 0.08; // 8% of tile width
-        
+
         // Red square for texture loading
         if (this.isLoading) {
             const loadingX = vertexNW.x + (vertexNE.x - vertexNW.x) * offsetFactor;
             const loadingY = vertexNW.y + (vertexSW.y - vertexNW.y) * offsetFactor;
             const loadingZ = vertexNW.z;
-            
+
             this.loadingIndicator = boxMark(
-                {x: loadingX, y: loadingY, z: loadingZ}, 
-                indicatorSize, indicatorSize, indicatorSize, 
+                {x: loadingX, y: loadingY, z: loadingZ},
+                indicatorSize, indicatorSize, indicatorSize,
                 "#FF0000", // Red color for texture loading
                 GlobalScene
             );
             this.loadingIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
         }
-        
+
         // Blue square for elevation loading (positioned next to red square)
         if (this.isLoadingElevation) {
             const elevationX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.12); // Offset to the right
             const elevationY = vertexNW.y + (vertexSW.y - vertexNW.y) * offsetFactor;
             const elevationZ = vertexNW.z;
-            
+
             this.elevationLoadingIndicator = boxMark(
-                {x: elevationX, y: elevationY, z: elevationZ}, 
-                indicatorSize, indicatorSize, indicatorSize, 
+                {x: elevationX, y: elevationY, z: elevationZ},
+                indicatorSize, indicatorSize, indicatorSize,
                 "#0000FF", // Blue color for elevation loading
                 GlobalScene
             );
             this.elevationLoadingIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
         }
-        
+
         // Layer mask indicators (positioned 25% down from the top of the tile)
         if (this.tileLayers !== undefined && this.tileLayers > 0) {
             const layerIndicatorY = vertexNW.y + (vertexSW.y - vertexNW.y) * 0.25; // 25% down from top
-            
+
             // Magenta square for MASK_MAIN (8)
             if (this.tileLayers & 8) { // MASK_MAIN = 8
                 const mainX = vertexNW.x + (vertexNE.x - vertexNW.x) * offsetFactor;
                 const mainZ = vertexNW.z;
-                
+
                 this.mainLayerIndicator = boxMark(
-                    {x: mainX, y: layerIndicatorY, z: mainZ}, 
-                    indicatorSize, indicatorSize, indicatorSize, 
+                    {x: mainX, y: layerIndicatorY, z: mainZ},
+                    indicatorSize, indicatorSize, indicatorSize,
                     "#FF00FF", // Magenta color for MASK_MAIN
                     GlobalScene
                 );
                 this.mainLayerIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
             }
-            
+
             // Yellow square for MASK_LOOK (16)
             if (this.tileLayers & 16) { // MASK_LOOK = 16
                 const lookX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.12); // Offset to the right
                 const lookZ = vertexNW.z;
-                
+
                 this.lookLayerIndicator = boxMark(
-                    {x: lookX, y: layerIndicatorY, z: lookZ}, 
-                    indicatorSize, indicatorSize, indicatorSize, 
+                    {x: lookX, y: layerIndicatorY, z: lookZ},
+                    indicatorSize, indicatorSize, indicatorSize,
                     "#FFFF00", // Yellow color for MASK_LOOK
                     GlobalScene
                 );
                 this.lookLayerIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
             }
-            
+
             // Green square for MASK_WORLD (1)
             if (this.tileLayers & 1) { // MASK_WORLD = 1
                 const worldX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.24); // Further to the right
                 const worldZ = vertexNW.z;
-                
+
                 this.worldLayerIndicator = boxMark(
-                    {x: worldX, y: layerIndicatorY, z: worldZ}, 
-                    indicatorSize, indicatorSize, indicatorSize, 
+                    {x: worldX, y: layerIndicatorY, z: worldZ},
+                    indicatorSize, indicatorSize, indicatorSize,
                     "#00FF00", // Green color for MASK_WORLD
                     GlobalScene
                 );
                 this.worldLayerIndicator.layers.mask = 0x1; // Make it visible on the helpers layer
             }
         }
-        
+
         // Brown square for active flag (positioned next to layer mask indicators)
         if (this.active !== undefined) {
             const activeIndicatorY = vertexNW.y + (vertexSW.y - vertexNW.y) * 0.25; // Same Y as layer indicators
             const activeX = vertexNW.x + (vertexNE.x - vertexNW.x) * (offsetFactor + 0.36); // Further to the right
             const activeZ = vertexNW.z;
-            
+
             this.activeIndicator = boxMark(
-                {x: activeX, y: activeIndicatorY, z: activeZ}, 
-                indicatorSize, indicatorSize, indicatorSize, 
+                {x: activeX, y: activeIndicatorY, z: activeZ},
+                indicatorSize, indicatorSize, indicatorSize,
                 this.active ? "#8B4513" : "#404040", // Brown if active, dark gray if inactive
                 GlobalScene
             );
@@ -735,7 +738,7 @@ export class QuadTreeTile {
             let yTileFraction = yIndex / (nPosition - 1)
             let xTileFraction = xIndex / (nPosition - 1)
 
-        //    assert(xTileFraction >= 0 && xTileFraction < 1, 'xTileFraction out of range in QuadTreeMap.js')
+            //    assert(xTileFraction >= 0 && xTileFraction < 1, 'xTileFraction out of range in QuadTreeMap.js')
 
             // clamp the fractions to keep it in the tile bounds
             // this is to avoid using adjacent tiles when we have perfect match
@@ -762,7 +765,7 @@ export class QuadTreeTile {
                 this.highestAltitude = elevation;
             }
 
-           // elevation = Math.random()*100000
+            // elevation = Math.random()*100000
 
             // convert that to EUS
             const vertexESU = LLAToEUS(lat, lon, elevation)
@@ -782,7 +785,7 @@ export class QuadTreeTile {
         this.generateElevationColorTextureInterpolated().catch(error => {
             console.warn(`Failed to generate interpolated elevation color texture for tile ${this.key()}:`, error);
         });
-        
+
         // Also check if we can now use actual elevation tile data instead of interpolated
         this.checkAndApplyElevationColorTexture();
 
@@ -794,7 +797,7 @@ export class QuadTreeTile {
         geometry.computeBoundingSphere()
 
         geometry.attributes.position.needsUpdate = true;
-        
+
         // Update skirt geometry to match the new main tile geometry
         if (this.skirtMesh && this.skirtGeometry) {
             this.updateSkirtGeometry();
@@ -804,13 +807,13 @@ export class QuadTreeTile {
     // NEW OPTIMIZED VERSION - works with elevation tiles at same or lower zoom levels
     // Tries exact coordinate match first, then searches parent tiles (lower zoom) and uses tile fractions
     // Applies elevation data directly from elevation tiles with bilinear interpolation
-    recalculateCurve(radius=wgs84.RADIUS) {
+    recalculateCurve(radius = wgs84.RADIUS) {
 
         this.highestAltitude = 0;
 
-         if (this.map.options.elevationMap.options.elevationType === "Flat") {
-             return this.recalculateCurveFlat(radius)
-         }
+        if (this.map.options.elevationMap.options.elevationType === "Flat") {
+            return this.recalculateCurveFlat(radius)
+        }
 
         // Use optimized Web Mercator version if we're using GoogleMapsCompatible projection
         if (this.map.options.mapProjection && this.map.options.mapProjection.name === "GoogleMapsCompatible") {
@@ -834,26 +837,29 @@ export class QuadTreeTile {
         let tileOffsetY = 0;
         let tileFractionX = 1.0;
         let tileFractionY = 1.0;
-        
+
         // First try exact match
         elevationTile = this.map.elevationMap?.getTile(this.x, this.y, this.z);
-        
+
         if (!elevationTile || !elevationTile.elevation) {
             // Try lower zoom levels (parent tiles with less detailed but available elevation data)
-            for (let searchZoom = this.z - 1; searchZoom >= 0; searchZoom--) {
-                // Calculate which parent tile covers this tile
-                const zoomDiff = this.z - searchZoom;
-                const tilesPerParent = Math.pow(2, zoomDiff);
-                
-                // Find the parent tile coordinates
-                const elevationX = Math.floor(this.x / tilesPerParent);
-                const elevationY = Math.floor(this.y / tilesPerParent);
-                const candidateTile = this.map.elevationMap.getTile(elevationX, elevationY, searchZoom);
-                
+            // Note: We must calculate parent coordinates mathematically because we're looking up
+            // tiles in a different QuadTree (elevationMap) than this tile belongs to (textureMap)
+            let searchX = this.x;
+            let searchY = this.y;
+            let searchZoom = this.z - 1;
+
+            while (searchZoom >= 0) {
+                searchX = Math.floor(searchX / 2);
+                searchY = Math.floor(searchY / 2);
+                const candidateTile = this.map.elevationMap?.getTile(searchX, searchY, searchZoom);
+
                 if (candidateTile && candidateTile.elevation) {
                     elevationTile = candidateTile;
                     elevationZoom = searchZoom;
                     // Calculate which portion of the parent tile this texture tile represents
+                    const zoomDiff = this.z - searchZoom;
+                    const tilesPerParent = Math.pow(2, zoomDiff);
                     tileOffsetX = this.x % tilesPerParent;
                     tileOffsetY = this.y % tilesPerParent;
                     tileFractionX = 1.0 / tilesPerParent;
@@ -861,9 +867,11 @@ export class QuadTreeTile {
 //                    console.log(`Using parent elevation tile ${elevationKey} (zoom ${searchZoom}) for texture tile ${this.key()}`);
                     break;
                 }
+
+                searchZoom--;
             }
         }
-        
+
         if (!elevationTile || !elevationTile.elevation) {
             // No elevation tile found at any zoom level, fall back to old method
 //            console.warn(`No elevation tile found for ${this.key()} at any zoom level, falling back to interpolated method`);
@@ -906,7 +914,7 @@ export class QuadTreeTile {
             // Map vertex position to elevation data coordinates, accounting for tile fraction and offset
             // If we're using a higher-zoom elevation tile, we need to map to the correct portion
             let elevationLocalX, elevationLocalY;
-            
+
             if (elevationZoom === this.z) {
                 // Same zoom level - direct mapping
                 elevationLocalX = xTileFraction * (elevationSize - 1);
@@ -919,28 +927,28 @@ export class QuadTreeTile {
                 elevationLocalX = parentOffsetX * (elevationSize - 1);
                 elevationLocalY = parentOffsetY * (elevationSize - 1);
             }
-            
+
             // Get the four surrounding elevation data points for interpolation
             const x0 = Math.floor(elevationLocalX);
             const x1 = Math.min(elevationSize - 1, x0 + 1);
             const y0 = Math.floor(elevationLocalY);
             const y1 = Math.min(elevationSize - 1, y0 + 1);
-            
+
             // Get the fractional parts for interpolation
             const fx = elevationLocalX - x0;
             const fy = elevationLocalY - y0;
-            
+
             // Sample the four corner elevation values
             const e00 = elevationTile.elevation[y0 * elevationSize + x0];
             const e01 = elevationTile.elevation[y0 * elevationSize + x1];
             const e10 = elevationTile.elevation[y1 * elevationSize + x0];
             const e11 = elevationTile.elevation[y1 * elevationSize + x1];
-            
+
             // Bilinear interpolation
             const e0 = e00 + (e01 - e00) * fx;
             const e1 = e10 + (e11 - e10) * fx;
             let elevation = e0 + (e1 - e0) * fy;
-            
+
             // Apply z-scale if available
             if (this.map.elevationMap.options.zScale) {
                 elevation *= this.map.elevationMap.options.zScale;
@@ -977,7 +985,7 @@ export class QuadTreeTile {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
-        
+
         // Update skirt geometry to match the new main tile geometry
         if (this.skirtMesh && this.skirtGeometry) {
             this.updateSkirtGeometry();
@@ -1052,7 +1060,7 @@ export class QuadTreeTile {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
-        
+
         // Update skirt geometry to match the new main tile geometry
         if (this.skirtMesh && this.skirtGeometry) {
             this.updateSkirtGeometry();
@@ -1065,7 +1073,7 @@ export class QuadTreeTile {
     recalculateCurveWebMercator(radius) {
         // Performance timing for optimization verification
         const startTime = performance.now();
-        
+
         this.highestAltitude = 0;
 
         var geometry = this.geometry;
@@ -1085,35 +1093,40 @@ export class QuadTreeTile {
         let tileOffsetY = 0;
         let tileFractionX = 1.0;
         let tileFractionY = 1.0;
-        
+
         // First try exact match
         elevationTile = this.map.elevationMap?.getTile(this.x, this.y, this.z);
-        
+
         if (!elevationTile || !elevationTile.elevation) {
             // Try lower zoom levels (parent tiles with less detailed but available elevation data)
-            for (let searchZoom = this.z - 1; searchZoom >= 0; searchZoom--) {
-                // Calculate which parent tile covers this tile
-                const zoomDiff = this.z - searchZoom;
-                const tilesPerParent = Math.pow(2, zoomDiff);
-                
-                // Find the parent tile coordinates
-                const elevationX = Math.floor(this.x / tilesPerParent);
-                const elevationY = Math.floor(this.y / tilesPerParent);
-                const candidateTile = this.map.elevationMap.getTile(elevationX, elevationY, searchZoom);
-                
+            // Note: We must calculate parent coordinates mathematically because we're looking up
+            // tiles in a different QuadTree (elevationMap) than this tile belongs to (textureMap)
+            let searchX = this.x;
+            let searchY = this.y;
+            let searchZoom = this.z - 1;
+
+            while (searchZoom >= 0) {
+                searchX = Math.floor(searchX / 2);
+                searchY = Math.floor(searchY / 2);
+                const candidateTile = this.map.elevationMap?.getTile(searchX, searchY, searchZoom);
+
                 if (candidateTile && candidateTile.elevation) {
                     elevationTile = candidateTile;
                     elevationZoom = searchZoom;
                     // Calculate which portion of the parent tile this texture tile represents
+                    const zoomDiff = this.z - searchZoom;
+                    const tilesPerParent = Math.pow(2, zoomDiff);
                     tileOffsetX = this.x % tilesPerParent;
                     tileOffsetY = this.y % tilesPerParent;
                     tileFractionX = 1.0 / tilesPerParent;
                     tileFractionY = 1.0 / tilesPerParent;
                     break;
                 }
+
+                searchZoom--;
             }
         }
-        
+
         if (!elevationTile || !elevationTile.elevation) {
             // No elevation tile found at any zoom level, fall back to old method
             return this.recalculateCurveOld(radius);
@@ -1123,11 +1136,11 @@ export class QuadTreeTile {
         const numTiles = Math.pow(2, this.z);
         const tileBaseX = this.x;
         const tileBaseY = this.y;
-        
+
         // Pre-calculate longitude constants (longitude is linear in Web Mercator)
         const lonScale = 360.0 / numTiles;
         const lonOffset = -180.0;
-        
+
         // Pre-calculate latitude constants (latitude uses Web Mercator formula)
         const latScale = Math.PI / numTiles;
 
@@ -1155,7 +1168,7 @@ export class QuadTreeTile {
             // Direct Web Mercator calculation - optimized version
             // Longitude calculation (linear)
             const lon = (xWorld * lonScale) + lonOffset;
-            
+
             // Latitude calculation (Web Mercator inverse)
             const latNorthRad = Math.atan(Math.sinh(Math.PI * (1 - 2 * yWorld / numTiles)));
             const lat = latNorthRad * 180 / Math.PI;
@@ -1163,7 +1176,7 @@ export class QuadTreeTile {
             // Get elevation with bilinear interpolation from the elevation tile data
             // Map vertex position to elevation data coordinates, accounting for tile fraction and offset
             let elevationLocalX, elevationLocalY;
-            
+
             if (elevationZoom === this.z) {
                 // Same zoom level - direct mapping
                 elevationLocalX = xTileFraction * (elevationSize - 1);
@@ -1176,28 +1189,28 @@ export class QuadTreeTile {
                 elevationLocalX = parentOffsetX * (elevationSize - 1);
                 elevationLocalY = parentOffsetY * (elevationSize - 1);
             }
-            
+
             // Get the four surrounding elevation data points for interpolation
             const x0 = Math.floor(elevationLocalX);
             const x1 = Math.min(elevationSize - 1, x0 + 1);
             const y0 = Math.floor(elevationLocalY);
             const y1 = Math.min(elevationSize - 1, y0 + 1);
-            
+
             // Get the fractional parts for interpolation
             const fx = elevationLocalX - x0;
             const fy = elevationLocalY - y0;
-            
+
             // Sample the four corner elevation values
             const e00 = elevationTile.elevation[y0 * elevationSize + x0];
             const e01 = elevationTile.elevation[y0 * elevationSize + x1];
             const e10 = elevationTile.elevation[y1 * elevationSize + x0];
             const e11 = elevationTile.elevation[y1 * elevationSize + x1];
-            
+
             // Bilinear interpolation
             const e0 = e00 + (e01 - e00) * fx;
             const e1 = e10 + (e11 - e10) * fx;
             let elevation = e0 + (e1 - e0) * fy;
-            
+
             // Apply z-scale if available
             if (this.map.elevationMap.options.zScale) {
                 elevation *= this.map.elevationMap.options.zScale;
@@ -1234,12 +1247,12 @@ export class QuadTreeTile {
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
-        
+
         // Update skirt geometry to match the new main tile geometry
         if (this.skirtMesh && this.skirtGeometry) {
             this.updateSkirtGeometry();
         }
-        
+
         // Performance logging
         const endTime = performance.now();
         const duration = endTime - startTime;
@@ -1251,7 +1264,7 @@ export class QuadTreeTile {
     buildMaterial() {
         const url = this.textureUrl();
         const sourceDef = this.map.terrainNode.getMapSourceDef();
-        
+
         // For static textures (same URL for all tiles), use a simplified cache key
         // This prevents creating separate materials for each tile of the same static texture
         // Check if URL contains tile coordinates as path parameters (more precise than simple string includes)
@@ -1259,32 +1272,32 @@ export class QuadTreeTile {
         const hasYParam = url && (url.includes(`/${this.y}/`) || url.includes(`y=${this.y}`) || url.includes(`&y=${this.y}`));
         const hasZParam = url && (url.includes(`/${this.z}/`) || url.includes(`z=${this.z}`) || url.includes(`&z=${this.z}`));
         const isStaticTexture = url && !hasXParam && !hasYParam && !hasZParam;
-        
+
         // For static textures with mipmaps, we need to separate base texture loading from mipmap generation
         if (isStaticTexture && sourceDef.generateMipmaps) {
             return this.buildStaticMipmapMaterial(url, sourceDef);
         }
-        
+
         // For non-static textures or static textures without mipmaps, use the original approach
         // Include processColors flag in cache key to prevent mixing processed and unprocessed textures
         const processColorsSuffix = sourceDef.processColors ? '_processed' : '';
-        const cacheKey = isStaticTexture ? `static_${url}${processColorsSuffix}` : 
+        const cacheKey = isStaticTexture ? `static_${url}${processColorsSuffix}` :
             (sourceDef.generateMipmaps ? `${url}_z${this.z}${processColorsSuffix}` : `${url}${processColorsSuffix}`);
-        
+
         // Check if we already have a cached material for this cache key
         if (materialCache.has(cacheKey)) {
             return Promise.resolve(materialCache.get(cacheKey));
         }
-        
+
         // Check if we're already loading this material to prevent concurrent loads
         if (textureLoadPromises.has(cacheKey)) {
 //            console.log(`QuadTreeTile: Waiting for concurrent texture load: ${cacheKey}`);
             return textureLoadPromises.get(cacheKey);
         }
-        
+
         // Create AbortController for this texture load
         this.textureAbortController = new AbortController();
-        
+
         // Create and cache the loading promise to prevent concurrent loads
         const loadPromise = loadTextureWithRetries(url, 3, 100, 0, 0, this.textureAbortController.signal).then((texture) => {
             let finalTexture = texture;
@@ -1300,13 +1313,13 @@ export class QuadTreeTile {
             if (sourceDef.generateMipmaps && sourceDef.maxZoom && !isStaticTexture) {
 //                console.log(`QuadTreeTile: Generating mipmap for tile ${this.z}/${this.x}/${this.y}`);
                 finalTexture = globalMipmapGenerator.generateTiledMipmap(
-                    finalTexture, 
-                    this.z, 
+                    finalTexture,
+                    this.z,
                     sourceDef.maxZoom,
                     false  // Non-static textures
                 );
             }
-            
+
             const material = new MeshStandardMaterial({map: finalTexture, color: "#ffffff"});
             // Cache the material for future use
             materialCache.set(cacheKey, material);
@@ -1321,7 +1334,7 @@ export class QuadTreeTile {
             this.textureAbortController = null;
             throw error;
         });
-        
+
         textureLoadPromises.set(cacheKey, loadPromise);
         return loadPromise;
     }
@@ -1333,27 +1346,27 @@ export class QuadTreeTile {
     async buildStaticMipmapMaterial(url, sourceDef) {
         // Include processColors flag in cache keys to prevent mixing processed and unprocessed textures
         const processColorsSuffix = sourceDef.processColors ? '_processed' : '';
-        
+
         // Create cache key for the final material (includes zoom level)
         const materialCacheKey = `static_${url}_z${this.z}${processColorsSuffix}`;
-        
+
         // Check if we already have the final material cached
         if (materialCache.has(materialCacheKey)) {
             return materialCache.get(materialCacheKey);
         }
-        
+
         // Check if we're already building this specific material
         if (textureLoadPromises.has(materialCacheKey)) {
 //            console.log(`QuadTreeTile: Waiting for concurrent static mipmap material build: z${this.z}`);
             return textureLoadPromises.get(materialCacheKey);
         }
-        
+
         // Create AbortController for this texture load
         this.textureAbortController = new AbortController();
-        
+
         // Create cache key for the base texture (without zoom level)
         const baseCacheKey = `static_${url}_base${processColorsSuffix}`;
-        
+
         // Create the material building promise
         const buildPromise = (async () => {
             try {
@@ -1367,48 +1380,48 @@ export class QuadTreeTile {
                         const cachedMaterial = await textureLoadPromises.get(baseCacheKey);
                         baseTexture = cachedMaterial.map;
                     } else {
-                        
+
                         // Create and cache the base texture loading promise
                         const baseLoadPromise = loadTextureWithRetries(url, 3, 100, 0, 0, this.textureAbortController.signal).then((texture) => {
                             let finalTexture = texture;
-                            
+
                             // Apply color processing if enabled for this source
                             if (sourceDef.processColors && sourceDef.colorProcessingOptions) {
                                 finalTexture = processTextureColors(texture, sourceDef.colorProcessingOptions);
                                 // Dispose the original texture since we've created a processed version
                                 texture.dispose();
                             }
-                            
+
                             const baseMaterial = new MeshStandardMaterial({map: finalTexture, color: "#ffffff"});
                             materialCache.set(baseCacheKey, baseMaterial);
                             // Clean up the promise cache once loading is complete
                             textureLoadPromises.delete(baseCacheKey);
                             return baseMaterial;
                         });
-                        
+
                         textureLoadPromises.set(baseCacheKey, baseLoadPromise);
                         const cachedMaterial = await baseLoadPromise;
                         baseTexture = cachedMaterial.map;
                     }
                 }
-                
+
                 // Generate the appropriate mipmap level for this zoom
                 const mipmapTexture = globalMipmapGenerator.generateTiledMipmap(
-                    baseTexture, 
-                    this.z, 
+                    baseTexture,
+                    this.z,
                     sourceDef.maxZoom,
                     true  // isSeamless = true for static textures
                 );
-                
+
                 const material = new MeshStandardMaterial({map: mipmapTexture, color: "#ffffff"});
-                
+
                 // Cache the final material
                 materialCache.set(materialCacheKey, material);
                 // Clean up the promise cache once building is complete
                 textureLoadPromises.delete(materialCacheKey);
                 // Clear the abort controller since loading is complete
                 this.textureAbortController = null;
-                
+
                 return material;
             } catch (error) {
                 // Clean up on error
@@ -1417,7 +1430,7 @@ export class QuadTreeTile {
                 throw error;
             }
         })();
-        
+
         textureLoadPromises.set(materialCacheKey, buildPromise);
         return buildPromise;
     }
@@ -1442,7 +1455,7 @@ export class QuadTreeTile {
 
         // Get parent texture
         const parentTexture = parentTile.mesh.material.map;
-        
+
         // Create a canvas to extract and resample the quadrant
         const canvas = document.createElement('canvas');
         const size = 256; // Standard tile texture size
@@ -1480,7 +1493,7 @@ export class QuadTreeTile {
 
         // Create and return material
         const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
-        
+
         return material;
     }
 
@@ -1508,11 +1521,11 @@ export class QuadTreeTile {
         // - The ancestor covers a 4x4 grid of tiles at zoom 9 (2^2 = 4)
         // - We need to find which cell in that 4x4 grid this tile occupies
         const scale = Math.pow(2, zoomDiff); // e.g., 2^2 = 4 for zoom diff of 2
-        
+
         // Calculate this tile's position relative to the ancestor's coverage area
         const relativeX = this.x - (ancestorTile.x * scale);
         const relativeY = this.y - (ancestorTile.y * scale);
-        
+
         // Normalize to 0-1 range to get the region within the ancestor texture
         const regionX = relativeX / scale; // e.g., 0, 0.25, 0.5, 0.75 for scale=4
         const regionY = relativeY / scale;
@@ -1549,7 +1562,7 @@ export class QuadTreeTile {
 
         // Create and return material
         const material = new MeshStandardMaterial({map: texture, color: "#ffffff"});
-        
+
         return material;
     }
 
@@ -1575,23 +1588,23 @@ export class QuadTreeTile {
 
         // Calculate which region of the ancestor tile this tile corresponds to
         const scale = Math.pow(2, zoomDiff); // e.g., 2^2 = 4 for zoom diff of 2
-        
+
         // Calculate this tile's position relative to the ancestor's coverage area
         const relativeX = this.x - (ancestorTile.x * scale);
         const relativeY = this.y - (ancestorTile.y * scale);
-        
+
         // Get ancestor elevation data dimensions
         const [ancestorWidth, ancestorHeight] = ancestorTile.shape;
-        
+
         // Calculate the region within the ancestor elevation data
         const regionStartX = Math.floor((relativeX / scale) * ancestorWidth);
         const regionStartY = Math.floor((relativeY / scale) * ancestorHeight);
         const regionWidth = Math.ceil(ancestorWidth / scale);
         const regionHeight = Math.ceil(ancestorHeight / scale);
-        
+
         // Create output elevation array
         const elevation = new Float32Array(dataSize * dataSize);
-        
+
         // Resample the ancestor elevation data to the output size
         // Use bilinear interpolation for smoother results
         for (let y = 0; y < dataSize; y++) {
@@ -1599,31 +1612,31 @@ export class QuadTreeTile {
                 // Map output coordinates to ancestor region coordinates
                 const srcX = regionStartX + (x / dataSize) * regionWidth;
                 const srcY = regionStartY + (y / dataSize) * regionHeight;
-                
+
                 // Bilinear interpolation
                 const x0 = Math.floor(srcX);
                 const x1 = Math.min(x0 + 1, ancestorWidth - 1);
                 const y0 = Math.floor(srcY);
                 const y1 = Math.min(y0 + 1, ancestorHeight - 1);
-                
+
                 const fx = srcX - x0;
                 const fy = srcY - y0;
-                
+
                 // Get the four surrounding elevation values
                 const e00 = ancestorTile.elevation[y0 * ancestorWidth + x0];
                 const e10 = ancestorTile.elevation[y0 * ancestorWidth + x1];
                 const e01 = ancestorTile.elevation[y1 * ancestorWidth + x0];
                 const e11 = ancestorTile.elevation[y1 * ancestorWidth + x1];
-                
+
                 // Bilinear interpolation
                 const e0 = e00 * (1 - fx) + e10 * fx;
                 const e1 = e01 * (1 - fx) + e11 * fx;
                 const e = e0 * (1 - fy) + e1 * fy;
-                
+
                 elevation[y * dataSize + x] = e;
             }
         }
-        
+
         return {
             elevation: elevation,
             shape: [dataSize, dataSize]
@@ -1650,12 +1663,12 @@ export class QuadTreeTile {
     // Method to cancel pending loads for this specific tile
     cancelPendingLoads() {
         let cancelledCount = 0;
-        
+
         // Cancel texture loading if in progress
         if (this.isLoading) {
             // Set cancelling state to prevent reactivation during cancellation
             this.isCancelling = true;
-            
+
             // Abort the texture loading using AbortController
             if (this.textureAbortController) {
 //                console.log(`Aborting texture load for tile ${this.key()}`);
@@ -1663,17 +1676,17 @@ export class QuadTreeTile {
                 this.textureAbortController = null;
                 cancelledCount++;
             }
-            
+
             const url = this.textureUrl();
             if (url) {
                 const sourceDef = this.map.terrainNode.getMapSourceDef();
-                
+
                 // Determine the cache keys that might be associated with this tile
                 const hasXParam = url.includes(`/${this.x}/`) || url.includes(`x=${this.x}`) || url.includes(`&x=${this.x}`);
                 const hasYParam = url.includes(`/${this.y}/`) || url.includes(`y=${this.y}`) || url.includes(`&y=${this.y}`);
                 const hasZParam = url.includes(`/${this.z}/`) || url.includes(`z=${this.z}`) || url.includes(`&z=${this.z}`);
                 const isStaticTexture = !hasXParam && !hasYParam && !hasZParam;
-                
+
                 // Determine the single cache key for this tile's pending load
                 let cacheKey;
                 if (isStaticTexture && sourceDef.generateMipmaps) {
@@ -1686,25 +1699,25 @@ export class QuadTreeTile {
                     // For non-static (tile-specific) textures
                     cacheKey = sourceDef.generateMipmaps ? `${url}_z${this.z}` : url;
                 }
-                
+
                 // Remove the pending promise for this tile
                 if (textureLoadPromises.has(cacheKey)) {
 //                    console.log(`Removing pending promise for key: ${cacheKey}`);
                     textureLoadPromises.delete(cacheKey);
                 }
             }
-            
+
             // Clear the texture loading state
             this.isLoading = false;
         }
-        
+
         // Cancel elevation loading if in progress
         if (this.isLoadingElevation) {
             // Clear the elevation loading state
             this.isLoadingElevation = false;
             cancelledCount++;
         }
-        
+
         if (cancelledCount > 0) {
 //            console.log(`Cancelled ${cancelledCount} pending load(s) for tile ${this.key()}`);
             // Update debug geometry to reflect the cancelled loading state
@@ -1717,9 +1730,9 @@ export class QuadTreeTile {
         // Remove both regular and mipmap cache entries for this URL
         const keysToDelete = [];
         materialCache.forEach((material, cacheKey) => {
-            if (cacheKey === url || 
-                cacheKey.startsWith(`${url}_z`) || 
-                cacheKey === `static_${url}` || 
+            if (cacheKey === url ||
+                cacheKey.startsWith(`${url}_z`) ||
+                cacheKey === `static_${url}` ||
                 cacheKey.startsWith(`static_${url}_z`) ||
                 cacheKey === `static_${url}_base`) {
                 if (material.map) {
@@ -1729,22 +1742,22 @@ export class QuadTreeTile {
                 keysToDelete.push(cacheKey);
             }
         });
-        
+
         keysToDelete.forEach(key => materialCache.delete(key));
-        
+
         // Also remove any pending promises for these keys
         const promiseKeysToDelete = [];
         textureLoadPromises.forEach((promise, cacheKey) => {
-            if (cacheKey === url || 
-                cacheKey.startsWith(`${url}_z`) || 
-                cacheKey === `static_${url}` || 
+            if (cacheKey === url ||
+                cacheKey.startsWith(`${url}_z`) ||
+                cacheKey === `static_${url}` ||
                 cacheKey.startsWith(`static_${url}_z`) ||
                 cacheKey === `static_${url}_base`) {
                 promiseKeysToDelete.push(cacheKey);
             }
         });
         promiseKeysToDelete.forEach(key => textureLoadPromises.delete(key));
-        
+
         if (keysToDelete.length > 0) {
             console.log(`Materials removed from cache for URL: ${url} (${keysToDelete.length} entries)`);
         }
@@ -1762,7 +1775,7 @@ export class QuadTreeTile {
             pendingLoads: textureLoadPromises.size,
             pendingLoadKeys: Array.from(textureLoadPromises.keys())
         };
-        
+
         // Count different types of cached textures
         stats.urls.forEach(url => {
             if (url.includes('_base')) {
@@ -1773,7 +1786,7 @@ export class QuadTreeTile {
                 stats.zoomSpecificTextures++;
             }
         });
-        
+
         return stats;
     }
 
@@ -1790,7 +1803,7 @@ export class QuadTreeTile {
         if (stats.pendingLoads > 0) {
             console.log(`Pending load keys:`, stats.pendingLoadKeys);
         }
-        
+
         if (stats.urls.length > 0) {
             console.log("Cached URLs:");
             stats.urls.forEach(url => {
@@ -1798,13 +1811,13 @@ export class QuadTreeTile {
                 console.log(`  ${isStatic ? '[STATIC]' : '[ZOOM]'} ${url}`);
             });
         }
-        
+
         // Calculate potential memory savings for static textures
         const oceanSurfaceEntries = stats.urls.filter(url => url.includes('sea water texture')).length;
         if (oceanSurfaceEntries > 0) {
             console.log(`Ocean Surface texture entries: ${oceanSurfaceEntries} (should be 1 with optimization)`);
         }
-        
+
         return stats;
     }
 
@@ -1836,7 +1849,6 @@ export class QuadTreeTile {
         ctx.strokeRect(0, 0, canvas.width, canvas.height);
 
 
-
         // draw the word "Debug" in the center of the canvas
         ctx.fillStyle = "#FFFFFF";
         ctx.font = "48px Arial";
@@ -1850,7 +1862,6 @@ export class QuadTreeTile {
         texture.minFilter = NearestFilter;
         texture.magFilter = NearestFilter;
         const material = new MeshStandardMaterial({map: texture});
-
 
 
         this.mesh.material = material;
@@ -1896,7 +1907,7 @@ export class QuadTreeTile {
 
                 // Get elevation data coordinates, accounting for tile fraction and offset
                 let elevationLocalX, elevationLocalY;
-                
+
                 if (elevationZoom === this.z) {
                     // Same zoom level - direct mapping
                     elevationLocalX = xTileFraction * (elevationSize - 1);
@@ -1908,28 +1919,28 @@ export class QuadTreeTile {
                     elevationLocalX = parentOffsetX * (elevationSize - 1);
                     elevationLocalY = parentOffsetY * (elevationSize - 1);
                 }
-                
+
                 // Get the four surrounding elevation data points for interpolation
                 const x0 = Math.floor(elevationLocalX);
                 const x1 = Math.min(elevationSize - 1, x0 + 1);
                 const y0 = Math.floor(elevationLocalY);
                 const y1 = Math.min(elevationSize - 1, y0 + 1);
-                
+
                 // Get the fractional parts for interpolation
                 const fx = elevationLocalX - x0;
                 const fy = elevationLocalY - y0;
-                
+
                 // Sample the four corner elevation values
                 const e00 = elevationTile.elevation[y0 * elevationSize + x0];
                 const e01 = elevationTile.elevation[y0 * elevationSize + x1];
                 const e10 = elevationTile.elevation[y1 * elevationSize + x0];
                 const e11 = elevationTile.elevation[y1 * elevationSize + x1];
-                
+
                 // Bilinear interpolation
                 const e0 = e00 + (e01 - e00) * fx;
                 const e1 = e10 + (e11 - e10) * fx;
                 let elevation = e0 + (e1 - e0) * fy;
-                
+
                 // Apply z-scale if available
                 if (this.map.elevationMap.options.zScale) {
                     elevation *= this.map.elevationMap.options.zScale;
@@ -1941,7 +1952,7 @@ export class QuadTreeTile {
             }
         }
 
-        return { heightmap, minElevation, maxElevation };
+        return {heightmap, minElevation, maxElevation};
     }
 
     // Helper function to generate heightmap array using interpolated elevation data
@@ -1978,19 +1989,19 @@ export class QuadTreeTile {
             }
         }
 
-        return { heightmap, minElevation, maxElevation };
+        return {heightmap, minElevation, maxElevation};
     }
 
     // Helper function to generate heightmap array with flat elevation (all zeros)
     generateHeightmapFlat(textureSize = 256) {
         const heightmap = new Float32Array(textureSize * textureSize);
         // All values are already 0 due to Float32Array initialization
-        return { heightmap, minElevation: 0, maxElevation: 0 };
+        return {heightmap, minElevation: 0, maxElevation: 0};
     }
 
     // Helper function to convert heightmap to color texture
     async heightmapToColorTexture(heightmapData, textureSize = 256, testPatternColors = null, colorBands = null) {
-        const { heightmap, minElevation, maxElevation } = heightmapData;
+        const {heightmap, minElevation, maxElevation} = heightmapData;
 
         const elevationScale = this.map.terrainNode.UI.elevationScale
         // Create a canvas for the elevation color texture
@@ -2002,7 +2013,7 @@ export class QuadTreeTile {
         // Create image data for pixel manipulation
         const imageData = ctx.createImageData(canvas.width, canvas.height);
         const data = imageData.data;
-        
+
         // Get OceanSurface texture for blue pixels (water areas)
         let oceanTexture = null;
         let oceanImageData = null;
@@ -2014,7 +2025,7 @@ export class QuadTreeTile {
                 oceanCanvas.width = textureSize;
                 oceanCanvas.height = textureSize;
                 const oceanCtx = oceanCanvas.getContext('2d');
-                
+
                 // Draw the ocean texture scaled to our texture size
                 oceanCtx.drawImage(oceanTexture.image, 0, 0, textureSize, textureSize);
                 oceanImageData = oceanCtx.getImageData(0, 0, textureSize, textureSize);
@@ -2043,7 +2054,7 @@ export class QuadTreeTile {
 
         // Use provided color bands or default ones
         const bands = colorBands || defaultColorBands;
-        
+
         // Convert altitude from feet to meters and sort by altitude
         const sortedBands = bands.map(band => ({
             altitude: band.altitude * 0.3048, // Convert feet to meters
@@ -2074,19 +2085,19 @@ export class QuadTreeTile {
             for (let i = 0; i < sortedBands.length - 1; i++) {
                 const currentBand = sortedBands[i];
                 const nextBand = sortedBands[i + 1];
-                
+
                 if (elevation >= currentBand.altitude && elevation <= nextBand.altitude) {
                     // Interpolate between current and next band
                     const t = (elevation - currentBand.altitude) / (nextBand.altitude - currentBand.altitude);
                     return interpolateColor(currentBand.color, nextBand.color, t);
                 }
             }
-            
+
             // If elevation is below the first band, use the first color
             if (elevation < sortedBands[0].altitude) {
                 return sortedBands[0].color;
             }
-            
+
             // If elevation is above the last band, use the last color
             return sortedBands[sortedBands.length - 1].color;
         };
@@ -2099,7 +2110,7 @@ export class QuadTreeTile {
         const tileCenterLat = this.map.options.mapProjection.getNorthLatitude(this.y + 0.5, this.z);
         const tileCenterLon = this.map.options.mapProjection.getLeftLongitude(this.x + 0.5, this.z);
         const tileCenterEUS = LLAToEUS(tileCenterLat, tileCenterLon, 0);
-        
+
         // Get local up and north vectors for the tile center
         const localUp = getLocalUpVector(tileCenterEUS);
         const localNorth = getLocalNorthVector(tileCenterEUS);
@@ -2132,7 +2143,7 @@ export class QuadTreeTile {
 
                     // Get color for this elevation using the new dynamic system
                     const elevationColor = getColorForElevation(elevation);
-                    
+
                     if (elevationColor === 'ocean') {
                         // Use OceanSurface texture for water/low elevation
                         const oceanPixelIndex = pixelIndex;
@@ -2145,7 +2156,7 @@ export class QuadTreeTile {
                         red = elevationColor.red;
                         green = elevationColor.green;
                         blue = elevationColor.blue;
-                        
+
                         // Update pixel counters based on dominant color (for backward compatibility)
                         if (red < 100 && green < 100 && blue > 150) {
                             bluePixels++;
@@ -2160,27 +2171,27 @@ export class QuadTreeTile {
 
                     // Calculate surface normal and apply tilt-based color modification
                     let colorModifier = 1.0; // Default: no modification
-                    
+
                     // Only apply surface normal modification if we have elevation variation
                     if (maxElevation > minElevation) {
                         // Calculate surface normal from heightmap gradients
                         const scale = 1.0; // Scale factor for gradient calculation
-                        
+
                         // Get neighboring elevation values (with boundary checks)
                         const leftX = Math.max(0, x - 1);
                         const rightX = Math.min(textureSize - 1, x + 1);
                         const topY = Math.max(0, y - 1);
                         const bottomY = Math.min(textureSize - 1, y + 1);
-                        
+
                         const leftElevation = heightmap[y * textureSize + leftX];
                         const rightElevation = heightmap[y * textureSize + rightX];
                         const topElevation = heightmap[topY * textureSize + x];
                         const bottomElevation = heightmap[bottomY * textureSize + x];
-                        
+
                         // Calculate gradients (dx, dy)
                         const dx = (rightElevation - leftElevation) / (2.0 * scale);
                         const dy = (bottomElevation - topElevation) / (2.0 * scale);
-                        
+
                         // Calculate surface normal (normalized)
                         const normalLength = Math.sqrt(dx * dx + dy * dy + 1.0);
                         const surfaceNormal = {
@@ -2188,17 +2199,17 @@ export class QuadTreeTile {
                             y: 1.0 / normalLength,  // Up component
                             z: -dy / normalLength
                         };
-                        
+
                         // Convert surface normal to world space using local up and north
                         // Project the surface normal onto the north-south axis
-                        const northDot = surfaceNormal.x * localNorth.x + 
-                                        surfaceNormal.y * localNorth.y + 
-                                        surfaceNormal.z * localNorth.z;
-                        
+                        const northDot = surfaceNormal.x * localNorth.x +
+                            surfaceNormal.y * localNorth.y +
+                            surfaceNormal.z * localNorth.z;
+
                         // Calculate tilt angle relative to north (in radians)
                         const tiltAngleRad = Math.asin(Math.abs(northDot));
                         const tiltAngleDeg = tiltAngleRad * (180.0 / Math.PI);
-                        
+
                         // Apply color modification based on tilt direction and magnitude
                         if (tiltAngleDeg >= tiltThresholdDegrees) {
                             // Full effect at 45° or more
@@ -2221,7 +2232,7 @@ export class QuadTreeTile {
                             }
                         }
                     }
-                    
+
                     // Apply color modifier and clamp to valid range
                     red = Math.round(Math.min(255, Math.max(0, red * colorModifier)));
                     green = Math.round(Math.min(255, Math.max(0, green * colorModifier)));
@@ -2244,7 +2255,7 @@ export class QuadTreeTile {
         texture.magFilter = NearestFilter;
         texture.needsUpdate = true;
 
-        return { texture, minElevation, maxElevation, bluePixels, greenPixels, greyPixels, whitePixels };
+        return {texture, minElevation, maxElevation, bluePixels, greenPixels, greyPixels, whitePixels};
     }
 
     // Helper function to apply texture to mesh with proper cleanup
@@ -2268,24 +2279,24 @@ export class QuadTreeTile {
             }
             oldMaterial.dispose();
         }
-        
+
         this.mesh.material = material;
         this.mesh.material.needsUpdate = true;
         this.updateSkirtMaterial(); // Update skirt to use the same material
-        
+
         // Force a complete refresh by temporarily removing and re-adding to scene
         if (this.mesh.parent && this.added) {
             const parent = this.mesh.parent;
             parent.remove(this.mesh);
             parent.add(this.mesh);
-            
+
             // Also refresh the skirt mesh if it exists
             if (this.skirtMesh && this.skirtMesh.parent) {
                 parent.remove(this.skirtMesh);
                 parent.add(this.skirtMesh);
             }
         }
-        
+
 //        console.log(logMessage);
     }
 
@@ -2318,10 +2329,10 @@ export class QuadTreeTile {
 
         // Get color bands from the source definition
         const colorBands = sourceDef.colorBands || null;
-        
+
         // Convert heightmap to color texture (now async to load OceanSurface texture)
         const textureData = await this.heightmapToColorTexture(heightmapData, 256, null, colorBands);
-        
+
 //        console.log(`Elevation range: ${heightmapData.minElevation.toFixed(2)}m to ${heightmapData.maxElevation.toFixed(2)}m, Blue: ${textureData.bluePixels}, Green: ${textureData.greenPixels}, Grey: ${textureData.greyPixels}, White: ${textureData.whitePixels}`);
 
         // Apply the texture to the mesh
@@ -2363,13 +2374,13 @@ export class QuadTreeTile {
 
         // Generate flat heightmap (all zeros)
         const heightmapData = this.generateHeightmapFlat();
-        
+
         // Get color bands from the source definition
         const colorBands = sourceDef.colorBands || null;
-        
+
         // Convert heightmap to color texture (now async to load OceanSurface texture)
         const textureData = await this.heightmapToColorTexture(heightmapData, 256, null, colorBands);
-        
+
         // Apply the texture to the mesh
         this.applyElevationTexture(
             textureData.texture,
@@ -2395,7 +2406,7 @@ export class QuadTreeTile {
 
         // Generate heightmap from interpolated data
         const heightmapData = this.generateHeightmapFromInterpolation();
-        
+
         // If all elevations are 0, it means no elevation data is loaded yet - skip texture generation
         if (heightmapData.minElevation === 0 && heightmapData.maxElevation === 0) {
             console.log(`No elevation data loaded yet for tile ${this.key()}, skipping texture generation`);
@@ -2404,14 +2415,14 @@ export class QuadTreeTile {
 
         // Get color bands from the source definition
         const colorBands = sourceDef.colorBands || null;
-        
+
         // Convert heightmap to color texture with custom test pattern colors for interpolated method
         const testPatternColors = {
             color1: [128, 0, 128], // Purple squares (different from the main method)
             color2: [255, 165, 0]  // Orange squares
         };
         const textureData = await this.heightmapToColorTexture(heightmapData, 256, testPatternColors, colorBands);
-        
+
         console.log(`Interpolated elevation range: ${heightmapData.minElevation.toFixed(2)}m to ${heightmapData.maxElevation.toFixed(2)}m, Blue: ${textureData.bluePixels}, Green: ${textureData.greenPixels}, Grey: ${textureData.greyPixels}, White: ${textureData.whitePixels}`);
 
         // Apply the texture to the mesh
@@ -2428,16 +2439,16 @@ export class QuadTreeTile {
 
             this.updateDebugMaterial();
             this.addAfterLoaded();
-            
+
             // Return early for debug materials
             return Promise.resolve(this.mesh.material);
         }
-        
+
         // Handle wireframe material
         if (sourceDef.name === "Wireframe") {
             this.updateWireframeMaterial();
             this.addAfterLoaded();
-            
+
             // Return early for wireframe materials
             return Promise.resolve(this.mesh.material);
         }
@@ -2452,7 +2463,7 @@ export class QuadTreeTile {
                 // Check if elevation data is already available and apply elevation color texture
                 this.checkAndApplyElevationColorTexture();
             });
-            
+
             // The actual elevation color texture will be applied when recalculateCurve() is called
             // or when elevation data becomes available
             return Promise.resolve(this.mesh.material);
@@ -2479,10 +2490,10 @@ export class QuadTreeTile {
                         }
                         oldMaterial.dispose();
                     }
-                    
+
                     this.mesh.material = material
                     this.updateSkirtMaterial(); // Update skirt to use the same material
-                    if (! this.map.scene) {
+                    if (!this.map.scene) {
                         console.warn("QuadTreeTile.applyMaterial: map.scene is not defined, not adding mesh to scene (changed levels?)")
                         this.loaded = true; // Mark as loaded even if scene is not available
                         this.isLoading = false;
@@ -2490,7 +2501,7 @@ export class QuadTreeTile {
                         this.updateDebugGeometry();
                         return resolve(material);
                     }
-                    
+
                     // Only add to scene if not already added (parent data tiles are already in scene)
                     if (!this.added) {
                         this.addAfterLoaded();
@@ -2498,7 +2509,7 @@ export class QuadTreeTile {
                         // Already in scene, just mark as loaded with high-res data
                         this.loaded = true;
                     }
-                    
+
                     this.isLoading = false; // Clear loading state
                     this.isCancelling = false; // Clear cancelling state
                     this.updateDebugGeometry(); // Update debug geometry to remove loading indicator
@@ -2524,7 +2535,7 @@ export class QuadTreeTile {
 
     addAfterLoaded() {
 //        console.log(`addAfterLoaded: ${this.key()} - BEFORE: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
-        
+
         this.loaded = true; // mark the tile as loaded
 
         // Only add to scene if tileLayers > 0 (tile should be visible)
@@ -2535,12 +2546,12 @@ export class QuadTreeTile {
                 this.map.scene.add(this.skirtMesh); // add the skirt mesh to the scene
             }
             this.added = true; // mark the tile as added to the scene
-            
+
 //            console.log(`addAfterLoaded: ${this.key()} - AFTER scene.add: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
-            
+
             // Apply current layer mask (use tileLayers which may have been combined from multiple views)
             this.map.setTileLayerMask(this, this.tileLayers);
-            
+
 //            console.log(`addAfterLoaded: ${this.key()} - FINAL: mesh.layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask}), tileLayers=${this.tileLayers ? this.tileLayers.toString(2) : 'undefined'} (${this.tileLayers})`);
         }
     }
@@ -2548,11 +2559,11 @@ export class QuadTreeTile {
     buildMesh() {
         this.mesh = new Mesh(this.geometry, tileMaterial)
 //        console.log(`buildMesh: ${this.key()} - mesh created with layers.mask=${this.mesh.layers.mask.toString(2)} (${this.mesh.layers.mask})`);
-        
+
         // Build and create skirt mesh
         this.buildSkirtGeometry();
         // Create skirt mesh with the same material as the main tile initially
-         this.skirtMesh = new Mesh(this.skirtGeometry, tileMaterial);
+        this.skirtMesh = new Mesh(this.skirtGeometry, tileMaterial);
 //        console.log(`buildMesh: ${this.key()} - skirtMesh created with layers.mask=${this.skirtMesh.layers.mask.toString(2)} (${this.skirtMesh.layers.mask})`);
     }
 
@@ -2564,12 +2575,12 @@ export class QuadTreeTile {
             if (mainMaterial) {
                 // Create a new material with the same properties
                 const skirtMaterial = mainMaterial.clone();
-                
+
                 // Dispose of old skirt material if it exists and is not the shared tileMaterial
                 if (this.skirtMesh.material && this.skirtMesh.material !== tileMaterial) {
                     this.skirtMesh.material.dispose();
                 }
-                
+
                 // Preserve the layer mask when assigning new material to skirt
                 this.skirtMesh.material = skirtMaterial;
                 this.skirtMesh.material.needsUpdate = true;
@@ -2667,7 +2678,7 @@ export class QuadTreeTile {
                     pixels.data[rgba] * 256.0 +
                     pixels.data[rgba + 1] +
                     pixels.data[rgba + 2] / 256.0 -
-                   32768.0;
+                    32768.0;
             }
         }
         this.elevation = elevation;
@@ -2682,10 +2693,10 @@ export class QuadTreeTile {
                 const ij = i + pixels.shape[0] * j;
                 const rgba = ij * 4;
                 elevation[ij] =
-                    (pixels.data[rgba] * 256.0 *256.0 +
-                    pixels.data[rgba + 1] *256 +
-                    pixels.data[rgba + 2] ) * 0.1
-                    -10000;
+                    (pixels.data[rgba] * 256.0 * 256.0 +
+                        pixels.data[rgba + 1] * 256 +
+                        pixels.data[rgba + 2]) * 0.1
+                    - 10000;
             }
         }
         this.elevation = elevation;
@@ -2752,35 +2763,40 @@ export class QuadTreeTile {
         let tileOffsetY = 0;
         let tileFractionX = 1.0;
         let tileFractionY = 1.0;
-        
+
         // First try exact match
         elevationTile = this.map.elevationMap?.getTile(this.x, this.y, this.z);
-        
+
         if (!elevationTile || !elevationTile.elevation) {
             // Try lower zoom levels (parent tiles with less detailed but available elevation data)
-            for (let searchZoom = this.z - 1; searchZoom >= 0; searchZoom--) {
-                // Calculate which parent tile covers this tile
-                const zoomDiff = this.z - searchZoom;
-                const tilesPerParent = Math.pow(2, zoomDiff);
-                
-                // Find the parent tile coordinates
-                const elevationX = Math.floor(this.x / tilesPerParent);
-                const elevationY = Math.floor(this.y / tilesPerParent);
-                const candidateTile = this.map.elevationMap?.getTile(elevationX, elevationY, searchZoom);
-                
+            // Note: We must calculate parent coordinates mathematically because we're looking up
+            // tiles in a different QuadTree (elevationMap) than this tile belongs to (textureMap)
+            let searchX = this.x;
+            let searchY = this.y;
+            let searchZoom = this.z - 1;
+
+            while (searchZoom >= 0) {
+                searchX = Math.floor(searchX / 2);
+                searchY = Math.floor(searchY / 2);
+                const candidateTile = this.map.elevationMap?.getTile(searchX, searchY, searchZoom);
+
                 if (candidateTile && candidateTile.elevation) {
                     elevationTile = candidateTile;
                     elevationZoom = searchZoom;
                     // Calculate which portion of the parent tile this texture tile represents
+                    const zoomDiff = this.z - searchZoom;
+                    const tilesPerParent = Math.pow(2, zoomDiff);
                     tileOffsetX = this.x % tilesPerParent;
                     tileOffsetY = this.y % tilesPerParent;
                     tileFractionX = 1.0 / tilesPerParent;
                     tileFractionY = 1.0 / tilesPerParent;
                     break;
                 }
+
+                searchZoom--;
             }
         }
-        
+
         // If elevation data is available, generate the elevation color texture
         if (elevationTile && elevationTile.elevation) {
 //            console.log(`Applying elevation color texture immediately for tile ${this.key()} using elevation zoom ${elevationZoom}`);
@@ -2833,7 +2849,7 @@ export class QuadTreeTile {
         const p = LLAToEUS(lat, lon, 0);
 
         this.mesh.position.copy(p)
-        
+
         // Position the skirt mesh at the same location
         if (this.skirtMesh) {
             this.skirtMesh.position.copy(p);
@@ -2848,89 +2864,4 @@ export class QuadTreeTile {
         this.mesh.updateMatrixWorld() //
     }
 
-    // resolveSeamY(neighbor) {
-    //     const tPosition = this.mesh.geometry.attributes.position.count
-    //     const nPosition = Math.sqrt(tPosition)
-    //     const nPositionN = Math.sqrt(
-    //         neighbor.mesh.geometry.attributes.position.count
-    //     )
-    //     if (nPosition !== nPositionN) {
-    //         showError("resolveSeamY only implemented for geometries of same size")
-    //         return
-    //     }
-    //
-    //     // the positions are relative to the tile centers
-    //     // so we need to adjust by the offset
-    //     const tileCenter = this.mesh.position;
-    //     const neighborCenter = neighbor.mesh.position;
-    //     const offset = neighborCenter.clone().sub(tileCenter);
-    //
-    //     for (let i = tPosition - nPosition; i < tPosition; i++) {
-    //         // copy the entire position vector
-    //         this.mesh.geometry.attributes.position.setXYZ(
-    //             i,  // this is the index of the vertex in the mesh
-    //             neighbor.mesh.geometry.attributes.position.getX(i - (tPosition - nPosition)) + offset.x,
-    //             neighbor.mesh.geometry.attributes.position.getY(i - (tPosition - nPosition)) + offset.y,
-    //             neighbor.mesh.geometry.attributes.position.getZ(i - (tPosition - nPosition)) + offset.z
-    //         )
-    //     }
-    // }
-    //
-    // // TODO: this fixes the seams, but is not quite right, there are angular and texture discontinuities:
-    // // http://localhost/sitrec/?custom=http://localhost/sitrec-upload/99999999/Custom-8c549374795aec6f133bfde7f25bad93.json
-    // resolveSeamX(neighbor) {
-    //     const tPosition = this.mesh.geometry.attributes.position.count
-    //     const nPosition = Math.sqrt(tPosition)
-    //     const nPositionN = Math.sqrt(
-    //         neighbor.mesh.geometry.attributes.position.count
-    //     )
-    //     if (nPosition !== nPositionN) {
-    //         showError("resolveSeamX only implemented for geometries of same size")
-    //         return
-    //     }
-    //
-    //     // the positions are relative to the tile centers
-    //     // so we need to adjust by the offset
-    //     const tileCenter = this.mesh.position;
-    //     const neighborCenter = neighbor.mesh.position;
-    //     const offset = neighborCenter.clone().sub(tileCenter);
-    //
-    //     for (let i = nPosition - 1; i < tPosition; i += nPosition) {
-    //         // copy the entire position vector
-    //         this.mesh.geometry.attributes.position.setXYZ(
-    //             i,  // this is the index of the vertex in the mesh
-    //             neighbor.mesh.geometry.attributes.position.getX(i - nPosition + 1) + offset.x,
-    //             neighbor.mesh.geometry.attributes.position.getY(i - nPosition + 1) + offset.y,
-    //             neighbor.mesh.geometry.attributes.position.getZ(i - nPosition + 1) + offset.z
-    //         )
-    //     }
-    // }
-    //
-    // resolveSeams(cache, doNormals = true) {
-    //     let worked = false
-    //     const neighY = cache[this.keyNeighY()]
-    //     const neighX = cache[this.keyNeighX()]
-    //     if (this.seamY === false && neighY && neighY.mesh) {
-    //         this.resolveSeamY(neighY)
-    //         this.seamY = true
-    //         worked = true
-    //     }
-    //     if (this.seamX === false && neighX && neighX.mesh) {
-    //         this.resolveSeamX(neighX)
-    //         this.seamX = true
-    //         worked = true
-    //     }
-    //     if (worked) {
-    //         this.mesh.geometry.attributes.position.needsUpdate = true
-    //         if (doNormals)
-    //             this.mesh.geometry.computeVertexNormals()
-    //     }
-    // }
-
-
-}
-
-// Make QuadTreeTile available globally for debugging
-if (typeof window !== 'undefined') {
-    window.QuadTreeTile = QuadTreeTile;
 }

@@ -44,6 +44,29 @@ export class QuadTreeMap {
 
     deleteTile(x, y, z) {
         if (this.tileCache[z] && this.tileCache[z][x] && this.tileCache[z][x][y]) {
+            const tile = this.tileCache[z][x][y];
+            
+            // Clean up tree structure: remove from parent's children array
+            if (tile.parent && tile.parent.children) {
+                const index = tile.parent.children.indexOf(tile);
+                if (index !== -1) {
+                    tile.parent.children[index] = null;
+                }
+                // If all children are null, clear the children array
+                if (tile.parent.children.every(child => child === null)) {
+                    tile.parent.children = null;
+                }
+            }
+            
+            // Clean up tree structure: clear children references
+            if (tile.children) {
+                tile.children.forEach(child => {
+                    if (child) child.parent = null;
+                });
+                tile.children = null;
+            }
+            tile.parent = null;
+            
             delete this.tileCache[z][x][y];
             // Clean up empty objects to prevent memory leaks
             if (Object.keys(this.tileCache[z][x]).length === 0) {
@@ -256,7 +279,7 @@ export class QuadTreeMap {
         this.forEachTile((tile) => {
             if (!this.canSubdivide(tile)) return;
 
-            const hasChildren = this.hasAnyChildren(tile);
+            const hasChildren = this.hasChildren(tile);
             
             // Skip inactive tiles without children
             if (!tile.tileLayers && !hasChildren) return;
@@ -450,7 +473,7 @@ export class QuadTreeMap {
             // 3. Have been inactive for longer than the timeout
             const allChildrenPrunable = children.every(child => {
                 if (child.tileLayers !== 0) return false; // Still active
-                if (this.hasAnyChildren(child)) return false; // Has children
+                if (this.hasChildren(child)) return false; // Has children
                 if (!child.inactiveSince) return false; // No timestamp (shouldn't happen)
                 if (now - child.inactiveSince < this.inactiveTileTimeout) return false; // Not old enough
                 return true;
@@ -614,10 +637,13 @@ export class QuadTreeMap {
                              tile.mesh.material.map && !tile.mesh.material.wireframe;
         
         // Create 4 child tiles (standard quadtree subdivision)
-        this.activateTile(tile.x * 2, tile.y * 2, tile.z + 1, tileLayers, useParentData);
-        this.activateTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1, tileLayers, useParentData);
-        this.activateTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1, tileLayers, useParentData);
-        this.activateTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1, tileLayers, useParentData);
+        // note activateTile will set the parent tile automatically
+        const child1 = this.activateTile(tile.x * 2, tile.y * 2, tile.z + 1, tileLayers, useParentData);
+        const child2 = this.activateTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1, tileLayers, useParentData);
+        const child3 = this.activateTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1, tileLayers, useParentData);
+        const child4 = this.activateTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1, tileLayers, useParentData);
+
+        tile.children = [child1, child2, child3, child4];
 
         // For texture maps: Deactivate parent if all children are loaded and added
         // (even if using parent data - that's valid for display, just lower quality)
@@ -656,23 +682,41 @@ export class QuadTreeMap {
     }
 
     /**
-     * Check if tile has any children
+     * Check if tile has children
+     * All tiles have either 0 or 4 children, so we can simply check if children array is null
      */
-    hasAnyChildren(tile) {
-        return this.getTile(tile.x * 2, tile.y * 2, tile.z + 1) !== undefined;
+    hasChildren(tile) {
+        return tile.children !== null;
     }
 
     /**
      * Get all 4 children of a tile (returns null if any are missing)
      */
     getChildren(tile) {
-        const child1 = this.getTile(tile.x * 2, tile.y * 2, tile.z + 1);
-        const child2 = this.getTile(tile.x * 2, tile.y * 2 + 1, tile.z + 1);
-        const child3 = this.getTile(tile.x * 2 + 1, tile.y * 2, tile.z + 1);
-        const child4 = this.getTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1);
+        return tile.children;
+    }
+    
+    /**
+     * Get the parent of a tile
+     * If tile.parent is already set, return it (fast path)
+     * Otherwise, calculate parent coordinates and look it up in the cache
+     */
+    getParent(tile) {
+        // Fast path: if parent is already set in tree structure, return it
+        if (tile.parent) {
+            return tile.parent;
+        }
         
-        if (!child1 || !child2 || !child3 || !child4) return null;
-        return [child1, child2, child3, child4];
+        // Fallback: calculate parent coordinates and look it up
+        // This is needed when setting up the tree structure for newly created tiles
+        if (tile.z === 0) {
+            return null; // Root tile has no parent
+        }
+        
+        const parentX = Math.floor(tile.x / 2);
+        const parentY = Math.floor(tile.y / 2);
+        const parentZ = tile.z - 1;
+        return this.getTile(parentX, parentY, parentZ);
     }
 
     // Set the layer mask on a tile's mesh objects
