@@ -220,35 +220,37 @@ export class PointEditor {
 
         // right click on point to delete it
         if (event.button == 2) {
-            // TODO - ADJUST FOR VIEW, not full screen
-            this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-            this.pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            this.raycaster.setFromCamera(this.pointer, this.camera);
-            const intersects = this.raycaster.intersectObjects(this.splineHelperObjects, false);
-            if (intersects.length > 0) {
+            var view = ViewMan.get("mainView")
+            if (mouseInViewOnly(view, event.clientX, event.clientY)) {
+                const [px, py] = mouseToViewNormalized(view, event.clientX, event.clientY)
+                this.pointer.x = px;
+                this.pointer.y = py;
+                this.raycaster.setFromCamera(this.pointer, this.camera);
+                const intersects = this.raycaster.intersectObjects(this.splineHelperObjects, false);
+                if (intersects.length > 0) {
 
-                const object = intersects[0].object;
+                    const object = intersects[0].object;
 
-                if (object === this.transformControl.object) {
-                    this.transformControl.detach();
+                    if (object === this.transformControl.object) {
+                        this.transformControl.detach();
+                    }
+
+                    var index = this.splineHelperObjects.findIndex(ob => ob === object)
+                    assert(index !== -1, "Can't find object to destroy!!")
+
+                    this.scene.remove(object);
+
+                    // remove one entry from all the
+                    this.frameNumbers.splice(index, 1)
+                    this.positions.splice(index, 1)
+                    this.splineHelperObjects.splice(index, 1)
+                    this.updatePointEditorGraphics()
+                    this.numPoints--;
+
+                    this.dirty = true;
+
                 }
-
-                var index = this.splineHelperObjects.findIndex(ob => ob === object)
-                assert (index !== -1, "Can't find object to destroy!!")
-
-                this.scene.remove(object);
-
-                // remove one entry from all the
-                this.frameNumbers.splice(index, 1)
-                this.positions.splice(index, 1)
-                this.splineHelperObjects.splice(index, 1)
-                this.updatePointEditorGraphics()
-                this.numPoints--;
-
-                this.dirty = true;
-
             }
-
 
         }
 

@@ -149,7 +149,7 @@ export class CNodeTerrain extends CNode {
 
     update(f) {
         super.update(f);
-        this.createDebugTextDisplay()
+       this.createDebugTextDisplay()
     }
 
     createDebugTextDisplay() {
@@ -162,6 +162,7 @@ export class CNodeTerrain extends CNode {
             }
             
             const labelMainViewTerrain = new CNodeViewUI({id: "labelMainViewTerrain", overlayView: ViewMan.list.mainView.data});
+            labelMainViewTerrain.ignoreMouseEvents(); // Allow mouse events to pass through to the 3D view
             const terrain = this;
             
             // Show elevation map stats for mainView
