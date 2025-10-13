@@ -226,13 +226,13 @@ export class QuadTreeTile {
 
         // Create skirt for each edge
         const edges = [
-            // Bottom edge (y = 0)
+            // Bottom edge (y = 0) - left to right
             {start: [0, 0], end: [segments, 0], direction: [1, 0]},
-            // Right edge (x = segments)
+            // Right edge (x = segments) - bottom to top
             {start: [segments, 0], end: [segments, segments], direction: [0, 1]},
-            // Top edge (y = segments)
+            // Top edge (y = segments) - right to left
             {start: [segments, segments], end: [0, segments], direction: [-1, 0]},
-            // Left edge (x = 0)
+            // Left edge (x = 0) - top to bottom
             {start: [0, segments], end: [0, 0], direction: [0, -1]}
         ];
 
@@ -257,7 +257,7 @@ export class QuadTreeTile {
                 const mainU = mainUvs[mainVertexIndex * 2];
                 const mainV = mainUvs[mainVertexIndex * 2 + 1];
 
-                // Get the normal from the main tile surface for fake lighting
+                // Get the normal from the main tile surface for consistent lighting
                 const mainNx = mainNormals[mainVertexIndex * 3];
                 const mainNy = mainNormals[mainVertexIndex * 3 + 1];
                 const mainNz = mainNormals[mainVertexIndex * 3 + 2];
@@ -278,10 +278,9 @@ export class QuadTreeTile {
                 const currentVertexIndex = edgeStartVertexIndex + i * 2;
                 const nextVertexIndex = currentVertexIndex + 2;
 
-                // Two triangles per segment (clockwise winding for outward-facing normals)
-                // Triangle 1: current top, next top, current bottom
+                // Triangle 1: [top-current, top-next, bottom-current]
                 indices.push(currentVertexIndex, nextVertexIndex, currentVertexIndex + 1);
-                // Triangle 2: current bottom, next top, next bottom
+                // Triangle 2: [bottom-current, top-next, bottom-next]
                 indices.push(currentVertexIndex + 1, nextVertexIndex, nextVertexIndex + 1);
             }
 
@@ -2571,20 +2570,10 @@ export class QuadTreeTile {
     // Update skirt material to match the main tile material
     updateSkirtMaterial() {
         if (this.skirtMesh && this.mesh) {
-            // Clone the main tile material for the skirt to avoid sharing issues
             const mainMaterial = this.mesh.material;
             if (mainMaterial) {
-                // Create a new material with the same properties
-                const skirtMaterial = mainMaterial.clone();
-
-                // Dispose of old skirt material if it exists and is not the shared tileMaterial
-                if (this.skirtMesh.material && this.skirtMesh.material !== tileMaterial) {
-                    this.skirtMesh.material.dispose();
-                }
-
-                // Preserve the layer mask when assigning new material to skirt
-                this.skirtMesh.material = skirtMaterial;
-                this.skirtMesh.material.needsUpdate = true;
+                // Just use the same material directly
+                this.skirtMesh.material = mainMaterial;
             }
         }
     }

@@ -12,7 +12,7 @@ import {Globals} from "../../../Globals";
  * @param {number} terrainShadingStrength - How much terrain shading to apply (0-1), default 0.3 (30% variation)
  * @returns {ShaderMaterial} The custom shader material
  */
-export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 0.3) {
+export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 0.3, doubleSided = false) {
     const material = new ShaderMaterial({
         uniforms: {
             map: { value: texture },
@@ -21,6 +21,7 @@ export function createTerrainDayNightMaterial(texture, terrainShadingStrength = 
             terrainShadingStrength: { value: terrainShadingStrength },
             ...sharedUniforms,
         },
+        side: doubleSided ? 2 : 0, // 2 = DoubleSide, 0 = FrontSide
         vertexShader: `
             varying vec2 vUv;
             varying vec3 vNormal;
