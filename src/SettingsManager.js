@@ -1,5 +1,6 @@
 // SettingsManager.js
 // Handles loading and saving user settings from both cookies and server (S3)
+// The setting UI is set up in setupSettingsMenu()
 
 import {Globals} from "./Globals";
 
@@ -17,6 +18,9 @@ function getCookie(name) {
 }
 
 // Sanitize settings to prevent exploits
+// NOTE: When adding new settings, you must update BOTH:
+//   1. This function (SettingsManager.js)
+//   2. sanitizeSettings() in settings.php (server-side)
 export function sanitizeSettings(settings) {
     const sanitized = {};
     
@@ -130,6 +134,12 @@ export async function saveSettingsToServer(settings) {
 
 /**
  * Initialize settings by loading from server (if logged in) or cookies
+ * NOTE: When adding new settings, remember to:
+ *   1. Add default value here
+ *   2. Update sanitizeSettings() in this file
+ *   3. Update sanitizeSettings() in settings.php
+ *   4. Add UI control in CustomSupport.js setupSettingsMenu()
+ *   5. Add tests in SettingsManager.test.js
  * @returns {Promise<Object>} The loaded settings object
  */
 export async function initializeSettings() {

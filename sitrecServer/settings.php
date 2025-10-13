@@ -43,6 +43,9 @@ function startS3() {
 }
 
 // Sanitize settings to prevent exploits
+// NOTE: When adding new settings, you must update BOTH:
+//   1. This function (settings.php)
+//   2. sanitizeSettings() in SettingsManager.js
 function sanitizeSettings($settings) {
     if (!is_array($settings)) {
         return [];
@@ -58,10 +61,7 @@ function sanitizeSettings($settings) {
     }
     
     // Add more settings here as needed
-    // Example:
-    // if (isset($settings['someBooleanSetting'])) {
-    //     $sanitized['someBooleanSetting'] = (bool)$settings['someBooleanSetting'];
-    // }
+    // Remember to also update SettingsManager.js!
     
     return $sanitized;
 }
