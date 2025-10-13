@@ -1,7 +1,7 @@
 import {par} from "../par";
 import {GlobalDateTimeNode, NodeMan, setRenderOne, Sit} from "../Globals";
 import {CNode} from "./CNode";
-import {parseBoolean} from "../utils";
+import {getControlsContainer} from "../PageStructure";
 
 export class CNodeFrameSlider extends CNode {
     constructor(v) {
@@ -39,13 +39,9 @@ export class CNodeFrameSlider extends CNode {
     setupFrameSlider() {
         const sliderContainer = document.createElement('div');
 
-        // Set up the slider container
-        sliderContainer.style.position = 'absolute';
-        sliderContainer.style.height = '40px';
-        sliderContainer.style.bottom = '0px';
-        if (parseBoolean(process.env.BANNER_ACTIVE)) {
-            sliderContainer.style.bottom = process.env.BANNER_HEIGHT + 'px';
-        }
+        // Set up the slider container - now positioned relative within ControlsBottom
+        sliderContainer.style.position = 'relative';
+        sliderContainer.style.height = '100%';
         sliderContainer.style.width = '100%';
         sliderContainer.style.zIndex = '1001'; // Needed to get mouse events when over other windows
         sliderContainer.style.display = 'flex';
@@ -60,8 +56,8 @@ export class CNodeFrameSlider extends CNode {
         // Create control buttons container
         this.controlContainer = document.createElement('div');
         this.controlContainer.style.display = 'flex';
-        this.controlContainer.style.marginRight = '10px';
-        this.controlContainer.style.width = '400px'; // Adjusted width to accommodate the new buttons
+        this.controlContainer.style.marginRight = '5px';
+        this.controlContainer.style.width = '280px'; // Reduced from 400px (30% reduction for button sizes)
 
         // Create Buttons
         this.pinButton = this.createButton(
@@ -198,7 +194,7 @@ export class CNodeFrameSlider extends CNode {
         // create a div to hold the slider
         this.sliderDiv = document.createElement('div');
         this.sliderDiv.style.width = '100%';
-        this.sliderDiv.style.height = '40px';
+        this.sliderDiv.style.height = '100%'; // Fill the container height (28px)
         this.sliderDiv.style.display = 'flex';
         this.sliderDiv.style.alignItems = 'center';
         this.sliderDiv.style.justifyContent = 'center';
@@ -206,12 +202,22 @@ export class CNodeFrameSlider extends CNode {
         this.sliderDiv.style.zIndex = '1002';
         this.sliderDiv.style.opacity = "0"; // Initially hidden
         this.sliderDiv.style.transition = "opacity 0.2s";
-        this.sliderDiv.style.marginRight = '10px'; // Match the spacing between buttons and slider
+        this.sliderDiv.style.marginRight = '5px'; // Reduced spacing
+        this.sliderDiv.style.backgroundColor = '#000000'; // Black background
 
 
         this.sliderDiv.appendChild(this.sliderInput);
         sliderContainer.appendChild(this.sliderDiv);
-        document.body.appendChild(sliderContainer);
+        
+        // Append to the ControlsBottom container instead of document.body
+        const controlsContainer = getControlsContainer();
+        if (controlsContainer) {
+            controlsContainer.appendChild(sliderContainer);
+        } else {
+            // Fallback to document.body if ControlsBottom doesn't exist (shouldn't happen)
+            console.warn("ControlsBottom container not found, appending to body");
+            document.body.appendChild(sliderContainer);
+        }
 
         // add a canvas to the slider div
         this.canvas = document.createElement('canvas');
@@ -261,12 +267,12 @@ export class CNodeFrameSlider extends CNode {
                     const currentFramePixel = frameToPixel(par.frame);
                     
                     // Define slider thumb area (prioritize this over A/B limits)
-                    const thumbWidth = 20; // Approximate width of slider thumb
+                    const thumbWidth = 14; // Approximate width of slider thumb (scaled down)
                     const thumbArea = {
                         left: currentFramePixel - thumbWidth / 2,
                         right: currentFramePixel + thumbWidth / 2,
-                        top: 10, // Allow A/B dragging above the slider track
-                        bottom: 40 // Full height of slider container
+                        top: 7, // Allow A/B dragging above the slider track
+                        bottom: 28 // Full height of slider container (reduced from 40)
                     };
                     
                     // If mouse is in the slider thumb area, don't allow A/B limit dragging
@@ -280,7 +286,7 @@ export class CNodeFrameSlider extends CNode {
                         return 'A';
                     }
                     // Check if near A handle circle (top of line) - prioritize this area
-                    if (Math.abs(mouseX - aPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+                    if (Math.abs(mouseX - aPixel) <= 6 && mouseY >= 0 && mouseY <= 12) {
                         return 'A';
                     }
                     
@@ -289,7 +295,7 @@ export class CNodeFrameSlider extends CNode {
                         return 'B';
                     }
                     // Check if near B handle circle (top of line) - prioritize this area
-                    if (Math.abs(mouseX - bPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+                    if (Math.abs(mouseX - bPixel) <= 6 && mouseY >= 0 && mouseY <= 12) {
                         return 'B';
                     }
                     
@@ -416,12 +422,17 @@ export class CNodeFrameSlider extends CNode {
 
         // Helper function to convert pixel position to frame number
         const pixelToFrame = (x) => {
-            return Math.round((x / this.canvas.offsetWidth) * Sit.frames);
+            const padding = 5; // Must match the padding used in drawing
+            const drawableWidth = this.canvas.offsetWidth - (2 * padding);
+            const adjustedX = Math.max(0, Math.min(drawableWidth, x - padding));
+            return Math.round((adjustedX / drawableWidth) * Sit.frames);
         };
 
         // Helper function to get pixel position of a frame
         const frameToPixel = (frame) => {
-            return (frame / Sit.frames) * this.canvas.offsetWidth;
+            const padding = 5; // Must match the padding used in drawing
+            const drawableWidth = this.canvas.offsetWidth - (2 * padding);
+            return padding + (drawableWidth * frame / Sit.frames);
         };
 
         // Helper function to check if mouse is near a limit line or handle
@@ -431,12 +442,12 @@ export class CNodeFrameSlider extends CNode {
             const currentFramePixel = frameToPixel(par.frame);
             
             // Define slider thumb area (prioritize this over A/B limits)
-            const thumbWidth = 20; // Approximate width of slider thumb
+            const thumbWidth = 14; // Approximate width of slider thumb (scaled down)
             const thumbArea = {
                 left: currentFramePixel - thumbWidth / 2,
                 right: currentFramePixel + thumbWidth / 2,
-                top: 10, // Allow A/B dragging above the slider track
-                bottom: 40 // Full height of slider container
+                top: 7, // Allow A/B dragging above the slider track
+                bottom: 28 // Full height of slider container (reduced from 40)
             };
             
             // If mouse is in the slider thumb area, don't allow A/B limit dragging
@@ -450,7 +461,7 @@ export class CNodeFrameSlider extends CNode {
                 return 'A';
             }
             // Check if near A handle circle (top of line) - prioritize this area
-            if (Math.abs(mouseX - aPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+            if (Math.abs(mouseX - aPixel) <= 6 && mouseY >= 0 && mouseY <= 12) {
                 return 'A';
             }
             
@@ -459,7 +470,7 @@ export class CNodeFrameSlider extends CNode {
                 return 'B';
             }
             // Check if near B handle circle (top of line) - prioritize this area
-            if (Math.abs(mouseX - bPixel) <= 8 && mouseY >= 0 && mouseY <= 16) {
+            if (Math.abs(mouseX - bPixel) <= 6 && mouseY >= 0 && mouseY <= 12) {
                 return 'B';
             }
             
@@ -651,21 +662,24 @@ export class CNodeFrameSlider extends CNode {
         this.canvas.width = this.canvas.offsetWidth;
         this.canvas.height = this.canvas.offsetHeight;
 
+        // Add padding to ensure handles are visible at the edges
+        const padding = 5; // pixels of padding on each side
+        const drawableWidth = this.canvas.width - (2 * padding);
 
         // Draw A limit line (green)
-        const aPixel = this.canvas.width * Sit.aFrame / Sit.frames;
+        const aPixel = padding + (drawableWidth * Sit.aFrame / Sit.frames);
         let aColor = '#008000'; // Default green
-        let aLineWidth = 2;
-        let aHandleRadius = 4;
+        let aLineWidth = 1.5;
+        let aHandleRadius = 3;
         
         if (this.draggingALimit) {
             aColor = '#00ff00'; // Bright green when dragging
-            aLineWidth = 3;
-            aHandleRadius = 5;
+            aLineWidth = 2;
+            aHandleRadius = 3.5;
         } else if (this.hoveringALimit) {
             aColor = '#00cc00'; // Medium green when hovering
-            aLineWidth = 2.5;
-            aHandleRadius = 4.5;
+            aLineWidth = 1.75;
+            aHandleRadius = 3.25;
         }
         
         ctx.strokeStyle = aColor;
@@ -678,23 +692,23 @@ export class CNodeFrameSlider extends CNode {
         // Draw A limit handle (small circle at top)
         ctx.fillStyle = aColor;
         ctx.beginPath();
-        ctx.arc(aPixel, 8, aHandleRadius, 0, 2 * Math.PI);
+        ctx.arc(aPixel, 6, aHandleRadius, 0, 2 * Math.PI);
         ctx.fill();
 
         // Draw B limit line (red)
-        const bPixel = this.canvas.width * Sit.bFrame / Sit.frames;
+        const bPixel = padding + (drawableWidth * Sit.bFrame / Sit.frames);
         let bColor = '#800000'; // Default red
-        let bLineWidth = 2;
-        let bHandleRadius = 4;
+        let bLineWidth = 1.5;
+        let bHandleRadius = 3;
         
         if (this.draggingBLimit) {
             bColor = '#ff0000'; // Bright red when dragging
-            bLineWidth = 3;
-            bHandleRadius = 5;
+            bLineWidth = 2;
+            bHandleRadius = 3.5;
         } else if (this.hoveringBLimit) {
             bColor = '#cc0000'; // Medium red when hovering
-            bLineWidth = 2.5;
-            bHandleRadius = 4.5;
+            bLineWidth = 1.75;
+            bHandleRadius = 3.25;
         }
         
         ctx.strokeStyle = bColor;
@@ -707,7 +721,7 @@ export class CNodeFrameSlider extends CNode {
         // Draw B limit handle (small circle at top)
         ctx.fillStyle = bColor;
         ctx.beginPath();
-        ctx.arc(bPixel, 8, bHandleRadius, 0, 2 * Math.PI);
+        ctx.arc(bPixel, 6, bHandleRadius, 0, 2 * Math.PI);
         ctx.fill();
 
 
@@ -730,12 +744,16 @@ export class CNodeFrameSlider extends CNode {
     // Utility function to create a div using a sprite from a sprite sheet
     createSpriteDiv(row, column, onClickHandler) {
         const div = document.createElement('div');
-        div.style.width = '40px';
-        div.style.height = '40px';
+        const buttonSize = 28; // Reduced from 40px (30% reduction)
+        const spriteSize = 40; // Original sprite size
+        const scaleFactor = buttonSize / spriteSize; // 0.7
+        
+        div.style.width = buttonSize + 'px';
+        div.style.height = buttonSize + 'px';
         div.style.backgroundImage = 'url(./data/images/video-sprites-40px-5x3.png?v=1)';
-        div.style.backgroundSize = '200px 120px'; // Updated to match the actual sprite sheet size
-        div.style.backgroundPosition = `-${column * 40}px -${row * 40}px`; // Corrected to reflect sprite size in 200x120 image
-        div.style.backgroundRepeat = 'no-repeat'; // Ensure only one sprite is displayed
+        div.style.backgroundSize = `${200 * scaleFactor}px ${120 * scaleFactor}px`; // Scale sprite sheet
+        div.style.backgroundPosition = `-${column * spriteSize * scaleFactor}px -${row * spriteSize * scaleFactor}px`;
+        div.style.backgroundRepeat = 'no-repeat';
         div.style.cursor = 'pointer';
         div.addEventListener('click', onClickHandler);
         return div;
@@ -744,8 +762,9 @@ export class CNodeFrameSlider extends CNode {
     // Utility function to create a button container
     createButtonContainer() {
         const container = document.createElement('div');
-        container.style.width = '40px';
-        container.style.height = '40px';
+        const buttonSize = 28; // Reduced from 40px (30% reduction)
+        container.style.width = buttonSize + 'px';
+        container.style.height = buttonSize + 'px';
         container.style.display = 'flex';
         container.style.alignItems = 'center';
         container.style.justifyContent = 'center';
@@ -754,10 +773,12 @@ export class CNodeFrameSlider extends CNode {
 
     // Function to update the play/pause button based on the state of par.paused
     updatePlayPauseButton() {
+        const spriteSize = 40;
+        const scaleFactor = 28 / spriteSize; // 0.7
         if (par.paused) {
-            this.playPauseButton.style.backgroundPosition = `-${spriteLocations.play.col * 40}px -${spriteLocations.play.row * 40}px`;
+            this.playPauseButton.style.backgroundPosition = `-${spriteLocations.play.col * spriteSize * scaleFactor}px -${spriteLocations.play.row * spriteSize * scaleFactor}px`;
         } else {
-            this.playPauseButton.style.backgroundPosition = `-${spriteLocations.pause.col * 40}px -${spriteLocations.pause.row * 40}px`;
+            this.playPauseButton.style.backgroundPosition = `-${spriteLocations.pause.col * spriteSize * scaleFactor}px -${spriteLocations.pause.row * spriteSize * scaleFactor}px`;
         }
     }
 
@@ -770,7 +791,11 @@ export class CNodeFrameSlider extends CNode {
     // Pin/Unpin toggle function
     togglePin() {
         this.pinned = !this.pinned;
-        this.pinButton.style.backgroundPosition = this.pinned ? `-${spriteLocations.unpin.col * 40}px -${spriteLocations.unpin.row * 40}px` : `-${spriteLocations.pin.col * 40}px -${spriteLocations.pin.row * 40}px`;
+        const spriteSize = 40;
+        const scaleFactor = 28 / spriteSize; // 0.7
+        this.pinButton.style.backgroundPosition = this.pinned ? 
+            `-${spriteLocations.unpin.col * spriteSize * scaleFactor}px -${spriteLocations.unpin.row * spriteSize * scaleFactor}px` : 
+            `-${spriteLocations.pin.col * spriteSize * scaleFactor}px -${spriteLocations.pin.row * spriteSize * scaleFactor}px`;
     }
 
     // Advance a single frame function
