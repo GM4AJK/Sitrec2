@@ -123,7 +123,7 @@ export const SitFAA2023 = {
         //  console.log("pointermove" + event.clientX + event.clientY)
         const raycaster = new Raycaster();
         raycaster.layers.mask = LAYERS.MASK_MAINRENDER
-        this.raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
+        raycaster.layers.mask  |= LAYER.MASK_MAIN | LAYER.MASK_LOOK;
         raycaster.setFromCamera(mouseRay, mainView.camera);
         const intersects = raycaster.intersectObjects(this.markerGroup.children);
 
