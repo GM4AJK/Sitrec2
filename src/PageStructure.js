@@ -25,6 +25,9 @@ export function setupPageStructure() {
     if (setupDone) return;
     setupDone = true;
 
+    // Set body background to black to match the application theme
+    document.body.style.backgroundColor = '#000000';
+
     // if banner is not active, then we have content and controls divs
     if (!parseBoolean(process.env.BANNER_ACTIVE)) {
         // create the container div, with ID of "Content"
@@ -45,7 +48,7 @@ export function setupPageStructure() {
         const controlsBottom = document.createElement('div');
         controlsBottom.id = "ControlsBottom";
         controlsBottom.style.position = 'absolute';
-        controlsBottom.style.bottom = '0px';
+        controlsBottom.style.bottom = '10px'; // Moved up 10px from bottom
         controlsBottom.style.width = '100%';
         controlsBottom.style.height = `${CONTROLS_HEIGHT}px`;
         controlsBottom.style.overflow = 'hidden';
@@ -91,7 +94,7 @@ export function setupPageStructure() {
     const controlsBottom = document.createElement('div');
     controlsBottom.id = "ControlsBottom";
     controlsBottom.style.position = 'absolute';
-    controlsBottom.style.bottom = process.env.BANNER_HEIGHT + 'px';
+    controlsBottom.style.bottom = (parseInt(process.env.BANNER_HEIGHT) + 10) + 'px'; // Moved up 10px from banner
     controlsBottom.style.width = '100%';
     controlsBottom.style.height = `${CONTROLS_HEIGHT}px`;
     controlsBottom.style.overflow = 'hidden';
