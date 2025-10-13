@@ -207,53 +207,79 @@ export class PointEditor {
         }
     }
 
+    /**
+     * Helper function to set up raycaster with view-relative coordinates
+     * Returns true if the mouse is in the main view and raycaster is ready, false otherwise
+     */
+    setupRaycasterForEvent(event) {
+        const view = ViewMan.get("mainView");
+        
+        // Robust check: if mainView doesn't exist, do nothing
+        if (!view) {
+            return false;
+        }
 
+        // Check if mouse is within the main view bounds
+        if (!mouseInViewOnly(view, event.clientX, event.clientY)) {
+            return false;
+        }
 
+        // Convert to view-normalized coordinates
+        const [px, py] = mouseToViewNormalized(view, event.clientX, event.clientY);
+        this.pointer.x = px;
+        this.pointer.y = py;
+
+        // Set up raycaster with the normalized coordinates
+        this.raycaster.setFromCamera(this.pointer, this.camera);
+        
+        return true;
+    }
+
+    /**
+     * Helper function to find intersected control point objects
+     * Returns the first intersected object or null
+     */
+    getIntersectedControlPoint() {
+        const intersects = this.raycaster.intersectObjects(this.splineHelperObjects, false);
+        return intersects.length > 0 ? intersects[0].object : null;
+    }
 
     onPointerDown(event) {
-
         if (!this.enable) return;
 
         this.onDownPosition.x = event.clientX;
         this.onDownPosition.y = event.clientY;
 
+        // Right click on point to delete it
+        if (event.button === 2) {
+            if (!this.setupRaycasterForEvent(event)) {
+                return; // Not in main view or view doesn't exist
+            }
 
-        // right click on point to delete it
-        if (event.button == 2) {
-            // TODO - ADJUST FOR VIEW, not full screen
-            this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-            this.pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
-            this.raycaster.setFromCamera(this.pointer, this.camera);
-            const intersects = this.raycaster.intersectObjects(this.splineHelperObjects, false);
-            if (intersects.length > 0) {
-
-                const object = intersects[0].object;
-
+            const object = this.getIntersectedControlPoint();
+            if (object) {
+                // Detach transform control if we're deleting the object it's attached to
                 if (object === this.transformControl.object) {
                     this.transformControl.detach();
                 }
 
-                var index = this.splineHelperObjects.findIndex(ob => ob === object)
-                assert (index !== -1, "Can't find object to destroy!!")
+                // Find and remove the control point
+                const index = this.splineHelperObjects.findIndex(ob => ob === object);
+                assert(index !== -1, "Can't find object to destroy!!");
 
                 this.scene.remove(object);
 
-                // remove one entry from all the
-                this.frameNumbers.splice(index, 1)
-                this.positions.splice(index, 1)
-                this.splineHelperObjects.splice(index, 1)
-                this.updatePointEditorGraphics()
+                // Remove from all tracking arrays
+                this.frameNumbers.splice(index, 1);
+                this.positions.splice(index, 1);
+                this.splineHelperObjects.splice(index, 1);
+                
+                this.updatePointEditorGraphics();
                 this.numPoints--;
-
                 this.dirty = true;
-
             }
-
-
         }
-
     }
-
 
     onPointerUp(event) {
         if (!this.enable) return;
@@ -261,40 +287,27 @@ export class PointEditor {
         this.onUpPosition.x = event.clientX;
         this.onUpPosition.y = event.clientY;
 
-        if (this.onDownPosition.distanceTo(this.onUpPosition) === 0) this.transformControl.detach();
-        this.exportSpline()
+        if (this.onDownPosition.distanceTo(this.onUpPosition) === 0) {
+            this.transformControl.detach();
+        }
+        this.exportSpline();
     }
 
     onPointerMove(event) {
         if (!this.enable) return;
 
-        //this.pointer.x = (event.clientX / window.innerWidth) * 2 - 1;
-        //this.pointer.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        if (!this.setupRaycasterForEvent(event)) {
+            return; // Not in main view or view doesn't exist
+        }
 
-        var view = ViewMan.get("mainView")
+        const object = this.getIntersectedControlPoint();
+        if (object) {
+            // Find the index of the control point we're hovering over
+            this.editingIndex = this.splineHelperObjects.findIndex(ob => ob === object);
 
-        if (mouseInViewOnly(view, event.clientX , event.clientY))
-        {
-            const [px, py] = mouseToViewNormalized(view, event.clientX, event.clientY)
-            this.pointer.x = px;
-            this.pointer.y = py;
-
-            this.raycaster.setFromCamera(this.pointer, this.camera);
-            const intersects = this.raycaster.intersectObjects(this.splineHelperObjects, false);
-            if (intersects.length > 0) {
-
-
-                const object = intersects[0].object;
-
-                // find the index of the splineHelperObjects entry we are editing
-                this.editingIndex = this.splineHelperObjects.findIndex((ob) => {
-                    return ob === object
-                })
-
-
-                if (object !== this.transformControl.object) {
-                    this.transformControl.attach(object);
-                }
+            // Attach transform control if not already attached to this object
+            if (object !== this.transformControl.object) {
+                this.transformControl.attach(object);
             }
         }
     }

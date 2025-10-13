@@ -9,6 +9,11 @@ export class CNodeViewUI extends CNodeViewCanvas2D {
     // constructor is passed a CView object or id, if null then this is stand-alone
     constructor(v) {
         super(v)
+        
+        // UI overlays should not intercept mouse events by default
+        // This allows mouse events to pass through to the underlying 3D view
+        this.ignoreMouseEvents();
+        
         if (this.overlayView) {
             this.visible = this.overlayView.visible;
         }

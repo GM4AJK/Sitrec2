@@ -48,6 +48,7 @@ import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
+import {syntheticTrackCreator} from "./SyntheticTrackCreator";
 import {findRootTrack} from "./FindRootTrack";
 import {initializeSettings, SettingsSaver} from "./SettingsManager";
 
@@ -1293,6 +1294,40 @@ export class CCustomManager {
 
                 menu.destroy();
             },
+            createSyntheticTrack: () => {
+                // Create a track at the clicked point
+                syntheticTrackCreator.createTrack({
+                    startPoint: groundPoint,
+                    name: "New Track",
+                    editMode: true
+                });
+                menu.destroy();
+            },
+            createTrackWithObject: () => {
+                // Create a 3D object at the clicked point
+                const objectID = `syntheticObject_${Date.now()}`;
+                
+                // Create a simple sphere object
+                new CNode3DObject({
+                    id: objectID,
+                    geometry: "sphere",
+                    radius: 10, // 10 meters
+                    color: 0xff8800,
+                    position: groundPoint,
+                });
+                
+                // Create track and associate with object
+                syntheticTrackCreator.createTrack({
+                    startPoint: groundPoint,
+                    name: `Object Track`,
+                    objectID: objectID,
+                    editMode: true,
+                    color: 0xff8800,
+                });
+                
+                console.log(`Created object ${objectID} with track at ${lat}, ${lon}, ${alt}m`);
+                menu.destroy();
+            },
         };
         
         // Add location text as custom HTML (bright and selectable)
@@ -1304,6 +1339,9 @@ export class CCustomManager {
         menu.add(menuData, "setTargetAbove").name("Set Target Above");
         menu.add(menuData, "setTargetOnGround").name("Set Target on Ground");
 
+        // Add synthetic track options
+        menu.add(menuData, "createSyntheticTrack").name("Create Synthetic Track");
+        menu.add(menuData, "createTrackWithObject").name("Create Track with Object");
 
         if (NodeMan.exists("terrainUI")) {
             const terrainUI = NodeMan.get("terrainUI");
