@@ -1516,7 +1516,8 @@ function disposeEverything() {
     // clear the material cache
     QuadTreeTile.clearMaterialCache();
 
-    // what about the terrain? that should be removed by the terrain node....
+    // ensure the next sitch has a good default value (false) for Globals.dynamicSubdivision
+    Globals.dynamicSubdivision = false;
 
    // ViewMan.disposeAll()
     assert(ViewMan.size() === 0, "ViewMan.size() should be zero, it's " + ViewMan.size());
