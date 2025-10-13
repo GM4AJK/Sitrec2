@@ -18,8 +18,8 @@ import {parseBoolean} from "./utils";
 let setupDone = false;
 
 // Height of the controls area at the bottom (frame slider and buttons)
-// Reduced from 40px to 28px (30% reduction) to minimize vertical space
-const CONTROLS_HEIGHT = 28;
+// Reduced from 40px to 28px, then to 20px (30% thinner than 28px) to minimize vertical space
+const CONTROLS_HEIGHT = 20;
 
 export function setupPageStructure() {
     if (setupDone) return;
@@ -49,6 +49,9 @@ export function setupPageStructure() {
         controlsBottom.style.width = '100%';
         controlsBottom.style.height = `${CONTROLS_HEIGHT}px`;
         controlsBottom.style.overflow = 'hidden';
+        controlsBottom.style.backgroundColor = '#000000'; // Black background
+        controlsBottom.style.paddingBottom = '4px'; // Add padding at the bottom
+        controlsBottom.style.paddingRight = '10px'; // Add padding at the right end
         document.body.append(controlsBottom);
 
         return;
@@ -92,6 +95,9 @@ export function setupPageStructure() {
     controlsBottom.style.width = '100%';
     controlsBottom.style.height = `${CONTROLS_HEIGHT}px`;
     controlsBottom.style.overflow = 'hidden';
+    controlsBottom.style.backgroundColor = '#000000'; // Black background
+    controlsBottom.style.paddingBottom = '4px'; // Add padding at the bottom
+    controlsBottom.style.paddingRight = '10px'; // Add padding at the right end
     document.body.append(controlsBottom);
 
     // create the bottom banner
