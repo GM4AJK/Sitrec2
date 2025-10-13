@@ -7,6 +7,7 @@ import {assert} from "./assert";
 import {ViewMan} from "./CViewManager";
 import {parseBoolean} from "./utils";
 import Stats from "stats.js";
+import {toggleControlsVisibility} from "./PageStructure";
 
 // Issue with lil-gui, the OptionController options() method adds a
 // _names array to the controller object, and a _values array
@@ -419,6 +420,12 @@ export class CGuiMenuBar {
         document.body.appendChild(bar);
         this.bar = bar;
 
+        // Listen for fullscreen changes to update menu bar position
+        document.addEventListener('fullscreenchange', () => {
+            if (!this._hidden) {
+                this._updateMenuBarPosition();
+            }
+        });
 
         // capture mousedown events from anywhere on screen to detect if we want to close the GUIs
         document.addEventListener("mousedown", (event) => {
@@ -550,7 +557,8 @@ export class CGuiMenuBar {
         this.bar.style.display = "block";
         this._hidden = false;
 
-        ViewMan.topPx = this.barHeight;
+        // Update positioning based on full-screen mode
+        this._updateMenuBarPosition();
     }
 
     hide() {
@@ -569,12 +577,37 @@ export class CGuiMenuBar {
       //  updateSize();
     }
 
+    // Helper method to update menu bar position based on current state
+    _updateMenuBarPosition() {
+        // Check if browser is in full-screen mode
+        const isFullScreen = document.fullscreenElement !== null;
+        
+        // When in browser full-screen mode without banners, add 10px spacing from top
+        const topOffset = (isFullScreen && !parseBoolean(process.env.BANNER_ACTIVE)) ? 10 : 0;
+        
+        if (parseBoolean(process.env.BANNER_ACTIVE)) {
+            // With banner, position below it
+            this.bar.style.top = process.env.BANNER_HEIGHT + "px";
+            this.menuBar.style.top = process.env.BANNER_HEIGHT + "px";
+            ViewMan.topPx = this.barHeight;
+        } else {
+            // Without banner, use the top offset (10px in full-screen mode, 0px otherwise)
+            this.bar.style.top = topOffset + "px";
+            this.menuBar.style.top = topOffset + "px";
+            ViewMan.topPx = this.barHeight + topOffset;
+        }
+        
+        ViewMan.updateSize();
+    }
+
     toggleVisiblity() {
         if (this._hidden) {
             this.show();
         } else {
             this.hide();
         }
+        // Also toggle the controls visibility to maximize view space
+        toggleControlsVisibility();
     }
 
     reset() {

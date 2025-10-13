@@ -128,3 +128,35 @@ export function setupPageStructure() {
 export function getControlsContainer() {
     return document.getElementById("ControlsBottom");
 }
+
+// Helper function to toggle controls visibility
+let controlsHidden = false;
+
+export function toggleControlsVisibility() {
+    const controlsBottom = document.getElementById("ControlsBottom");
+    const content = document.getElementById("Content");
+    
+    if (!controlsBottom || !content) return;
+    
+    controlsHidden = !controlsHidden;
+    
+    if (controlsHidden) {
+        // Hide controls and expand content to full screen
+        controlsBottom.style.display = 'none';
+        content.style.height = '100%';
+    } else {
+        // Show controls and restore content height
+        controlsBottom.style.display = 'block';
+        
+        // Restore original height based on whether banner is active
+        if (!parseBoolean(process.env.BANNER_ACTIVE)) {
+            content.style.height = `calc(100% - ${CONTROLS_HEIGHT}px)`;
+        } else {
+            content.style.height = 'calc(100% - ' + (2 * process.env.BANNER_HEIGHT + CONTROLS_HEIGHT) + 'px)';
+        }
+    }
+}
+
+export function areControlsHidden() {
+    return controlsHidden;
+}
