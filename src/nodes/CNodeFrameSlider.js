@@ -6,6 +6,7 @@ import {getControlsContainer} from "../PageStructure";
 export class CNodeFrameSlider extends CNode {
     constructor(v) {
         super(v);
+        this.sliderContainer = null;
         this.sliderDiv = null;
         this.sliderInput = null;
         this.playPauseButton = null;
@@ -37,18 +38,18 @@ export class CNodeFrameSlider extends CNode {
     }
 
     setupFrameSlider() {
-        const sliderContainer = document.createElement('div');
+        this.sliderContainer = document.createElement('div');
 
         // Set up the slider container - now positioned relative within ControlsBottom
-        sliderContainer.style.position = 'relative';
-        sliderContainer.style.height = '100%';
-        sliderContainer.style.width = '100%';
-        sliderContainer.style.zIndex = '1001'; // Needed to get mouse events when over other windows
-        sliderContainer.style.display = 'flex';
-        sliderContainer.style.alignItems = 'center';
+        this.sliderContainer.style.position = 'relative';
+        this.sliderContainer.style.height = '100%';
+        this.sliderContainer.style.width = '100%';
+        this.sliderContainer.style.zIndex = '1001'; // Needed to get mouse events when over other windows
+        this.sliderContainer.style.display = 'flex';
+        this.sliderContainer.style.alignItems = 'center';
 
         // Prevent double click behavior on the slider container
-        sliderContainer.addEventListener('dblclick', (event) => {
+        this.sliderContainer.addEventListener('dblclick', (event) => {
             event.preventDefault();
             event.stopPropagation();
         });
@@ -160,7 +161,7 @@ export class CNodeFrameSlider extends CNode {
         );
 
         this.controlContainer.style.opacity = "0"; // Initially hidden
-        sliderContainer.appendChild(this.controlContainer);
+        this.sliderContainer.appendChild(this.controlContainer);
 
         // Create the slider input element
         this.sliderInput = document.createElement('input');
@@ -207,16 +208,16 @@ export class CNodeFrameSlider extends CNode {
 
 
         this.sliderDiv.appendChild(this.sliderInput);
-        sliderContainer.appendChild(this.sliderDiv);
+        this.sliderContainer.appendChild(this.sliderDiv);
         
         // Append to the ControlsBottom container instead of document.body
         const controlsContainer = getControlsContainer();
         if (controlsContainer) {
-            controlsContainer.appendChild(sliderContainer);
+            controlsContainer.appendChild(this.sliderContainer);
         } else {
             // Fallback to document.body if ControlsBottom doesn't exist (shouldn't happen)
             console.warn("ControlsBottom container not found, appending to body");
-            document.body.appendChild(sliderContainer);
+            document.body.appendChild(this.sliderContainer);
         }
 
         // add a canvas to the slider div
@@ -229,6 +230,13 @@ export class CNodeFrameSlider extends CNode {
         this.canvas.style.zIndex = '1003'; // Ensure it overlays the input
         this.canvas.style.pointerEvents = 'none'; // Initially allow events to pass through
         this.sliderDiv.appendChild(this.canvas);
+
+        // Add ResizeObserver to redraw canvas when it's resized
+        this.resizeObserver = new ResizeObserver(() => {
+            // Trigger a redraw by calling update with current frame
+            this.update(par.frame);
+        });
+        this.resizeObserver.observe(this.canvas);
 
         // Create frame display box
         this.frameDisplayBox = document.createElement('div');
@@ -250,7 +258,7 @@ export class CNodeFrameSlider extends CNode {
         this.setupLimitDragging();
 
         // Add mouse move listener to the slider container to manage pointer events
-        sliderContainer.addEventListener('mousemove', (event) => {
+        this.sliderContainer.addEventListener('mousemove', (event) => {
             if (!this.draggingALimit && !this.draggingBLimit) {
                 const rect = this.canvas.getBoundingClientRect();
                 const mouseX = event.clientX - rect.left;
@@ -379,7 +387,7 @@ export class CNodeFrameSlider extends CNode {
 
         this.sliderInput.style.opacity = "0"; // Initially hidden
 
-        sliderContainer.addEventListener('mouseenter', () => {
+        this.sliderContainer.addEventListener('mouseenter', () => {
             console.log("Hover Start");
             if (!sliderDragging) {
                 setTimeout(() => { this.sliderDiv.style.opacity = "1"; }, 200); // fade in
@@ -395,7 +403,7 @@ export class CNodeFrameSlider extends CNode {
             }
         });
 
-        sliderContainer.addEventListener('mouseleave', () => {
+        this.sliderContainer.addEventListener('mouseleave', () => {
             if (sliderDragging) {
                 sliderFade = true;
             } else {
@@ -404,6 +412,12 @@ export class CNodeFrameSlider extends CNode {
                     this.startFadeOut();
                 }, 2000);
             }
+        });
+        
+        // Initial draw of the canvas to ensure A/B limits are visible immediately
+        // Use requestAnimationFrame to ensure the canvas has proper dimensions
+        requestAnimationFrame(() => {
+            this.update(par.frame);
         });
     }
 
@@ -581,8 +595,21 @@ export class CNodeFrameSlider extends CNode {
 
     dispose() {
         super.dispose()
-        // safely remove the slider
-        this.sliderDiv.remove();
+        // Disconnect the ResizeObserver
+        if (this.resizeObserver) {
+            this.resizeObserver.disconnect();
+            this.resizeObserver = null;
+        }
+        // Remove the entire slider container (which contains sliderDiv, controlContainer, etc.)
+        if (this.sliderContainer) {
+            this.sliderContainer.remove();
+            this.sliderContainer = null;
+        }
+        // Remove the frame display box
+        if (this.frameDisplayBox) {
+            this.frameDisplayBox.remove();
+            this.frameDisplayBox = null;
+        }
         // Clear any pending fade out timer
         if (this.fadeOutTimer) {
             clearTimeout(this.fadeOutTimer);
@@ -750,7 +777,7 @@ export class CNodeFrameSlider extends CNode {
         
         div.style.width = buttonSize + 'px';
         div.style.height = buttonSize + 'px';
-        div.style.backgroundImage = 'url(./data/images/video-sprites-40px-5x3.png?v=1)';
+        div.style.backgroundImage = 'url(./data/images/video-sprites-40px-5x3-dark.png?v=1)';
         div.style.backgroundSize = `${200 * scaleFactor}px ${120 * scaleFactor}px`; // Scale sprite sheet
         div.style.backgroundPosition = `-${column * spriteSize * scaleFactor}px -${row * spriteSize * scaleFactor}px`;
         div.style.backgroundRepeat = 'no-repeat';
