@@ -1152,6 +1152,7 @@ class CTrackManager extends CManager {
      * @param {string} options.curveType - Type of curve: "linear", "catmull", "chordal", "centripetal" (default: "chordal")
      * @param {number} options.color - Track color as hex (default: 0xffff00)
      * @param {number} options.lineWidth - Track line width (default: 2)
+     * @param {number} options.startFrame - Frame number for the initial point (default: 0)
      * @returns {Object} The created track object
      */
     addSyntheticTrack(options) {
@@ -1161,6 +1162,7 @@ class CTrackManager extends CManager {
         const editMode = options.editMode !== undefined ? options.editMode : true;
         const colorHex = options.color || 0xffff00;
         const lineWidth = options.lineWidth || 2;
+        const startFrame = options.startFrame !== undefined ? options.startFrame : 0;
         
         // Generate unique short name for display (like "synth_01_d")
         const shortName = `synth_${String(trackNumber + 1).padStart(2, '0')}_d`;
@@ -1187,7 +1189,7 @@ class CTrackManager extends CManager {
         const initialPoints = [];
         if (options.startPoint) {
             const sp = options.startPoint;
-            initialPoints.push([0, sp.x, sp.y, sp.z]);
+            initialPoints.push([startFrame, sp.x, sp.y, sp.z]);
         }
         
         // Smart fallback: Use linear interpolation if we don't have enough points for spline curves

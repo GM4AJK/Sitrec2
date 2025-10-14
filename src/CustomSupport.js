@@ -1304,7 +1304,8 @@ export class CCustomManager {
                 TrackManager.addSyntheticTrack({
                     startPoint: groundPoint,
                     name: "New Track",
-                    editMode: true
+                    editMode: true,
+                    startFrame: par.frame
                 });
                 menu.destroy();
             },
@@ -1328,6 +1329,7 @@ export class CCustomManager {
                     objectID: objectID,
                     editMode: true,
                     color: 0xff8800,
+                    startFrame: par.frame
                 });
                 
                 console.log(`Created object ${objectID} with track at ${lat}, ${lon}, ${alt}m`);
