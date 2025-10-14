@@ -146,7 +146,7 @@ export async function initializeSettings() {
     // Initialize Globals.settings with defaults
     if (!Globals.settings) {
         Globals.settings = {
-            maxDetails: 15 // Default value
+            maxDetails: 15, // Default value
         };
     }
     

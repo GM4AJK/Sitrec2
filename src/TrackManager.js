@@ -1263,6 +1263,7 @@ class CTrackManager extends CManager {
         trackOb.curveType = curveType;
         trackOb.editMode = editMode; // Store initial edit mode state
         trackOb.constantSpeed = false; // Default to time-based interpolation
+        trackOb.extrapolateTrack = true; // Default to extrapolating beyond control points
         
         splineEditorNode.shortName = shortName;
         
@@ -1293,12 +1294,25 @@ class CTrackManager extends CManager {
             trackOb.constantSpeed = splineEditorNode.constantSpeed;
         }
         
+        // Sync extrapolateTrack from splineEditorNode (in case it was loaded from saved data)
+        if (splineEditorNode.extrapolateTrack !== undefined) {
+            trackOb.extrapolateTrack = splineEditorNode.extrapolateTrack;
+        }
+        
         // Add constant speed checkbox to the GUI folder
         // This checkbox controls whether the track uses constant speed interpolation
         guiFolder.add(trackOb, 'constantSpeed').name('Constant Speed').onChange((value) => {
             splineEditorNode.constantSpeed = value;
             splineEditorNode.recalculateCascade();
             console.log(`Constant speed ${value ? 'enabled' : 'disabled'} for track: ${shortName}`);
+        });
+        
+        // Add extrapolate track checkbox to the GUI folder
+        // This checkbox controls whether the track extrapolates beyond first/last control points
+        guiFolder.add(trackOb, 'extrapolateTrack').name('Extrapolate Track').onChange((value) => {
+            splineEditorNode.extrapolateTrack = value;
+            splineEditorNode.recalculateCascade();
+            console.log(`Extrapolate track ${value ? 'enabled' : 'disabled'} for track: ${shortName}`);
         });
         
         // Set initial edit mode state

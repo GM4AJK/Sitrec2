@@ -16,6 +16,9 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
         // Default to time-based interpolation (not constant speed)
         this.constantSpeed = false;
         
+        // Default to extrapolating beyond first/last control points
+        this.extrapolateTrack = true;
+        
         assert(v.view !== undefined, "CNodeSplineEditor needs a view");
         const view = NodeMan.get(v.view) // convert id to node, if needed
         const renderer = view.renderer;
@@ -45,6 +48,9 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
                         v.initialPointsLLA, true)
                 }
         }
+        
+        // Store reference to parent node so PointEditor can access extrapolateTrack setting
+        this.splineEditor.parentNode = this;
 
         this.optionalInputs(["snapCamera","snapTarget"])
         if (this.in.snapCamera != undefined) {
@@ -86,6 +92,7 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
             ...super.modSerialize(),
             positions: positions,
             constantSpeed: this.constantSpeed,
+            extrapolateTrack: this.extrapolateTrack,
         }
     }
 
@@ -96,6 +103,9 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
         }
         if (v.constantSpeed !== undefined) {
             this.constantSpeed = v.constantSpeed
+        }
+        if (v.extrapolateTrack !== undefined) {
+            this.extrapolateTrack = v.extrapolateTrack
         }
     }
 

@@ -520,11 +520,54 @@ export class PointEditor {
         // this is the index of the last control point
         // i.e. the last fencepost
         const lastIndex = this.frameNumbers.length - 1
-        // If outside the bounds of the curve, the just use the end point
-        // might be good to extrapolate. But better to have values at frame 0
-        // and the last frame.
-        if (f<this.frameNumbers[0] ) f = this.frameNumbers[0]
-        if (f>this.frameNumbers[lastIndex] ) f = this.frameNumbers[lastIndex]
+        
+        // Check if extrapolation is enabled for this track
+        // Default to true if not set or if parentNode is not available
+        const shouldExtrapolate = this.parentNode?.extrapolateTrack ?? true;
+        
+        // Handle frames before the first control point
+        if (f < this.frameNumbers[0]) {
+            if (shouldExtrapolate) {
+                // Linear extrapolation using the first two control points
+                const frame0 = this.frameNumbers[0];
+                const frame1 = this.frameNumbers[1];
+                const pos0 = this.positions[0];
+                const pos1 = this.positions[1];
+                
+                // Calculate the extrapolation factor (negative since we're going backwards)
+                const frameDelta = frame1 - frame0;
+                const extrapolationFactor = (f - frame0) / frameDelta;
+                
+                // Linear extrapolation: pos = pos0 + (pos1 - pos0) * factor
+                point.copy(pos1).sub(pos0).multiplyScalar(extrapolationFactor).add(pos0);
+                return point;
+            } else {
+                // Clamp to first control point
+                f = this.frameNumbers[0];
+            }
+        }
+        
+        // Handle frames after the last control point
+        if (f > this.frameNumbers[lastIndex]) {
+            if (shouldExtrapolate) {
+                // Linear extrapolation using the last two control points
+                const frame0 = this.frameNumbers[lastIndex - 1];
+                const frame1 = this.frameNumbers[lastIndex];
+                const pos0 = this.positions[lastIndex - 1];
+                const pos1 = this.positions[lastIndex];
+                
+                // Calculate the extrapolation factor (positive since we're going forward)
+                const frameDelta = frame1 - frame0;
+                const extrapolationFactor = (f - frame0) / frameDelta;
+                
+                // Linear extrapolation: pos = pos0 + (pos1 - pos0) * factor
+                point.copy(pos1).sub(pos0).multiplyScalar(extrapolationFactor).add(pos0);
+                return point;
+            } else {
+                // Clamp to last control point
+                f = this.frameNumbers[lastIndex];
+            }
+        }
 
         const numFramesCovered = this.frameNumbers[lastIndex] - this.frameNumbers[0]
         var segment = 0
