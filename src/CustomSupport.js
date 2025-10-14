@@ -1226,6 +1226,12 @@ export class CCustomManager {
      * @param {Vector3} groundPoint - The 3D point where the ground was clicked (in EUS coordinates)
      */
     showGroundContextMenu(mouseX, mouseY, groundPoint) {
+        // Check if we're in track editing mode
+        if (Globals.editingTrack) {
+            this.showTrackEditingMenu(mouseX, mouseY, groundPoint);
+            return;
+        }
+        
         // Convert ground point to LLA
         const groundLLA = EUSToLLA(groundPoint);
         const lat = groundLLA.x;
@@ -1349,6 +1355,102 @@ export class CCustomManager {
             }
 
         }
+    }
+
+    /**
+     * Show a context menu for track editing when in edit mode
+     * @param {number} mouseX - Screen X coordinate
+     * @param {number} mouseY - Screen Y coordinate
+     * @param {Vector3} groundPoint - The 3D point where the ground was clicked (in EUS coordinates)
+     */
+    showTrackEditingMenu(mouseX, mouseY, groundPoint) {
+        const trackOb = Globals.editingTrack;
+        if (!trackOb || !trackOb.splineEditor) {
+            console.warn("No track being edited");
+            return;
+        }
+        
+        const splineEditor = trackOb.splineEditor;
+        const shortName = trackOb.menuText || trackOb.trackID;
+        
+        // Create the context menu
+        const menu = Globals.menuBar.createStandaloneMenu(`Edit: ${shortName}`, mouseX, mouseY);
+        menu.open();
+        
+        // Create menu actions
+        const menuData = {
+            addPoint: () => {
+                // Add a point at the current frame and clicked position
+                splineEditor.insertPoint(par.frame, groundPoint);
+                console.log(`Added point to track ${shortName} at frame ${par.frame}`);
+                menu.destroy();
+                setRenderOne(true);
+            },
+            removeClosestPoint: () => {
+                // Find the closest point to the clicked position
+                let closestIndex = -1;
+                let closestDistance = Infinity;
+                
+                for (let i = 0; i < splineEditor.numPoints; i++) {
+                    const pointPos = splineEditor.positions[i];
+                    const distance = groundPoint.distanceTo(pointPos);
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        closestIndex = i;
+                    }
+                }
+                
+                if (closestIndex >= 0) {
+                    // Check if we have enough points to remove one
+                    if (splineEditor.numPoints <= splineEditor.minimumPoints) {
+                        alert(`Cannot remove point: track must have at least ${splineEditor.minimumPoints} points`);
+                        menu.destroy();
+                        return;
+                    }
+                    
+                    // Remove the point at the found index
+                    const frameNumber = splineEditor.frameNumbers[closestIndex];
+                    const point = splineEditor.splineHelperObjects[closestIndex];
+                    
+                    // Detach transform control if it's attached to this point
+                    if (splineEditor.transformControl.object === point) {
+                        splineEditor.transformControl.detach();
+                    }
+                    
+                    // Remove from scene
+                    splineEditor.scene.remove(point);
+                    
+                    // Remove from arrays
+                    splineEditor.frameNumbers.splice(closestIndex, 1);
+                    splineEditor.positions.splice(closestIndex, 1);
+                    splineEditor.splineHelperObjects.splice(closestIndex, 1);
+                    splineEditor.numPoints--;
+                    
+                    // Update graphics
+                    splineEditor.updatePointEditorGraphics();
+                    if (splineEditor.onChange) splineEditor.onChange();
+                    
+                    console.log(`Removed point at frame ${frameNumber} from track ${shortName}`);
+                    setRenderOne(true);
+                } else {
+                    console.warn("No point found to remove");
+                }
+                menu.destroy();
+            },
+            exitEditMode: () => {
+                // Exit edit mode
+                trackOb.editMode = false;
+                splineEditor.setEnable(false);
+                Globals.editingTrack = null;
+                console.log(`Exited edit mode for track ${shortName}`);
+                menu.destroy();
+            }
+        };
+        
+        // Add menu items
+        menu.add(menuData, "addPoint").name(`Add Point (Frame ${par.frame})`);
+        menu.add(menuData, "removeClosestPoint").name("Remove Closest Point");
+        menu.add(menuData, "exitEditMode").name("Exit Edit Mode");
     }
 
     updateViewFromPreset() {

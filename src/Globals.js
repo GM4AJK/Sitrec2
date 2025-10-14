@@ -4,7 +4,9 @@ export function incrementMainLoopCount() {
 //    console.log("Incrementing mainLoopCount to " + mainLoopCount);
 };
 
-export var Globals = {}
+export var Globals = {
+    editingTrack: null  // Reference to the CMetaTrack currently being edited
+}
 
 export function setSitchEstablished(bool) {
     Globals.sitchEstablished = bool;

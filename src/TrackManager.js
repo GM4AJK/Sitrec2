@@ -1246,15 +1246,7 @@ class CTrackManager extends CManager {
         // This must happen AFTER CNodeDisplayTrack has found the folder
         guiFolder.$title.innerText = shortName;
         
-        // Add edit mode toggle to the GUI folder (before display track controls)
-        guiFolder.add({
-            toggleEditMode: () => {
-                const isEnabled = splineEditor.enabled;
-                splineEditor.setEnable(!isEnabled);
-            }
-        }, 'toggleEditMode').name('Toggle Edit Mode');
-        
-        // Create the track object
+        // Create the track object first so we can reference it in the edit mode toggle
         const trackOb = this.add(trackID, new CMetaTrack(null, splineEditorNode, splineEditorNode));
         trackOb.trackID = trackID;
         trackOb.menuText = shortName;
@@ -1266,8 +1258,37 @@ class CTrackManager extends CManager {
         trackOb.guiFolder = guiFolder;
         trackOb.trackColor = trackColor;
         trackOb.curveType = curveType;
+        trackOb.editMode = editMode; // Store initial edit mode state
         
         splineEditorNode.shortName = shortName;
+        
+        // Add edit mode checkbox to the GUI folder (before display track controls)
+        // This checkbox controls whether the track is in edit mode
+        guiFolder.add(trackOb, 'editMode').name('Edit Track').onChange((value) => {
+            splineEditor.setEnable(value);
+            
+            // Set or clear the global editing track reference
+            if (value) {
+                // Disable edit mode on any other track that's currently being edited
+                if (Globals.editingTrack && Globals.editingTrack !== trackOb) {
+                    Globals.editingTrack.editMode = false;
+                    Globals.editingTrack.splineEditor.setEnable(false);
+                }
+                Globals.editingTrack = trackOb;
+                console.log(`Edit mode enabled for track: ${shortName}`);
+            } else {
+                if (Globals.editingTrack === trackOb) {
+                    Globals.editingTrack = null;
+                }
+                console.log(`Edit mode disabled for track: ${shortName}`);
+            }
+        });
+        
+        // Set initial edit mode state
+        if (editMode) {
+            splineEditor.setEnable(true);
+            Globals.editingTrack = trackOb;
+        }
         
         // Add delete button to the folder
         const dummy = {
@@ -1334,6 +1355,11 @@ class CTrackManager extends CManager {
         if (!trackOb || !trackOb.isSynthetic) {
             console.warn(`Synthetic track ${trackID} not found`);
             return;
+        }
+        
+        // Clear global editing track reference if this is the track being edited
+        if (Globals.editingTrack === trackOb) {
+            Globals.editingTrack = null;
         }
         
         // Disable edit mode first
