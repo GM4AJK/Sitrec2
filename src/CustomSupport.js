@@ -1385,10 +1385,33 @@ export class CCustomManager {
         
         // Create menu actions
         const menuData = {
-            addPoint: () => {
+            splitTrack: () => {
+                // Add a point at the current frame and current track position
+                // Get the track node to access the interpolated position
+                const trackNode = trackOb.splineEditorNode;
+                if (trackNode && trackNode.array && trackNode.array.length > 0) {
+                    const currentFrame = Math.floor(par.frame);
+                    if (currentFrame >= 0 && currentFrame < trackNode.array.length) {
+                        const trackPosition = trackNode.array[currentFrame].position;
+                        if (trackPosition) {
+                            splineEditor.insertPoint(par.frame, trackPosition);
+                            console.log(`Split track ${shortName} at frame ${par.frame} (position indicator)`);
+                        } else {
+                            console.warn("No track position available at current frame");
+                        }
+                    } else {
+                        console.warn("Current frame out of range");
+                    }
+                } else {
+                    console.warn("Track node or array not available");
+                }
+                menu.destroy();
+                setRenderOne(true);
+            },
+            addGroundPoint: () => {
                 // Add a point at the current frame and clicked position
                 splineEditor.insertPoint(par.frame, groundPoint);
-                console.log(`Added point to track ${shortName} at frame ${par.frame}`);
+                console.log(`Added ground point to track ${shortName} at frame ${par.frame}`);
                 menu.destroy();
                 setRenderOne(true);
             },
@@ -1454,9 +1477,10 @@ export class CCustomManager {
         };
         
         // Add menu items
-        // Only show "Add Point" if current frame doesn't already have a control point
+        // Only show point-adding options if current frame doesn't already have a control point
         if (!hasPointAtCurrentFrame) {
-            menu.add(menuData, "addPoint").name(`Add Point (Frame ${par.frame})`);
+            menu.add(menuData, "splitTrack").name(`Split Track (Frame ${par.frame})`);
+            menu.add(menuData, "addGroundPoint").name(`Add Ground Point (Frame ${par.frame})`);
         }
         menu.add(menuData, "removeClosestPoint").name("Remove Closest Point");
         menu.add(menuData, "exitEditMode").name("Exit Edit Mode");
