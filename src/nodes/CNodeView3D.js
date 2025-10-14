@@ -27,7 +27,7 @@ import {
     WebGLRenderer,
     WebGLRenderTarget
 } from "three";
-import {DebugArrowAB, forceFilterChange, scaleArrows} from "../threeExt";
+import {DebugArrowAB, forceFilterChange, scaleArrows, updateTrackPositionIndicator} from "../threeExt";
 import {CNodeViewCanvas} from "./CNodeViewCanvas";
 import {wgs84} from "../LLA-ECEF-ENU";
 import {getCameraNode} from "./CNodeCamera";
@@ -972,6 +972,8 @@ export class CNodeView3D extends CNodeViewCanvas {
         // mainly though it's because the camera control call updateMeasureArrow(), which was before
         scaleArrows(this);
 
+        // Update the position indicator cone for the currently editing track
+        updateTrackPositionIndicator(this);
 
         this.renderTargetAndEffects()
         CustomManager.postRenderUpdate(this)

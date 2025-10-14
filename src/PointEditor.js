@@ -1,5 +1,15 @@
 import {TransformControls} from "three/addons/controls/TransformControls.js";
-import {BoxGeometry, Line3, Mesh, MeshLambertMaterial, Raycaster, Vector2, Vector3} from "three";
+import {
+    BoxGeometry,
+    ConeGeometry,
+    Line3,
+    Mesh,
+    MeshBasicMaterial,
+    MeshLambertMaterial,
+    Raycaster,
+    Vector2,
+    Vector3
+} from "three";
 import {EUSToLLA, LLAToEUS} from "./LLA-ECEF-ENU";
 import {assert} from "./assert.js";
 import {V3} from "./threeUtils";
@@ -101,6 +111,22 @@ export class PointEditor {
         
         this.scene.add(gizmo);
 
+        // Create position indicator cone (inverted, pointing down)
+        // The cone will show the current track position during edit mode
+        const coneGeometry = new ConeGeometry(1, 2, 8); // radius, height, segments
+        const coneMaterial = new MeshBasicMaterial({ 
+            color: 0xffffff,
+            transparent: true,
+            opacity: 0.8,
+            depthTest: true,
+            depthWrite: false
+        });
+        this.positionIndicatorCone = new Mesh(coneGeometry, coneMaterial);
+        this.positionIndicatorCone.rotation.x = Math.PI; // Invert the cone (point down)
+        this.positionIndicatorCone.layers.mask = LAYER.MASK_HELPERS;
+        this.positionIndicatorCone.visible = false; // Hidden by default
+        this.scene.add(this.positionIndicatorCone);
+
         document.addEventListener('pointerdown', event => this.onPointerDown(event));
         document.addEventListener('pointerup', event => this.onPointerUp(event));
         document.addEventListener('pointermove', event => this.onPointerMove(event));
@@ -190,6 +216,10 @@ export class PointEditor {
         }
         if (!this.enable) {
             this.transformControl.detach()
+            // Hide the position indicator cone when edit mode is disabled
+            if (this.positionIndicatorCone) {
+                this.positionIndicatorCone.visible = false;
+            }
         } else {
             // When enabling, attach to the first control point if we have any
             // This ensures transform controls are always visible in edit mode
@@ -197,9 +227,41 @@ export class PointEditor {
                 this.editingIndex = 0;
                 this.transformControl.attach(this.splineHelperObjects[0]);
             }
+            // Show the position indicator cone when edit mode is enabled
+            if (this.positionIndicatorCone) {
+                this.positionIndicatorCone.visible = true;
+            }
         }
     }
 
+    /**
+     * Update the position indicator cone to show the current track position
+     * This should be called from the render loop when the track is in edit mode
+     * @param {Vector3} position - The current position on the track
+     * @param {CNodeView3D} view - The view to use for screen-space scaling
+     */
+    updatePositionIndicator(position, view) {
+        if (!this.positionIndicatorCone || !this.enable || !position || !view) {
+            return;
+        }
+
+        // Scale the cone to maintain constant screen size (like transform controls)
+        // Use pixelsToMeters to convert a fixed pixel size to world units
+        const coneHeightPixels = 40; // Height of cone in screen pixels
+        const coneRadiusPixels = 20; // Radius of cone in screen pixels
+        
+        const heightMeters = view.pixelsToMeters(position, coneHeightPixels);
+        const radiusMeters = view.pixelsToMeters(position, coneRadiusPixels);
+        
+        // The cone geometry has height=2 and radius=1, so scale accordingly
+        this.positionIndicatorCone.scale.set(radiusMeters, heightMeters / 2, radiusMeters);
+
+        // Position the cone so its TIP is at the track position
+        // The cone is inverted (rotated 180° on X axis), so the tip is at the bottom
+        // We need to offset it upward by half the scaled height
+        this.positionIndicatorCone.position.copy(position);
+        this.positionIndicatorCone.position.y += heightMeters / 2;
+    }
 
     // Given a hight and a camera track, adjust all the points up vertically by "height"
     // but keep them on the LOS (i.e. move towards the camera)
@@ -568,6 +630,30 @@ export class PointEditor {
         this.dirty = true;
         setRenderOne(true);
 
+    }
+
+    /**
+     * Clean up resources when the editor is disposed
+     */
+    dispose() {
+        // Remove and dispose the position indicator cone
+        if (this.positionIndicatorCone) {
+            this.scene.remove(this.positionIndicatorCone);
+            this.positionIndicatorCone.geometry.dispose();
+            this.positionIndicatorCone.material.dispose();
+            this.positionIndicatorCone = null;
+        }
+
+        // Clean up transform controls
+        if (this.transformControl) {
+            this.transformControl.detach();
+            this.transformControl.dispose();
+        }
+
+        // Remove all control point objects
+        for (let i = 0; i < this.splineHelperObjects.length; i++) {
+            this.scene.remove(this.splineHelperObjects[i]);
+        }
     }
 
 }

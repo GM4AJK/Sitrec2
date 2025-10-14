@@ -20,6 +20,10 @@ import {
     WireframeGeometry
 } from "three";
 
+import {Globals, NodeMan, setRenderOne} from './Globals';
+import {par} from "./par";
+
+
 import {drop3, pointOnSphereBelow} from "./SphericalMath"
 import {GlobalScene} from "./LocalFrame";
 import * as LAYER from "./LayerMasks";
@@ -27,7 +31,6 @@ import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
 import {LineMaterial} from "three/addons/lines/LineMaterial.js";
 import {LineGeometry} from "three/addons/lines/LineGeometry.js";
 import {Line2} from "three/addons/lines/Line2.js";
-import {NodeMan, setRenderOne} from "./Globals";
 import {assert} from "./assert.js";
 import {intersectSphere2, makeMatrix4PointYAt, V3} from "./threeUtils";
 
@@ -330,6 +333,46 @@ export function scaleArrows(view) {
 
 }
 
+/**
+ * Update the position indicator cone for the currently editing track
+ * This should be called from the render loop to keep the cone at the current frame position
+ * and maintain constant screen size
+ */
+export function updateTrackPositionIndicator(view) {
+
+    // Check if there's a track being edited
+    if (!Globals.editingTrack || !Globals.editingTrack.splineEditor) {
+        return;
+    }
+    
+    const trackOb = Globals.editingTrack;
+    const splineEditor = trackOb.splineEditor;
+    
+    // Check if the editor is enabled and has the position indicator
+    if (!splineEditor.enable || !splineEditor.positionIndicatorCone) {
+        return;
+    }
+    
+    // Get the track node (CNodeSplineEditor)
+    const trackNode = trackOb.splineEditorNode;
+    if (!trackNode || !trackNode.array || trackNode.array.length === 0) {
+        return;
+    }
+    
+    // Get the current frame position
+    const currentFrame = Math.floor(par.frame);
+    if (currentFrame < 0 || currentFrame >= trackNode.array.length) {
+        return;
+    }
+    
+    const position = trackNode.array[currentFrame].position;
+    if (!position) {
+        return;
+    }
+    
+    // Update the position indicator
+    splineEditor.updatePositionIndicator(position, view);
+}
 
 export function removeDebugArrow(name) {
     if (DebugArrows[name]) {

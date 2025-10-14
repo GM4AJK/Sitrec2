@@ -1379,9 +1379,13 @@ class CTrackManager extends CManager {
             Globals.editingTrack = null;
         }
         
-        // Disable edit mode first
+        // Disable edit mode first and dispose the spline editor
         if (trackOb.splineEditor) {
             trackOb.splineEditor.setEnable(false);
+            // Dispose the spline editor to clean up the position indicator cone
+            if (trackOb.splineEditor.dispose) {
+                trackOb.splineEditor.dispose();
+            }
         }
         
         // Remove from drop targets

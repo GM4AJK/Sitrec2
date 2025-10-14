@@ -79,6 +79,20 @@ export class   SplineEditor extends PointEditor{
         position.needsUpdate = true;
     }
 
+    /**
+     * Clean up resources when the spline editor is disposed
+     * Extends the base PointEditor dispose to also clean up the spline mesh
+     */
+    dispose() {
+        // Clean up the spline mesh
+        if (this.spline && this.spline.mesh) {
+            this.scene.remove(this.spline.mesh);
+            this.spline.mesh.geometry.dispose();
+            this.spline.mesh.material.dispose();
+        }
 
+        // Call parent dispose to clean up position indicator and other resources
+        super.dispose();
+    }
 
 }
