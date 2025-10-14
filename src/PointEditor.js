@@ -190,6 +190,13 @@ export class PointEditor {
         }
         if (!this.enable) {
             this.transformControl.detach()
+        } else {
+            // When enabling, attach to the first control point if we have any
+            // This ensures transform controls are always visible in edit mode
+            if (this.numPoints > 0) {
+                this.editingIndex = 0;
+                this.transformControl.attach(this.splineHelperObjects[0]);
+            }
         }
     }
 
@@ -249,6 +256,7 @@ export class PointEditor {
 
         this.onDownPosition.x = event.clientX;
         this.onDownPosition.y = event.clientY;
+        this.onDownButton = event.button; // Track which button was pressed
 
         // Right click on point to delete it
         if (event.button === 2) {
@@ -287,8 +295,16 @@ export class PointEditor {
         this.onUpPosition.x = event.clientX;
         this.onUpPosition.y = event.clientY;
 
-        if (this.onDownPosition.distanceTo(this.onUpPosition) === 0) {
+        // Only detach on left-click (button 0) when there was no drag
+        // Don't detach on right-click (button 2) to keep controls visible during context menu
+        if (this.onDownButton === 0 && this.onDownPosition.distanceTo(this.onUpPosition) === 0) {
             this.transformControl.detach();
+            
+            // Re-attach to first point to keep controls visible in edit mode
+            if (this.numPoints > 0) {
+                this.editingIndex = 0;
+                this.transformControl.attach(this.splineHelperObjects[0]);
+            }
         }
         this.exportSpline();
     }
