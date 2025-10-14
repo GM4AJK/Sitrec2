@@ -33,10 +33,10 @@ export function setupPageStructure() {
         // create the container div, with ID of "Content"
         const container = document.createElement('div');
         container.id = "Content";
-        // full screen minus controls at bottom
+        // full screen minus controls at bottom (controls height + 10px offset from bottom + 4px padding)
         container.style.position = 'absolute';
         container.style.width = '100%';
-        container.style.height = `calc(100% - ${CONTROLS_HEIGHT}px)`;
+        container.style.height = `calc(100% - ${CONTROLS_HEIGHT + 10 + 4}px)`;
         container.style.overflow = 'hidden';
 
         // disable touch actions to prevent scrolling
@@ -77,12 +77,12 @@ export function setupPageStructure() {
     bannerTop.innerHTML = process.env.BANNER_TOP_TEXT;
     document.body.append(bannerTop);
 
-    // create the content div, accounting for top banner, controls, and bottom banner
+    // create the content div, accounting for top banner, controls, and bottom banner (+ 10px offset + 4px padding)
     const container = document.createElement('div');
     container.id = "Content";
     container.style.position = 'absolute';
     container.style.width = '100%';
-    container.style.height = 'calc(100% - ' + (2 * process.env.BANNER_HEIGHT + CONTROLS_HEIGHT) + 'px)';
+    container.style.height = 'calc(100% - ' + (2 * process.env.BANNER_HEIGHT + CONTROLS_HEIGHT + 10 + 4) + 'px)';
     container.style.top = process.env.BANNER_HEIGHT + 'px';
     container.style.overflow = 'hidden';
     document.body.append(container)
@@ -148,11 +148,11 @@ export function toggleControlsVisibility() {
         // Show controls and restore content height
         controlsBottom.style.display = 'block';
         
-        // Restore original height based on whether banner is active
+        // Restore original height based on whether banner is active (accounting for 10px offset + 4px padding)
         if (!parseBoolean(process.env.BANNER_ACTIVE)) {
-            content.style.height = `calc(100% - ${CONTROLS_HEIGHT}px)`;
+            content.style.height = `calc(100% - ${CONTROLS_HEIGHT + 10 + 4}px)`;
         } else {
-            content.style.height = 'calc(100% - ' + (2 * process.env.BANNER_HEIGHT + CONTROLS_HEIGHT) + 'px)';
+            content.style.height = 'calc(100% - ' + (2 * process.env.BANNER_HEIGHT + CONTROLS_HEIGHT + 10 + 4) + 'px)';
         }
     }
 }

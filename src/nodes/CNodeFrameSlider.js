@@ -34,6 +34,10 @@ export class CNodeFrameSlider extends CNode {
         this.hoveringBLimit = false;
         this.dragThreshold = 10; // Pixels within which we can grab a limit line
 
+        // Hover state for continuous frame display updates
+        this.isHoveringSlider = false;
+        this.lastDisplayedFrame = null;
+
         this.setupFrameSlider();
     }
 
@@ -58,6 +62,7 @@ export class CNodeFrameSlider extends CNode {
         this.controlContainer = document.createElement('div');
         this.controlContainer.style.display = 'flex';
         this.controlContainer.style.marginRight = '5px';
+        this.controlContainer.style.marginTop = '2px'; // Move buttons down 2px
         this.controlContainer.style.width = '280px'; // Reduced from 400px (30% reduction for button sizes)
 
         // Create Buttons
@@ -351,7 +356,13 @@ export class CNodeFrameSlider extends CNode {
             this.hideFrameDisplay();
         });
 
+        this.sliderInput.addEventListener('mouseenter', () => {
+            this.isHoveringSlider = true;
+        });
+
         this.sliderInput.addEventListener('mouseleave', () => {
+            this.isHoveringSlider = false;
+            this.lastDisplayedFrame = null;
             this.hideFrameDisplay();
         });
 
@@ -382,6 +393,10 @@ export class CNodeFrameSlider extends CNode {
             if (sliderDragging) {
                 const frame = parseInt(this.sliderInput.value, 10);
                 this.updateFrameDisplay(frame, event.clientX);
+            } else {
+                // Show frame info for current frame when hovering (not dragging)
+                const currentFrame = parseInt(this.sliderInput.value, 10);
+                this.showFrameDisplay(currentFrame, event.clientX);
             }
         });
 
@@ -659,6 +674,21 @@ export class CNodeFrameSlider extends CNode {
             if (this.fadeOutTimer) {
                 clearTimeout(this.fadeOutTimer);
                 this.fadeOutTimer = null;
+            }
+        }
+
+        // Continuously update frame display when hovering over slider
+        if (this.isHoveringSlider && this.frameDisplayBox && this.frameDisplayBox.style.display === 'block') {
+            const currentFrame = parseInt(this.sliderInput.value, 10);
+            // Only update if the frame has changed to avoid unnecessary DOM updates
+            if (currentFrame !== this.lastDisplayedFrame) {
+                this.lastDisplayedFrame = currentFrame;
+                this.frameDisplayBox.textContent = this.getFrameDisplayText(currentFrame);
+                
+                // Update position based on current frame
+                const sliderRect = this.sliderDiv.getBoundingClientRect();
+                const framePosition = this.getFramePixelPosition(currentFrame);
+                this.frameDisplayBox.style.left = (sliderRect.left + framePosition) + 'px';
             }
         }
 
