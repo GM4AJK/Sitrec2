@@ -1312,25 +1312,34 @@ export class CCustomManager {
             createTrackWithObject: () => {
                 // Create a 3D object at the clicked point
                 const objectID = `syntheticObject_${Date.now()}`;
+                const trackID = `syntheticTrack_${Date.now()}`;
                 
-                // Create a simple sphere object
-                new CNode3DObject({
+                // Create a simple grey sphere object (5m radius) with phong material
+                const objectNode = new CNode3DObject({
                     id: objectID,
                     geometry: "sphere",
-                    radius: 10, // 10 meters
-                    color: 0xff8800,
+                    radius: 5, // 5 meters
+                    color: 0x808080, // grey
+                    material: "phong",
                     position: groundPoint,
                 });
                 
                 // Create track and associate with object using TrackManager
-                TrackManager.addSyntheticTrack({
+                const trackOb = TrackManager.addSyntheticTrack({
                     startPoint: groundPoint,
                     name: `Object Track`,
                     objectID: objectID,
                     editMode: true,
-                    color: 0xff8800,
+                    color: 0x808080, // grey
                     startFrame: par.frame
                 });
+                
+                // Add TrackPosition controller to the object to follow the track
+                if (trackOb && objectNode) {
+                    objectNode.addController("TrackPosition", {
+                        sourceTrack: trackOb.trackID
+                    });
+                }
                 
                 console.log(`Created object ${objectID} with track at ${lat}, ${lon}, ${alt}m`);
                 menu.destroy();
@@ -1347,8 +1356,8 @@ export class CCustomManager {
         menu.add(menuData, "setTargetOnGround").name("Set Target on Ground");
 
         // Add synthetic track options
-        menu.add(menuData, "createSyntheticTrack").name("Create Synthetic Track");
         menu.add(menuData, "createTrackWithObject").name("Create Track with Object");
+        menu.add(menuData, "createSyntheticTrack").name("Create Track (No Object)");
 
         if (NodeMan.exists("terrainUI")) {
             const terrainUI = NodeMan.get("terrainUI");
