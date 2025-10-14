@@ -326,8 +326,10 @@ export class CNodeMeasureAB extends CNodeLabel3D {
         }
 
         // add an arrow from A to C and B to D
-        DebugArrowAB(this.id + "start", this.C, this.A, color, true, this.groupNode.group);
-        DebugArrowAB(this.id + "end", this.D, this.B, color, true, this.groupNode.group);
+        // Use this.group instead of this.groupNode.group so arrows are children of this measurement
+        // and will be hidden/shown along with the text label
+        DebugArrowAB(this.id + "start", this.C, this.A, color, true, this.group);
+        DebugArrowAB(this.id + "end", this.D, this.B, color, true, this.group);
 
         let length
 
@@ -443,6 +445,8 @@ export class CNodeLabeledArrow extends CNodeLabel3D {
 }
 
 
+// MeasureAltitude will create a munge node B that has A as an input
+// and updates itself to be below A (on terrain if any, or MSL if none)
 export class CNodeMeasureAltitude extends CNodeMeasureAB {
     constructor(v) {
 

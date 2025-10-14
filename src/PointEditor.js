@@ -17,6 +17,8 @@ import {ViewMan} from "./CViewManager";
 import {mouseInViewOnly, mouseToViewNormalized} from "./ViewUtils";
 import {setRenderOne} from "./Globals";
 import * as LAYER from "./LayerMasks";
+import {CNodePositionXYZ} from "./nodes/CNodePositionLLA";
+import {CNodeMeasureAltitude, setupMeasurementUI} from "./nodes/CNodeLabels3D";
 
 // base class for curve editors
 // has a list of positions that are the control points
@@ -127,6 +129,29 @@ export class PointEditor {
         this.positionIndicatorCone.visible = false; // Hidden by default
         this.scene.add(this.positionIndicatorCone);
 
+        // Create measurement node for altitude above ground
+        // Ensure measurement UI is set up
+        setupMeasurementUI();
+        
+        // Generate unique IDs for this editor instance
+        const uniqueId = Math.random().toString(36).substr(2, 9);
+        
+        // Create a position node for the track position
+        this.measurePoint = new CNodePositionXYZ({id: `pointEditor_measure_${uniqueId}`, x:0, y:0, z:0});
+        
+        // Create the altitude measurement display
+        // CNodeMeasureAltitude automatically creates the ground point below the position
+        // Note: We don't specify groupNode, so it uses the default "MeasurementsGroupNode"
+        this.measureAltitude = new CNodeMeasureAltitude({
+            id: `pointEditor_measureAlt_${uniqueId}`,
+            position: `pointEditor_measure_${uniqueId}`,
+            color: "#00FF00",
+            text: "AGL",
+        });
+        
+        // Initially hide the measurement
+        this.measureAltitude.group.visible = false;
+
         document.addEventListener('pointerdown', event => this.onPointerDown(event));
         document.addEventListener('pointerup', event => this.onPointerUp(event));
         document.addEventListener('pointermove', event => this.onPointerMove(event));
@@ -220,6 +245,10 @@ export class PointEditor {
             if (this.positionIndicatorCone) {
                 this.positionIndicatorCone.visible = false;
             }
+            // Hide the measurement when edit mode is disabled
+            if (this.measureAltitude) {
+                this.measureAltitude.group.visible = false;
+            }
         } else {
             // When enabling, attach to the first control point if we have any
             // This ensures transform controls are always visible in edit mode
@@ -230,6 +259,10 @@ export class PointEditor {
             // Show the position indicator cone when edit mode is enabled
             if (this.positionIndicatorCone) {
                 this.positionIndicatorCone.visible = true;
+            }
+            // Show the measurement when edit mode is enabled
+            if (this.measureAltitude) {
+                this.measureAltitude.group.visible = true;
             }
         }
     }
@@ -261,6 +294,18 @@ export class PointEditor {
         // We need to offset it upward by half the scaled height
         this.positionIndicatorCone.position.copy(position);
         this.positionIndicatorCone.position.y += heightMeters / 2;
+
+        // Update the altitude measurement
+        // CNodeMeasureAltitude automatically calculates the ground point below
+        if (this.measurePoint && this.measureAltitude) {
+            // Update the position node with the current track position
+            this.measurePoint.setXYZ(position.x, position.y, position.z);
+            
+            // Note: We don't call measureAltitude.update() here because it will be
+            // called automatically by NodeMan.iterate() in the main loop.
+            // Calling it here would cause the arrows to be updated AFTER scaleArrows()
+            // has run in the render loop, causing them to not scale until the next frame.
+        }
     }
 
     // Given a hight and a camera track, adjust all the points up vertically by "height"
@@ -685,6 +730,17 @@ export class PointEditor {
             this.positionIndicatorCone.geometry.dispose();
             this.positionIndicatorCone.material.dispose();
             this.positionIndicatorCone = null;
+        }
+
+        // Clean up measurement nodes
+        // Note: measureAltitude.dispose() will also dispose its internal ground point node
+        if (this.measureAltitude) {
+            this.measureAltitude.dispose();
+            this.measureAltitude = null;
+        }
+        if (this.measurePoint) {
+            this.measurePoint.dispose();
+            this.measurePoint = null;
         }
 
         // Clean up transform controls
