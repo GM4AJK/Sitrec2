@@ -336,9 +336,13 @@ export class PointEditor {
         // intrinsically tying the data to the UI
         // the UI can modify these positions
         this.numPoints++;
-        this.positions.push(this.addPointEditorObject().position);
+        const newPoint = this.addPointEditorObject();
+        this.positions.push(newPoint.position);
         this.frameNumbers.push(-1)
         this.dirty = true;
+        
+        // Attach transform control to the newly added point
+        this.transformControl.attach(newPoint);
     }
 
 
@@ -506,6 +510,7 @@ export class PointEditor {
         // make the helper object we are going to add ahead of time
         // the position are references to this
         const object = this.makePointEditorObject(position)
+        let insertedIndex = -1;
 
         if (this.frameNumbers.length === 0 || this.frameNumbers[0] > frame) {
             // nothing there, or first frame has a higher value than this one
@@ -514,6 +519,7 @@ export class PointEditor {
             this.positions.splice(0,0,object.position)
             this.splineHelperObjects.splice(0,0,object)
             this.numPoints++;
+            insertedIndex = 0;
         } else {
 
             // at this point we know that we have:
@@ -531,15 +537,23 @@ export class PointEditor {
                 this.scene.remove(this.splineHelperObjects[insertPoint])
                 this.positions[insertPoint] = object.position
                 this.splineHelperObjects[insertPoint] = object;
+                insertedIndex = insertPoint;
             } else {
                 // otherwise, insert after this position
                 this.frameNumbers.splice(insertPoint + 1, 0, frame)
                 this.positions.splice(insertPoint + 1, 0, object.position)
                 this.splineHelperObjects.splice(insertPoint + 1, 0, object)
                 this.numPoints++
+                insertedIndex = insertPoint + 1;
             }
         }
         this.updatePointEditorGraphics()
+        
+        // Attach transform control to the newly inserted point if editor is enabled
+        if (this.enable && insertedIndex >= 0) {
+            this.editingIndex = insertedIndex;
+            this.transformControl.attach(this.splineHelperObjects[insertedIndex]);
+        }
     }
 
 

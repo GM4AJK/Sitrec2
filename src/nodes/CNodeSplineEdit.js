@@ -13,6 +13,8 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
         this.frames = v.frames ?? Sit.frames
         assert(this.frames >0, "CNodeSplineEditor has frames=0")
 
+        // Default to time-based interpolation (not constant speed)
+        this.constantSpeed = false;
         
         assert(v.view !== undefined, "CNodeSplineEditor needs a view");
         const view = NodeMan.get(v.view) // convert id to node, if needed
@@ -83,6 +85,7 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
         return {
             ...super.modSerialize(),
             positions: positions,
+            constantSpeed: this.constantSpeed,
         }
     }
 
@@ -90,6 +93,9 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
         super.modDeserialize(v);
         if (v.positions !== undefined) {
             this.splineEditor.load(v.positions)
+        }
+        if (v.constantSpeed !== undefined) {
+            this.constantSpeed = v.constantSpeed
         }
     }
 
@@ -186,25 +192,74 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
         // update snapping, if needed
         this.splineEditor.updateSnapping();
 
-
-        // NEW! Get it based on the frame number, as the spline now has a per-node frame number stored
-        // and will work out the t value for you
-      for (var i=0;i<this.frames;i++) {
-          var pos = this.splineEditor.getPointFrame(i)
-          this.array.push({position:pos})
-      }
-
-      // we've got enough points to define a nice curve,
-        // but need to smooth out the velocity along that curve
-        // while keeping the keyframes fixed
-        // this shoudl not be a difficult thing.
-
-
-
-
-
-//        console.log("Spine split into " + this.array.length)  // shoudl be 7027
-//        console.log("-----End Recalculate Spline")
+        if (this.constantSpeed) {
+            // CONSTANT SPEED MODE: Traverse the path at constant speed, ignoring frame times
+            // Calculate total path length by sampling the curve
+            const SAMPLES = 1000; // Number of samples for length calculation
+            var totalLength = 0;
+            var lastPos = new Vector3()
+            var currentPos = new Vector3()
+            
+            // Get the first point
+            this.splineEditor.getPoint(0, lastPos)
+            
+            // Calculate total length by sampling the curve
+            for (var i = 1; i <= SAMPLES; i++) {
+                var t = i / SAMPLES;
+                this.splineEditor.getPoint(t, currentPos)
+                totalLength += currentPos.clone().sub(lastPos).length()
+                lastPos.copy(currentPos)
+            }
+            
+            // Now create an array mapping distance along path to t value
+            const lengthToT = [{length: 0, t: 0}];
+            var accumulatedLength = 0;
+            this.splineEditor.getPoint(0, lastPos)
+            
+            for (var i = 1; i <= SAMPLES; i++) {
+                var t = i / SAMPLES;
+                this.splineEditor.getPoint(t, currentPos)
+                accumulatedLength += currentPos.clone().sub(lastPos).length()
+                lengthToT.push({length: accumulatedLength, t: t})
+                lastPos.copy(currentPos)
+            }
+            
+            // Now for each frame, find the position at constant speed
+            for (var frame = 0; frame < this.frames; frame++) {
+                // Calculate target distance for this frame
+                var targetDistance = (frame / (this.frames - 1)) * totalLength;
+                
+                // Find the two samples that bracket this distance
+                var sampleIndex = 0;
+                while (sampleIndex < lengthToT.length - 1 && lengthToT[sampleIndex + 1].length < targetDistance) {
+                    sampleIndex++;
+                }
+                
+                var t;
+                if (sampleIndex >= lengthToT.length - 1) {
+                    t = 1.0;
+                } else {
+                    // Interpolate between the two samples to find exact t
+                    var sample1 = lengthToT[sampleIndex];
+                    var sample2 = lengthToT[sampleIndex + 1];
+                    var lengthFraction = (targetDistance - sample1.length) / (sample2.length - sample1.length);
+                    t = sample1.t + lengthFraction * (sample2.t - sample1.t);
+                }
+                
+                // Get position at this t value
+                var framePos = new Vector3();
+                this.splineEditor.getPoint(t, framePos);
+                this.array.push({position: framePos});
+            }
+        } else {
+            // TIME-BASED MODE: Use frame numbers to determine position (original behavior)
+            // Get it based on the frame number, as the spline now has a per-node frame number stored
+            // and will work out the t value for you
+          for (var i=0;i<this.frames;i++) {
+              var pos = this.splineEditor.getPointFrame(i)
+              this.array.push({position:pos})
+          }
+        }
     }
 
     insertPoint(frame, point) {

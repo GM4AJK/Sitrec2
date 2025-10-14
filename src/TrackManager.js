@@ -1262,6 +1262,7 @@ class CTrackManager extends CManager {
         trackOb.trackColor = trackColor;
         trackOb.curveType = curveType;
         trackOb.editMode = editMode; // Store initial edit mode state
+        trackOb.constantSpeed = false; // Default to time-based interpolation
         
         splineEditorNode.shortName = shortName;
         
@@ -1285,6 +1286,19 @@ class CTrackManager extends CManager {
                 }
                 console.log(`Edit mode disabled for track: ${shortName}`);
             }
+        });
+        
+        // Sync constantSpeed from splineEditorNode (in case it was loaded from saved data)
+        if (splineEditorNode.constantSpeed !== undefined) {
+            trackOb.constantSpeed = splineEditorNode.constantSpeed;
+        }
+        
+        // Add constant speed checkbox to the GUI folder
+        // This checkbox controls whether the track uses constant speed interpolation
+        guiFolder.add(trackOb, 'constantSpeed').name('Constant Speed').onChange((value) => {
+            splineEditorNode.constantSpeed = value;
+            splineEditorNode.recalculateCascade();
+            console.log(`Constant speed ${value ? 'enabled' : 'disabled'} for track: ${shortName}`);
         });
         
         // Set initial edit mode state
