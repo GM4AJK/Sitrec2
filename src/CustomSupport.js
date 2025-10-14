@@ -1375,6 +1375,10 @@ export class CCustomManager {
         const splineEditor = trackOb.splineEditor;
         const shortName = trackOb.menuText || trackOb.trackID;
         
+        // Check if current frame already has a control point
+        const currentFrame = par.frame;
+        const hasPointAtCurrentFrame = splineEditor.frameNumbers.includes(currentFrame);
+        
         // Create the context menu
         const menu = Globals.menuBar.createStandaloneMenu(`Edit: ${shortName}`, mouseX, mouseY);
         menu.open();
@@ -1450,7 +1454,10 @@ export class CCustomManager {
         };
         
         // Add menu items
-        menu.add(menuData, "addPoint").name(`Add Point (Frame ${par.frame})`);
+        // Only show "Add Point" if current frame doesn't already have a control point
+        if (!hasPointAtCurrentFrame) {
+            menu.add(menuData, "addPoint").name(`Add Point (Frame ${par.frame})`);
+        }
         menu.add(menuData, "removeClosestPoint").name("Remove Closest Point");
         menu.add(menuData, "exitEditMode").name("Exit Edit Mode");
     }

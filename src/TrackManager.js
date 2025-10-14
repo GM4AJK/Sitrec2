@@ -1241,6 +1241,7 @@ class CTrackManager extends CManager {
                 pruneIfUnused: true
             }),
             width: lineWidth,
+            extendToGround: true, // Synthetic tracks extend to ground by default
             // skipGUI: false (default) - let it add controls to the folder
         });
         
