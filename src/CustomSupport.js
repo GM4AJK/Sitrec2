@@ -48,7 +48,6 @@ import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
-import {syntheticTrackCreator} from "./SyntheticTrackCreator";
 import {findRootTrack} from "./FindRootTrack";
 import {initializeSettings, SettingsSaver} from "./SettingsManager";
 
@@ -1295,8 +1294,8 @@ export class CCustomManager {
                 menu.destroy();
             },
             createSyntheticTrack: () => {
-                // Create a track at the clicked point
-                syntheticTrackCreator.createTrack({
+                // Create a track at the clicked point using TrackManager
+                TrackManager.addSyntheticTrack({
                     startPoint: groundPoint,
                     name: "New Track",
                     editMode: true
@@ -1316,8 +1315,8 @@ export class CCustomManager {
                     position: groundPoint,
                 });
                 
-                // Create track and associate with object
-                syntheticTrackCreator.createTrack({
+                // Create track and associate with object using TrackManager
+                TrackManager.addSyntheticTrack({
                     startPoint: groundPoint,
                     name: `Object Track`,
                     objectID: objectID,

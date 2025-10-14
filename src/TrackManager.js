@@ -4,7 +4,7 @@ import {CNodeScale} from "./nodes/CNodeScale";
 import {CNodeGUIValue} from "./nodes/CNodeGUIValue";
 import {CNodeConstant} from "./nodes/CNode";
 import * as LAYER from "./LayerMasks";
-import {Color} from "three";
+import {Color, Vector3} from "three";
 import {getFileExtension, scaleF2M} from "./utils";
 import {
     FileManager,
@@ -31,6 +31,7 @@ import {CNode3DObject, ModelFiles} from "./nodes/CNode3DObject";
 import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {CGeoJSON} from "./geoJSONUtils";
 import {CNodeSmoothedPositionTrack} from "./nodes/CNodeSmoothedPositionTrack";
+import {CNodeSplineEditor} from "./nodes/CNodeSplineEdit";
 
 
 class CMetaTrack {
@@ -38,6 +39,7 @@ class CMetaTrack {
         this.trackNode = trackNode;
         this.trackDataNode = trackDataNode;
         this.trackFileName = trackFileName;
+        this.isSynthetic = false; // Flag to identify synthetic tracks
     }
 
     // TODO - call this when switching levels
@@ -1138,6 +1140,248 @@ class CTrackManager extends CManager {
         // this.usedShortNames.add(uniqueShortName);
         
         return {shortName: uniqueShortName, moreTracks};
+    }
+
+    /**
+     * Add a synthetic (user-created) track to the TrackManager
+     * @param {Object} options - Track creation options
+     * @param {Vector3} options.startPoint - Starting point in EUS coordinates
+     * @param {string} options.name - Optional name for the track
+     * @param {string} options.objectID - Optional 3D object to associate with track
+     * @param {boolean} options.editMode - Whether to start in edit mode (default: true)
+     * @param {string} options.curveType - Type of curve: "linear", "catmull", "chordal", "centripetal" (default: "chordal")
+     * @param {number} options.color - Track color as hex (default: 0xffff00)
+     * @param {number} options.lineWidth - Track line width (default: 2)
+     * @returns {Object} The created track object
+     */
+    addSyntheticTrack(options) {
+        const trackNumber = this.size();
+        const name = options.name || `Track ${trackNumber + 1}`;
+        const curveType = options.curveType || "chordal";
+        const editMode = options.editMode !== undefined ? options.editMode : true;
+        const colorHex = options.color || 0xffff00;
+        const lineWidth = options.lineWidth || 2;
+        
+        // Generate unique short name for display (like "synth_01_d")
+        const shortName = `synth_${String(trackNumber + 1).padStart(2, '0')}_d`;
+        
+        // Generate unique IDs using timestamp for uniqueness
+        const trackID = `syntheticTrack_${Date.now()}`;
+        const displayTrackID = `syntheticTrackDisplay_${Date.now()}`;
+        
+        // Get the main view ID
+        const viewID = "mainView";
+        const view = NodeMan.get(viewID);
+        if (!view) {
+            console.error("TrackManager.addSyntheticTrack: No view found");
+            return null;
+        }
+        
+        const scene = view.scene;
+        if (!scene) {
+            console.error("TrackManager.addSyntheticTrack: View has no scene");
+            return null;
+        }
+
+        // Prepare initial points - CNodeSplineEditor expects [frame, x, y, z] format
+        const initialPoints = [];
+        if (options.startPoint) {
+            const sp = options.startPoint;
+            initialPoints.push([0, sp.x, sp.y, sp.z]);
+        }
+        
+        // Smart fallback: Use linear interpolation if we don't have enough points for spline curves
+        let effectiveCurveType = curveType;
+        if (initialPoints.length < 4 && curveType !== "linear") {
+            effectiveCurveType = "linear";
+            console.log(`TrackManager: Using linear interpolation (only ${initialPoints.length} point(s), need 4 for ${curveType})`);
+        }
+        
+        // Create GUI folder in Contents menu using the DISPLAY TRACK ID
+        // This is important: CNodeDisplayTrack will look for a folder with this.in.track.id
+        // So we create the folder with trackID, which is what the display track will reference
+        // IMPORTANT: Don't change the folder title yet! getFolder() looks up by innerText,
+        // so we need to keep it as trackID until after CNodeDisplayTrack finds it
+        const guiFolder = guiMenus.contents.addFolder(trackID);
+        
+        // Create spline editor node (the data track)
+        // Pass skipGUI: true to prevent it from creating its own GUI in physics menu
+        const splineEditorNode = new CNodeSplineEditor({
+            id: trackID,
+            type: effectiveCurveType,
+            scene: scene,
+            camera: "mainCamera",
+            view: viewID,
+            frames: Sit.frames,
+            initialPoints: initialPoints,
+            skipGUI: true, // Don't create GUI in physics menu
+        });
+        
+        splineEditorNode.menuText = name;
+        const splineEditor = splineEditorNode.splineEditor;
+        
+        // Convert hex color to RGB array for display track
+        const trackColor = new Color(
+            ((colorHex >> 16) & 0xff) / 255,
+            ((colorHex >> 8) & 0xff) / 255,
+            (colorHex & 0xff) / 255
+        );
+        
+        // Create display track for visualization
+        // Don't use skipGUI - let it create its controls in the folder we just created
+        // It will find the folder by looking up this.in.track.id (which is trackID)
+        const displayTrack = new CNodeDisplayTrack({
+            id: displayTrackID,
+            track: trackID,
+            color: new CNodeConstant({
+                id: "colorSynthetic_" + trackID,
+                value: trackColor,
+                pruneIfUnused: true
+            }),
+            width: lineWidth,
+            // skipGUI: false (default) - let it add controls to the folder
+        });
+        
+        // NOW change the folder title to the short name
+        // This must happen AFTER CNodeDisplayTrack has found the folder
+        guiFolder.$title.innerText = shortName;
+        
+        // Add edit mode toggle to the GUI folder (before display track controls)
+        guiFolder.add({
+            toggleEditMode: () => {
+                const isEnabled = splineEditor.enabled;
+                splineEditor.setEnable(!isEnabled);
+            }
+        }, 'toggleEditMode').name('Toggle Edit Mode');
+        
+        // Create the track object
+        const trackOb = this.add(trackID, new CMetaTrack(null, splineEditorNode, splineEditorNode));
+        trackOb.trackID = trackID;
+        trackOb.menuText = shortName;
+        trackOb.isSynthetic = true;
+        trackOb.splineEditor = splineEditor;
+        trackOb.splineEditorNode = splineEditorNode;
+        trackOb.displayTrack = displayTrack;
+        trackOb.displayTrackID = displayTrackID;
+        trackOb.guiFolder = guiFolder;
+        trackOb.trackColor = trackColor;
+        trackOb.curveType = curveType;
+        
+        splineEditorNode.shortName = shortName;
+        
+        // Add delete button to the folder
+        const dummy = {
+            deleteTrack: () => {
+                if (confirm(`Delete synthetic track "${shortName}"?`)) {
+                    this.disposeSyntheticTrack(trackID);
+                }
+            }
+        };
+        guiFolder.add(dummy, "deleteTrack").name("Delete Track");
+        
+        // Add to drop targets if configured
+        if (Sit.dropTargets !== undefined && Sit.dropTargets["track"] !== undefined) {
+            const dropTargets = Sit.dropTargets["track"];
+            for (let dropTargetSwitch of dropTargets) {
+                // Strip off any -number suffix
+                const match = dropTargetSwitch.match(/-(\d+)$/);
+                if (match !== null) {
+                    dropTargetSwitch = dropTargetSwitch.substring(0, dropTargetSwitch.length - match[0].length);
+                }
+                
+                if (NodeMan.exists(dropTargetSwitch)) {
+                    const switchNode = NodeMan.get(dropTargetSwitch);
+                    switchNode.removeOption(shortName);
+                    switchNode.addOption(shortName, splineEditorNode);
+                }
+            }
+        }
+        
+        // Associate with object if provided
+        if (options.objectID) {
+            const objectNode = NodeMan.get(options.objectID);
+            if (objectNode) {
+                if (objectNode.inputs && objectNode.inputs.track !== undefined) {
+                    objectNode.inputs.track = trackID;
+                    objectNode.recalculateCascade();
+                }
+                console.log(`Associated object ${options.objectID} with track ${trackID}`);
+            } else {
+                console.warn(`Object ${options.objectID} not found`);
+            }
+        }
+        
+        // Enable edit mode if requested
+        if (editMode) {
+            splineEditor.setEnable(true);
+        }
+        
+        console.log(`Created synthetic track: ${trackID} (${name})`);
+        
+        // Recalculate and render
+        NodeMan.recalculateAllRootFirst();
+        setRenderOne(true);
+        
+        return trackOb;
+    }
+
+    /**
+     * Dispose a synthetic track
+     * @param {string} trackID - ID of the track to delete
+     */
+    disposeSyntheticTrack(trackID) {
+        const trackOb = this.get(trackID);
+        if (!trackOb || !trackOb.isSynthetic) {
+            console.warn(`Synthetic track ${trackID} not found`);
+            return;
+        }
+        
+        // Disable edit mode first
+        if (trackOb.splineEditor) {
+            trackOb.splineEditor.setEnable(false);
+        }
+        
+        // Remove from drop targets
+        const shortName = trackOb.menuText;
+        if (Sit.dropTargets !== undefined && Sit.dropTargets["track"] !== undefined) {
+            const dropTargets = Sit.dropTargets["track"];
+            for (let dropTargetSwitch of dropTargets) {
+                const match = dropTargetSwitch.match(/-(\d+)$/);
+                if (match !== null) {
+                    dropTargetSwitch = dropTargetSwitch.substring(0, dropTargetSwitch.length - match[0].length);
+                }
+                
+                if (NodeMan.exists(dropTargetSwitch)) {
+                    const switchNode = NodeMan.get(dropTargetSwitch);
+                    switchNode.removeOption(shortName);
+                }
+            }
+        }
+        
+        // Remove GUI folder
+        if (trackOb.guiFolder) {
+            trackOb.guiFolder.destroy();
+        }
+        
+        // Remove display track
+        if (trackOb.displayTrackID) {
+            NodeMan.unlinkDisposeRemove(trackOb.displayTrackID);
+        }
+        
+        // Remove color constant
+        NodeMan.unlinkDisposeRemove("colorSynthetic_" + trackID);
+        
+        // Remove spline editor node
+        NodeMan.unlinkDisposeRemove(trackID);
+        
+        // Remove from manager
+        this.remove(trackID);
+        
+        console.log(`Deleted synthetic track: ${trackID}`);
+        
+        // Recalculate and render
+        NodeMan.recalculateAllRootFirst();
+        setRenderOne(true);
     }
 }
 

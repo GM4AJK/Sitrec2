@@ -1,5 +1,5 @@
 import {SplineEditor} from "../SplineEditor";
-import {gui, guiMenus, NodeMan, Sit} from "../Globals";
+import {guiMenus, NodeMan, Sit} from "../Globals";
 import {Vector3} from "three";
 import {PointEditor} from "../PointEditor";
 import {CNodeEmptyArray} from "./CNodeArray";
@@ -52,11 +52,15 @@ export class CNodeSplineEditor extends CNodeEmptyArray {
 
         this.enable = false;
 
-        this.gui = guiMenus.physics.addFolder("Spline " + this.id).close()
-        this.gui.add(this,"enable").onChange( v =>{
-           this.splineEditor.setEnable(v)
-        })
-        this.gui.add(this,"exportSpline")
+        // Only create GUI in physics menu if skipGUI is not set
+        // This allows TrackManager to manage synthetic tracks without duplicate GUIs
+        if (!v.skipGUI) {
+            this.gui = guiMenus.physics.addFolder("Spline " + this.id).close()
+            this.gui.add(this,"enable").onChange( v =>{
+               this.splineEditor.setEnable(v)
+            })
+            this.gui.add(this,"exportSpline")
+        }
 
 
         this.recalculate()
