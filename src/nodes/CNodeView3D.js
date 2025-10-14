@@ -1331,7 +1331,8 @@ export class CNodeView3D extends CNodeViewCanvas {
                     closestTrack = {
                         trackID: trackID,
                         nodeId: trackDataNode.id,
-                        guiFolder: trackOb.guiFolder
+                        guiFolder: trackOb.guiFolder,
+                        trackOb: trackOb
                     };
                 }
             }
@@ -1364,10 +1365,14 @@ export class CNodeView3D extends CNodeViewCanvas {
                 
                 if (distance < closestDistance) {
                     closestDistance = distance;
+                    // Try to find the trackOb from TrackManager
+                    // For synthetic tracks, the trackID matches the track node ID
+                    const trackOb = TrackManager.get(trackNode.id);
                     closestTrack = {
                         trackID: nodeId,
                         nodeId: nodeId,
-                        guiFolder: node.guiFolder
+                        guiFolder: node.guiFolder,
+                        trackOb: trackOb
                     };
                 }
             }
