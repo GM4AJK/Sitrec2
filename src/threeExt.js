@@ -600,7 +600,7 @@ export class CDisplayLine {
 
 // get the point on the ground below a point in ESU
 // if the terrain model is loaded, use that, otherwise use the sphere
-export function pointOnGround(A) {
+export function getPointBelow(A) {
     if (NodeMan.exists("TerrainModel")) {
         let terrainNode = NodeMan.get("TerrainModel")
         return terrainNode.getPointBelow(A)
@@ -609,14 +609,14 @@ export function pointOnGround(A) {
     }
 }
 
-export function pointOnGroundLL(lat, lon) {
+export function getPointBelowLL(lat, lon) {
     const A = LLAToEUS(lat, lon, 100000);
-    return pointOnGround(A)
+    return getPointBelow(A)
 }
 
 // get the above ground altitude a point in ESU
 export function aboveGroundLevelAt(A) {
-    const B = pointOnGround(A);
+    const B = getPointBelow(A);
     const altitude = A.clone().sub(B).length();
     return altitude;
 }
@@ -635,7 +635,7 @@ export function pointAbove(point, height) {
 }
 
 export function adjustHeightAboveGround (point, height) {
-    const ground = pointOnGround(point);
+    const ground = getPointBelow(point);
     return pointAbove(ground, height);
 }
 
@@ -652,7 +652,7 @@ export function elevationAtLL(lat, lon) {
     // get the point in ESU
     const point = LLAToEUS(lat, lon, 100000);
     // get the ground point below it
-    const groundPoint = pointOnGround(point);
+    const groundPoint = getPointBelow(point);
     // calculate the elevation
     return calculateAltitude(groundPoint);
 }

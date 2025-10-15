@@ -27,7 +27,7 @@ import {
     DebugArrow,
     DebugArrowAB,
     DebugWireframeSphere,
-    pointOnGround,
+    getPointBelow,
     propagateLayerMaskObject,
     removeDebugArrow,
     setLayerMaskRecursive
@@ -2680,7 +2680,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                         // Arrow from satellite to ground (red)
                         if (this.showSatelliteGround) {
                             let A = satData.eusA.clone()
-                            let B = pointOnGround(A)
+                            let B = getPointBelow(A)
                             DebugArrowAB(satData.name + "_g", A, B, "#00FF00", true, this.satelliteGroundGroup, 20, LAYER.MASK_LOOKRENDER)
                         }
                     }

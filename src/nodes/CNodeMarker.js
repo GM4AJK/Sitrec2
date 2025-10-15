@@ -1,5 +1,5 @@
 import {CNode3DGroup} from "./CNode3DGroup";
-import {CDisplayLine, pointAbove, pointOnGroundLL} from "../threeExt";
+import {CDisplayLine, getPointBelowLL, pointAbove} from "../threeExt";
 import * as LAYER from "../LayerMasks";
 import {getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
 import {radians} from "../utils";
@@ -21,7 +21,7 @@ export class CNodeLineMarker extends CNode3DGroup {
         const lon = this.in.lon.v0;
         const height = this.in.height.v0;
         const color = this.in.color.v0;
-        const ground = pointOnGroundLL(lat, lon);
+        const ground = getPointBelowLL(lat, lon);
         const above = pointAbove(ground, height);
         if (this.line) {
             this.line.dispose();
@@ -70,7 +70,7 @@ export class CNodeLaserMarker extends CNode3DGroup {
         const height = this.in.height.v0;
         const weight = this.in.weight.v0;
         const color = new Color(this.in.color.v0);
-        const ground = pointOnGroundLL(lat, lon);
+        const ground = getPointBelowLL(lat, lon);
         const above = pointAbove(ground, height);
         this.angle = this.in.angle.v0;
         this.sides = this.in.sides.v0;
