@@ -14,8 +14,8 @@ export const _configParams = {
     // This is the default map type if none specificed in the Sit file
     // Use DOCKER_MAP_TYPE if building for Docker, otherwise use DEFAULT_MAP_TYPE
     defaultMapType: process.env.DOCKER_BUILD
-        ? (process.env.DOCKER_MAP_TYPE ?? "debug")
-        : (process.env.DEFAULT_MAP_TYPE ?? "debug"), //"NRL_WMTS",
+        ? (process.env.DOCKER_MAP_TYPE ?? "Debug")
+        : (process.env.DEFAULT_MAP_TYPE ?? "Debug"), //"NRL_WMTS",
 
     customMapSources: {
 
