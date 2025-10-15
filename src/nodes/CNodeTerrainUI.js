@@ -620,6 +620,16 @@ export class CNodeTerrainUI extends CNode {
                 NodeMan.get("mainView")
             ];
 
+            // Call view-independent operations once per frame for elevation map
+            if (this.terrainNode.elevationMap !== undefined) {
+                this.terrainNode.elevationMap.subdivideTilesGeneral();
+            }
+
+            // Call view-independent operations once per frame for texture map
+            if (this.terrainNode.maps[this.mapType].map !== undefined) {
+                this.terrainNode.maps[this.mapType].map.subdivideTilesGeneral();
+            }
+
             // subdivide the elevation first so elevation requests will come before textures
             // this makes it more likely that the elevation will be ready when the texture is ready to make a tile.
             if (this.terrainNode.elevationMap !== undefined) {
@@ -628,12 +638,12 @@ export class CNodeTerrainUI extends CNode {
                 // as the tiles are 100x100
                 for (const view of views) {
                     if (view && view.visible) {
-                        this.terrainNode.elevationMap.subdivideTiles(view, this.elevationSubSize / this.elevationDetail);
+                        this.terrainNode.elevationMap.subdivideTilesViewSpecific(view, this.elevationSubSize / this.elevationDetail);
                     }
                 }
             }
 
-            // For texture maps, call subdivideTiles separately for each view
+            // For texture maps, call subdivideTilesViewSpecific separately for each view
             if (this.terrainNode.maps[this.mapType].map !== undefined) {
                 // Get the current map definition to check for textureSubSize override
                 const mapDef = this.mapSources[this.mapType];
@@ -641,7 +651,7 @@ export class CNodeTerrainUI extends CNode {
                 
                 for (const view of views) {
                     if (view && view.visible) {
-                        this.terrainNode.maps[this.mapType].map.subdivideTiles(view, textureSubSize / this.textureDetail);
+                        this.terrainNode.maps[this.mapType].map.subdivideTilesViewSpecific(view, textureSubSize / this.textureDetail);
                     }
                 }
             }

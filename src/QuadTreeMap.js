@@ -217,6 +217,32 @@ export class QuadTreeMap {
 
 
     /**
+     * Perform view-independent tile management operations
+     * This should be called once per frame before processing individual views
+     * 
+     * Operations performed:
+     * - Cleanup inactive tiles (cancel pending loads)
+     * - Remove inactive tiles from scene
+     * - Prune complete sets of inactive tiles
+     */
+    subdivideTilesGeneral() {
+        // Skip subdivision for flat elevation maps
+        if (this.constructor.name === 'QuadTreeMapElevation' && this.options.elevationType === "Flat") {
+            return;
+        }
+
+        // PASS 1: Cleanup inactive tiles
+        this.cleanupInactiveTiles();
+
+        // PASS 2: Remove inactive tiles from scene
+        this.removeInactiveTilesFromScene();
+
+        // PASS 3: Prune complete sets of inactive tiles
+        // Enable for both texture and elevation maps to prevent memory leaks
+        this.pruneInactiveTileSets();
+    }
+
+    /**
      * Subdivide or merge tiles based on view visibility and screen size
      * 
      * This method is called every frame from the update loop and manages the quadtree
@@ -239,7 +265,7 @@ export class QuadTreeMap {
      * @param {Object} view - The view containing camera and viewport info
      * @param {number} subdivideSize - Screen size threshold for subdivision (default: 2000)
      */
-    subdivideTiles(view, subdivideSize = 2000) {
+    subdivideTilesViewSpecific(view, subdivideSize = 2000) {
         // Skip subdivision for flat elevation maps
         if (this.constructor.name === 'QuadTreeMapElevation' && this.options.elevationType === "Flat") {
             return;
@@ -257,25 +283,17 @@ export class QuadTreeMap {
         ));
         camera.viewFrustum = frustum;
 
-        // PASS 1: Debug logging and cleanup
+        // PASS 1: Debug logging (view-specific)
         if (isLocal) {
-            this.logDebugStats(tileLayers, view.id);
+          //  this.logDebugStats(tileLayers, view.id);
         }
-        this.cleanupInactiveTiles();
 
-        // PASS 2: Deactivate parent tiles whose children are fully loaded (texture maps only)
+        // PASS 2: Deactivate parent tiles whose children are fully loaded (texture maps only, view-specific)
         if (isTextureMap) {
             this.deactivateParentsWithLoadedChildren(tileLayers);
         }
 
-        // PASS 3: Remove inactive tiles from scene
-        this.removeInactiveTilesFromScene();
-
-        // PASS 3.5: Prune complete sets of inactive tiles
-        // Enable for both texture and elevation maps to prevent memory leaks
-        this.pruneInactiveTileSets();
-
-        // PASS 4: Process each tile for subdivision/merging and lazy loading
+        // PASS 3: Process each tile for subdivision/merging and lazy loading
         this.forEachTile((tile) => {
             if (!this.canSubdivide(tile)) return;
 
