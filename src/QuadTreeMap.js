@@ -388,8 +388,20 @@ export class QuadTreeMap {
             // Skip inactive tiles without children
             if (!tile.tileLayers && !hasChildren) return;
 
+            // OPTIMIZATION #7: Early exit for tiles not active in this view
+            // Only process tiles that are either:
+            // 1. Active in this view (for subdivision/lazy loading), OR
+            // 2. Have children (for potential merging)
+            const isActiveInView = (tile.tileLayers & tileLayers) !== 0;
+            if (!isActiveInView && !hasChildren) return;
+
             // Calculate visibility and screen size
+            // This is expensive, so we only do it after early exit checks
             const visibility = this.calculateTileVisibility(tile, camera);
+            
+            // OPTIMIZATION #7: Early exit for invisible tiles without children
+            // If tile is not visible and has no children to merge, skip further processing
+            if (!visibility.visible && !hasChildren) return;
             
             // Handle lazy loading for visible tiles using parent data
             if (isTextureMap && visibility.actuallyVisible) {
@@ -399,7 +411,7 @@ export class QuadTreeMap {
             // Determine if subdivision is needed
             const shouldSubdivide = this.shouldSubdivideTile(tile, visibility, subdivideSize);
 
-            if (shouldSubdivide && (tile.tileLayers & tileLayers) && tile.z < this.maxZoom) {
+            if (shouldSubdivide && isActiveInView && tile.z < this.maxZoom) {
                 // RACE CONDITION FIX: Defer subdivision while parent tile is loading
                 // 
                 // Problem: On page reload (with cached resources), parent tiles are created and
