@@ -621,6 +621,18 @@ export function aboveGroundLevelAt(A) {
     return altitude;
 }
 
+// given a point in ESU, ensure it is at least "height" meters above the ground
+// accounting for terrain.
+export function clampAboveGround(point, height) {
+    const ground = getPointBelow(point);
+    const aboveGround = calculateAltitude(point) - calculateAltitude(ground);
+    if (aboveGround <= height) {
+      //  return pointAbove(ground, height);
+        return ground;
+    }
+    return point;
+}
+
 // get the AGL altitude at a point speciifed by lat/lon
 export function aboveGroundLevelAtLL(lat, lon) {
     const A = LLAToEUS(lat, lon, 100000);

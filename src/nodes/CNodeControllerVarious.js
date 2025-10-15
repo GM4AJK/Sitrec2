@@ -3,7 +3,7 @@ import {ECEFToLLAVD_Sphere, EUSToECEF, LLAToEUS, wgs84} from "../LLA-ECEF-ENU";
 import {isKeyHeld} from "../KeyBoardHandler";
 import {gui, NodeMan, Sit} from "../Globals";
 import {getLocalEastVector, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
-import {adjustHeightAboveGround, DebugArrow} from "../threeExt";
+import {adjustHeightAboveGround, clampAboveGround, DebugArrow} from "../threeExt";
 import {CNodeController} from "./CNodeController";
 
 import {MISB} from "../MISBUtils";
@@ -85,6 +85,10 @@ export class CNodeControllerTrackPosition extends CNodeController {
         assert(this.in.sourceTrack !== undefined, "CNodeControllerTrackPosition: sourceTrack is undefined, id=" + this.id)
         var pos = this.in.sourceTrack.p(f)
         assert(!Number.isNaN(pos.x), "CNodeControllerTrackPosition: track's position.x NaN")
+
+        // note the adjustment for this in CNodeControllerObjectTilt
+        // for when there's no tilt type
+        pos = clampAboveGround(pos, 2);
 
         if (object.isCamera) {
             updateCameraAndUI(pos, object, objectNode);

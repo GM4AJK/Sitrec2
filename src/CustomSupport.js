@@ -2266,6 +2266,8 @@ export class CCustomManager {
 
                 // rather messy logic now
                 // if we've got a target object then disable THAT if it's too close to this object
+                // This is for when we set the target object to follow one of the other object tracks, like a KML track
+                // we don't want two objects in the same spot.
                 if (ob !== tob) {
                     const targetObjectDist = ob.position.distanceTo(tob.position);
                     // we do a quick 100m check, as it's not worth doing a full tree search on everything

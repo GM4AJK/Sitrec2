@@ -103,8 +103,18 @@ export class CNodeControllerObjectTilt extends CNodeController {
                     next.sub(windVector)
                 }
 
+
+                // we want to use track positions not the object.position as the clampAboveGroung might have moved it
+                // so temporarily set the object position back to where it was before any clampAboveGround call
+
+                const oldPos = object.position.clone();
+                 object.position.copy(this.in.track.p(f))
+
                 object.up = objectNode.getUpVector(object.position)
                 object.lookAt(next)
+
+                // restore the object position
+                object.position.copy(oldPos);
 
                 // calculate the heading on the SMOOTHED track
                 var from = this.in.track.p(f)
