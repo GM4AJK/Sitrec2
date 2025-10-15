@@ -352,6 +352,12 @@ class CameraMapControls {
 			return;
 		}
 
+		// Check if mouse button is no longer pressed (e.g., released outside canvas)
+		// event.buttons is a bitmask: 0 = no buttons, 1 = left, 2 = right, 4 = middle
+		if (this.state !== STATE.NONE && event.buttons === 0) {
+			this.state = STATE.NONE;
+			return;
+		}
 
 		this.updateMeasureArrow();
 
