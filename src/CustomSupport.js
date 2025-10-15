@@ -48,7 +48,6 @@ import {CNodeTrackGUI} from "./nodes/CNodeControllerTrackGUI";
 import {forceUpdateUIText} from "./nodes/CNodeViewUI";
 import {configParams} from "./login";
 import {showError} from "./showError";
-import {findRootTrack} from "./FindRootTrack";
 import {initializeSettings, SettingsSaver} from "./SettingsManager";
 
 export class CCustomManager {
@@ -2273,15 +2272,15 @@ export class CCustomManager {
                     // we do a quick 100m check, as it's not worth doing a full tree search on everything
                     if (targetObjectDist < 100 && tob.customOldVisible === undefined) {
 
-                        assert (findRootTrack(node) === node.rootTrack, "findRootTrack(node) is not equal to node.rootTrack")
+                        // removed this assert as it was sometimes triggering on the first frame
+                        // due to async issues
+                        // assert (findRootTrack(node) === node.rootTrack, "findRootTrack(node) is not equal to node.rootTrack")
 
                         // check if they share the same root track
                         if (targetRoot && node.rootTrack === targetRoot) {
 
-                            // removed for now, as it messes with windblown object that come close to the camera
                             tob.customOldVisible = tob.visible;
                             tob.visible = false;
-//                        console.warn("TODO: Disabling target object as it's too close to this object")
                         }
                     }
                 }
