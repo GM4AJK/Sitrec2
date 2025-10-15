@@ -1167,9 +1167,9 @@ class CTrackManager extends CManager {
         // Generate unique short name for display (like "synth_01_d")
         const shortName = `synth_${String(trackNumber + 1).padStart(2, '0')}_d`;
         
-        // Generate unique IDs using timestamp for uniqueness
-        const trackID = `syntheticTrack_${Date.now()}`;
-        const displayTrackID = `syntheticTrackDisplay_${Date.now()}`;
+        // Use provided IDs if available (for deserialization), otherwise generate new ones
+        const trackID = options.trackID || `syntheticTrack_${Date.now()}`;
+        const displayTrackID = options.displayTrackID || `syntheticTrackDisplay_${Date.now()}`;
         
         // Get the main view ID
         const viewID = "mainView";
@@ -1264,6 +1264,7 @@ class CTrackManager extends CManager {
         trackOb.editMode = editMode; // Store initial edit mode state
         trackOb.constantSpeed = false; // Default to time-based interpolation
         trackOb.extrapolateTrack = true; // Default to extrapolating beyond control points
+        trackOb.objectID = options.objectID || null; // Store associated object ID
         
         splineEditorNode.shortName = shortName;
         
@@ -1443,6 +1444,200 @@ class CTrackManager extends CManager {
         // Recalculate and render
         NodeMan.recalculateAllRootFirst();
         setRenderOne(true);
+    }
+
+    /**
+     * Serialize all synthetic tracks
+     * This is called during the serialization process to save synthetic track metadata
+     * @returns {Array} Array of synthetic track metadata objects
+     */
+    serialize() {
+        const syntheticTracks = [];
+        
+        this.iterate((key, trackOb) => {
+            if (trackOb.isSynthetic) {
+                // Get the spline editor node to extract control points
+                const splineEditorNode = NodeMan.get(trackOb.trackID);
+                
+                // Extract positions from the spline editor
+                let positions = [];
+                if (splineEditorNode && splineEditorNode.splineEditor) {
+                    const editor = splineEditorNode.splineEditor;
+                    if (editor.positions && editor.frameNumbers) {
+                        for (let i = 0; i < editor.positions.length; i++) {
+                            const p = editor.positions[i];
+                            positions.push([editor.frameNumbers[i], p.x, p.y, p.z]);
+                        }
+                    }
+                }
+                
+                // If there's an associated object, save its properties
+                let objectData = null;
+                if (trackOb.objectID) {
+                    const objectNode = NodeMan.get(trackOb.objectID);
+                    if (objectNode) {
+                        objectData = {
+                            id: trackOb.objectID,
+                            geometry: objectNode.common.geometry, // Get the geometry type string from common
+                            radius: objectNode.geometryParams.radius, // Get radius from geometryParams
+                            color: objectNode.color, // Color is stored directly
+                            material: objectNode.common.material, // Get the material type string from common
+                        };
+                    }
+                }
+                
+                // Serialize the essential data needed to recreate the track
+                const trackData = {
+                    trackID: trackOb.trackID,
+                    displayTrackID: trackOb.displayTrackID,
+                    menuText: trackOb.menuText,
+                    shortName: trackOb.trackNode?.shortName || trackOb.menuText,
+                    curveType: trackOb.curveType,
+                    editMode: trackOb.editMode,
+                    constantSpeed: trackOb.constantSpeed,
+                    extrapolateTrack: trackOb.extrapolateTrack,
+                    // Store color as hex number
+                    color: trackOb.trackColor ? 
+                        (Math.round(trackOb.trackColor.r * 255) << 16) |
+                        (Math.round(trackOb.trackColor.g * 255) << 8) |
+                        Math.round(trackOb.trackColor.b * 255) : 0xffff00,
+                    lineWidth: trackOb.displayTrack?.width || 2,
+                    // Store control points from the spline editor
+                    positions: positions,
+                    // Store associated object data if any
+                    objectData: objectData,
+                };
+                
+                syntheticTracks.push(trackData);
+                console.log(`Serialized synthetic track: ${trackOb.trackID}`);
+            }
+        });
+        
+        return syntheticTracks;
+    }
+
+    /**
+     * Deserialize synthetic tracks
+     * This is called early in the deserialization process to recreate synthetic tracks
+     * BEFORE mods are applied to the nodes
+     * @param {Array} syntheticTracksData - Array of synthetic track metadata objects
+     */
+    deserialize(syntheticTracksData) {
+        if (!syntheticTracksData || syntheticTracksData.length === 0) {
+            console.log("No synthetic tracks to deserialize");
+            return;
+        }
+        
+        console.log(`Deserializing ${syntheticTracksData.length} synthetic track(s)`);
+        
+        for (const trackData of syntheticTracksData) {
+            try {
+                // Extract the first position to use as startPoint
+                // This ensures the track is created with at least one control point
+                let startPoint = null;
+                if (trackData.positions && trackData.positions.length > 0) {
+                    const firstPos = trackData.positions[0];
+                    // positions are in format [frame, x, y, z]
+                    startPoint = {
+                        x: firstPos[1],
+                        y: firstPos[2],
+                        z: firstPos[3]
+                    };
+                }
+                
+                // Recreate the associated 3D object if it exists
+                // This must be done BEFORE creating the track so the object exists
+                // when addSyntheticTrack tries to associate them
+                if (trackData.objectData) {
+                    const objData = trackData.objectData;
+                    const objectNode = new CNode3DObject({
+                        id: objData.id,
+                        geometry: objData.geometry,
+                        radius: objData.radius,
+                        color: objData.color,
+                        material: objData.material,
+                        position: startPoint, // Initial position (will be overridden by track)
+                    });
+                    console.log(`Recreated 3D object: ${objData.id}`);
+                }
+                
+                // Recreate the synthetic track with the saved parameters
+                // Note: We pass editMode: false initially, as the actual edit mode
+                // will be restored when mods are applied
+                const options = {
+                    name: trackData.menuText,
+                    curveType: trackData.curveType,
+                    editMode: false, // Will be restored by mods
+                    color: trackData.color,
+                    lineWidth: trackData.lineWidth,
+                    // Preserve the original IDs so mods can be applied correctly
+                    trackID: trackData.trackID,
+                    displayTrackID: trackData.displayTrackID,
+                    // Pass the first position as startPoint to initialize the track
+                    startPoint: startPoint,
+                    // Pass the associated object ID if any
+                    objectID: trackData.objectData?.id,
+                };
+                
+                // Create the track
+                const trackOb = this.addSyntheticTrack(options);
+                
+                // Verify the nodes were created and registered
+                if (trackOb) {
+                    console.log(`Created track with ID: ${trackOb.trackID}, exists in NodeMan: ${NodeMan.exists(trackOb.trackID)}`);
+                    console.log(`Created display track with ID: ${trackOb.displayTrackID}, exists in NodeMan: ${NodeMan.exists(trackOb.displayTrackID)}`);
+                }
+                
+                // If we recreated an object, add the TrackPosition controller to make it follow the track
+                if (trackOb && trackData.objectData) {
+                    const objectNode = NodeMan.get(trackData.objectData.id);
+                    if (objectNode) {
+                        objectNode.addController("TrackPosition", {
+                            sourceTrack: trackOb.trackID
+                        });
+                        console.log(`Added TrackPosition controller to object ${trackData.objectData.id}`);
+                    }
+                }
+                
+                if (trackOb && trackData.positions && trackData.positions.length > 1) {
+                    // Restore ALL positions using the spline editor's load method
+                    // This will replace the initial point we just created
+                    const splineEditorNode = NodeMan.get(trackOb.trackID);
+                    if (splineEditorNode && splineEditorNode.splineEditor) {
+                        // Use the load method which handles the positions array
+                        splineEditorNode.splineEditor.load(trackData.positions);
+                        splineEditorNode.recalculateCascade();
+                    }
+                }
+                
+                // Restore other properties that aren't handled by mods
+                if (trackOb) {
+                    trackOb.constantSpeed = trackData.constantSpeed ?? false;
+                    trackOb.extrapolateTrack = trackData.extrapolateTrack ?? true;
+                    
+                    // Update the spline editor node with these properties
+                    const splineEditorNode = NodeMan.get(trackOb.trackID);
+                    if (splineEditorNode) {
+                        splineEditorNode.constantSpeed = trackOb.constantSpeed;
+                        splineEditorNode.extrapolateTrack = trackOb.extrapolateTrack;
+                        
+                        // Ensure edit mode is disabled after deserialization
+                        // Transform controls should not be visible when loading a saved situation
+                        splineEditorNode.enable = false;
+                        if (splineEditorNode.splineEditor) {
+                            splineEditorNode.splineEditor.setEnable(false);
+                        }
+                    }
+                }
+                
+                console.log(`Deserialized synthetic track: ${trackData.trackID}`);
+            } catch (error) {
+                console.error(`Failed to deserialize synthetic track ${trackData.trackID}:`, error);
+            }
+        }
+        
+        // Recalculate everything after recreating all tracks
+        NodeMan.recalculateAllRootFirst();
     }
 }
 

@@ -1943,6 +1943,10 @@ export class CCustomManager {
 
         out.guiMenus = Globals.menuBar.modSerialize()
 
+        // Serialize synthetic tracks from TrackManager
+        // This must be done before mods, as the tracks need to be recreated
+        // before mods are applied to their nodes
+        out.syntheticTracks = TrackManager.serialize()
 
         // do the export version tracking last, so none of the combining sitches overwrites it
         out.exportVersion = process.env.BUILD_VERSION_STRING
@@ -2078,6 +2082,12 @@ export class CCustomManager {
             // if the set the units later, then it will convert the speed to the new units
             if (sitchData.modUnits) {
                 Units.modDeserialize(sitchData.modUnits)
+            }
+
+            // Deserialize synthetic tracks BEFORE applying mods
+            // This recreates the track nodes so that mods can be applied to them
+            if (sitchData.syntheticTracks) {
+                TrackManager.deserialize(sitchData.syntheticTracks)
             }
 
             // now we've either got
