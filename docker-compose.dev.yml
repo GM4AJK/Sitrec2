@@ -62,18 +62,19 @@ services:
       # ========================================================================
       
       # Source code directories (hot reload enabled for src/)
-      - ./src:/app/src
-      - ./data:/app/data
-      - ./docs:/app/docs
-      - ./tools:/app/tools
-      - ./config:/app/config
-      - ./sitrecServer:/app/sitrecServer
+      # Using 'cached' mode for better performance on Windows/Mac
+      - ./src:/app/src:cached
+      - ./data:/app/data:cached
+      - ./docs:/app/docs:cached
+      - ./tools:/app/tools:cached
+      - ./config:/app/config:cached
+      - ./sitrecServer:/app/sitrecServer:cached
       
       # Webpack configuration files
-      - ./webpack.common.js:/app/webpack.common.js
-      - ./webpack.dev.js:/app/webpack.dev.js
-      - ./webpack.prod.js:/app/webpack.prod.js
-      - ./webpackCopyPatterns.js:/app/webpackCopyPatterns.js
+      - ./webpack.common.js:/app/webpack.common.js:cached
+      - ./webpack.dev.js:/app/webpack.dev.js:cached
+      - ./webpack.prod.js:/app/webpack.prod.js:cached
+      - ./webpackCopyPatterns.js:/app/webpackCopyPatterns.js:cached
       
       # Docker-specific configuration override
       # This replaces config-install.js with Docker-appropriate paths
@@ -85,13 +86,13 @@ services:
       # ========================================================================
       
       # PHP backend scripts (executed by Apache)
-      - ./sitrecServer:/var/www/html/sitrecServer
+      - ./sitrecServer:/var/www/html/sitrecServer:cached
       
       # Data directory (required by getsitches.php to scan for sitches)
-      - ./data:/var/www/html/data
+      - ./data:/var/www/html/data:cached
       
       # Tools directory (utilities and helper scripts)
-      - ./tools:/var/www/html/tools
+      - ./tools:/var/www/html/tools:cached
       
       # PHP configuration files (read-only to prevent accidental modification)
       # Note: These override any config files in sitrecServer/
@@ -99,13 +100,14 @@ services:
       - ./config/shared.env:/var/www/html/shared.env.php:ro
       
       # Video files directory (served by Apache)
-      - ./sitrec-videos:/var/www/html/sitrec-videos
+      - ./sitrec-videos:/var/www/html/sitrec-videos:cached
       
       # Terrain tiles directory (served by Apache)
-      - ../sitrec-terrain:/var/www/html/sitrec-terrain
+      - ../sitrec-terrain:/var/www/html/sitrec-terrain:cached
       
       # Webpack build output (served by Apache as fallback/static files)
-      - ./dist:/var/www/html
+      # Using 'delegated' for write-heavy directories (webpack writes, host reads)
+      - ./dist:/var/www/html:delegated
       
       # ========================================================================
       # CONTAINER-MANAGED VOLUMES
@@ -114,6 +116,9 @@ services:
       # Node modules are kept in container for performance
       # (prevents host filesystem from overwriting container's npm packages)
       - node_modules:/app/node_modules
+      
+      # Webpack cache for faster rebuilds (persists between container restarts)
+      - webpack_cache:/app/node_modules/.cache
       
       # ========================================================================
       # OPTIONAL MOUNTS (uncomment if needed)
@@ -148,3 +153,5 @@ services:
 volumes:
   # Persistent storage for node_modules (improves performance)
   node_modules:
+  # Persistent storage for webpack cache (dramatically speeds up rebuilds)
+  webpack_cache:

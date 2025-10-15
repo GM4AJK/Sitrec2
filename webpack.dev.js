@@ -5,7 +5,7 @@ const CircularDependencyPlugin = require('circular-dependency-plugin');
 
 module.exports = merge(common, {
     mode: 'development',
-    devtool: 'inline-source-map',
+    devtool: 'eval-cheap-module-source-map', // Much faster than inline-source-map, especially on Windows
     devServer: {
         static: {
             directory: InstallPaths.dev_path,
@@ -15,6 +15,13 @@ module.exports = merge(common, {
         open: false, // Don't auto-open browser
         host: '0.0.0.0', // Allow external connections (needed for Docker)
         port: 8080,
+        // Optimize file watching for Docker/Windows
+        watchFiles: {
+            options: {
+                poll: 1000, // Check for changes every second (reduces CPU usage)
+                aggregateTimeout: 300, // Wait 300ms after change before rebuilding
+            },
+        },
         historyApiFallback: {
             rewrites: [
                 // Don't rewrite API requests

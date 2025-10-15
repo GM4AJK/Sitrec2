@@ -51,6 +51,12 @@ module.exports = {
     externals: {
         'node:fs': 'commonjs2 fs',
     },
+    cache: {
+        type: 'filesystem', // Enable persistent caching for faster rebuilds
+        buildDependencies: {
+            config: [__filename], // Invalidate cache when webpack config changes
+        },
+    },
     module: {
         rules: [
             {
