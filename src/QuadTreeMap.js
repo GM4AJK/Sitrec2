@@ -33,6 +33,7 @@ export class QuadTreeMap {
         this.lastLoggedStats = new Map(); // Track last logged stats per view to reduce console spam
         this.inactiveTileTimeout = 1000; // Time in ms before pruning inactive tiles (1 seconds)
         this.currentStats = new Map(); // Store current stats per view for debug display
+        this.parentTiles = new Set(); // Track tiles that have children for efficient iteration
 
     }
 
@@ -60,6 +61,8 @@ export class QuadTreeMap {
                 // If all children are null, clear the children array
                 if (tile.parent.children.every(child => child === null)) {
                     tile.parent.children = null;
+                    // Parent no longer has children, remove from parent tracking set
+                    this.parentTiles.delete(tile.parent);
                 }
             }
             
@@ -69,6 +72,8 @@ export class QuadTreeMap {
                     if (child) child.parent = null;
                 });
                 tile.children = null;
+                // This tile no longer has children, remove from parent tracking set
+                this.parentTiles.delete(tile);
             }
             tile.parent = null;
             
@@ -487,14 +492,19 @@ export class QuadTreeMap {
      * Deactivate parent tiles when all their children are loaded and active
      * Children with parent data are OK - they're valid for display, just lower quality
      * The key is that children are loaded (even if using parent data) and added to scene
+     * 
+     * OPTIMIZATION: Only iterates over tiles that have children (tracked in parentTiles Set)
+     * instead of all tiles. With 100 tiles, typically only 10-25 are parents (75-90% reduction).
      */
     deactivateParentsWithLoadedChildren(tileLayers) {
-        this.forEachTile((tile) => {
+        // Iterate only over parent tiles (tiles that have children)
+        // This is much more efficient than iterating all tiles
+        this.parentTiles.forEach((tile) => {
             if (tile.z >= this.maxZoom) return;
             if (tile.isLoading) return;
 
             const children = this.getChildren(tile);
-            if (!children) return;
+            if (!children) return; // Safety check (shouldn't happen if parentTiles is maintained correctly)
 
             // Children must be loaded and added (parent data is OK - it's valid for display)
             const allChildrenReady = children.every(child => 
@@ -641,6 +651,8 @@ export class QuadTreeMap {
         const child4 = this.activateTile(tile.x * 2 + 1, tile.y * 2 + 1, tile.z + 1, tileLayers, useParentData);
 
         tile.children = [child1, child2, child3, child4];
+        // Track this tile as a parent for efficient iteration
+        this.parentTiles.add(tile);
 
         // For texture maps: Deactivate parent if all children are loaded and added
         // (even if using parent data - that's valid for display, just lower quality)
