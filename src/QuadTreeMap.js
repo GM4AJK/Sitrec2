@@ -229,6 +229,9 @@ export class QuadTreeMap {
      * - Cleanup inactive tiles (cancel pending loads)
      * - Remove inactive tiles from scene
      * - Prune complete sets of inactive tiles
+     * 
+     * OPTIMIZATION: Combines all three operations into a single forEachTile() iteration
+     * to reduce overhead from 3 iterations to 1 (67% reduction in tile iterations)
      */
     subdivideTilesGeneral() {
         // Skip subdivision for flat elevation maps
@@ -236,15 +239,88 @@ export class QuadTreeMap {
             return;
         }
 
-        // PASS 1: Cleanup inactive tiles
-        this.cleanupInactiveTiles();
+        const now = Date.now();
+        let prunedCount = 0;
+        
+        // Collect tiles to prune (can't delete during iteration)
+        const tilesToPrune = [];
 
-        // PASS 2: Remove inactive tiles from scene
-        this.removeInactiveTilesFromScene();
+        // COMBINED PASS: Process all tiles in a single iteration
+        this.forEachTile((tile) => {
+            // OPERATION 1: Cleanup inactive tiles - cancel pending loads
+            if (!tile.tileLayers && (tile.isLoading || tile.isLoadingElevation)) {
+                tile.cancelPendingLoads();
+            }
 
-        // PASS 3: Prune complete sets of inactive tiles
-        // Enable for both texture and elevation maps to prevent memory leaks
-        this.pruneInactiveTileSets();
+            // OPERATION 2: Remove inactive tiles from scene
+            if (tile.added && !tile.tileLayers && tile.mesh) {
+                const children = this.getChildren(tile);
+                if (children) {
+                    const allChildrenLoaded = children.every(child => child && child.loaded);
+                    if (allChildrenLoaded) {
+                        this.scene.remove(tile.mesh);
+                        if (tile.skirtMesh) {
+                            this.scene.remove(tile.skirtMesh);
+                        }
+                        tile.added = false;
+                        
+                        // Reset lazy loading flags when tile is removed from scene
+                        if (tile.usingParentData) {
+                            tile.needsHighResLoad = false;
+                        }
+                        
+                        this.refreshDebugGeometry(tile);
+                    }
+                }
+            }
+
+            // OPERATION 3: Identify tiles to prune (collect for deletion after iteration)
+            const children = this.getChildren(tile);
+            if (children) {
+                // Check if all four children meet pruning criteria
+                const allChildrenPrunable = children.every(child => {
+                    if (child.tileLayers !== 0) return false; // Still active
+                    if (this.hasChildren(child)) return false; // Has children
+                    if (!child.inactiveSince) return false; // No timestamp
+                    if (now - child.inactiveSince < this.inactiveTileTimeout) return false; // Not old enough
+                    return true;
+                });
+                
+                if (allChildrenPrunable) {
+                    // Collect children for pruning (delete after iteration completes)
+                    tilesToPrune.push(...children);
+                }
+            }
+        });
+
+        // Prune collected tiles after iteration completes (safe to delete now)
+        tilesToPrune.forEach(child => {
+            // Clean up the tile
+            if (child.mesh) {
+                this.scene.remove(child.mesh);
+                if (child.mesh.geometry) child.mesh.geometry.dispose();
+                if (child.mesh.material) {
+                    if (child.mesh.material.map) child.mesh.material.map.dispose();
+                    child.mesh.material.dispose();
+                }
+            }
+            if (child.skirtMesh) {
+                this.scene.remove(child.skirtMesh);
+                if (child.skirtMesh.geometry) child.skirtMesh.geometry.dispose();
+                if (child.skirtMesh.material) child.skirtMesh.material.dispose();
+            }
+            
+            // Cancel any pending loads
+            child.cancelPendingLoads();
+            
+            // Remove from cache
+            this.deleteTile(child.x, child.y, child.z);
+            prunedCount++;
+        });
+        
+        if (prunedCount > 0 && isLocal) {
+            debugLog(`Pruned ${prunedCount} inactive tiles (${prunedCount / 4} sets of 4)`);
+        }
     }
 
     /**
@@ -408,17 +484,6 @@ export class QuadTreeMap {
     }
 
     /**
-     * Cancel pending loads for tiles that are no longer active in any view
-     */
-    cleanupInactiveTiles() {
-        this.forEachTile((tile) => {
-            if (!tile.tileLayers && (tile.isLoading || tile.isLoadingElevation)) {
-                tile.cancelPendingLoads();
-            }
-        });
-    }
-
-    /**
      * Deactivate parent tiles when all their children are loaded and active
      * Children with parent data are OK - they're valid for display, just lower quality
      * The key is that children are loaded (even if using parent data) and added to scene
@@ -443,97 +508,6 @@ export class QuadTreeMap {
                 this.deactivateTile(tile.x, tile.y, tile.z, tileLayers, true);
             }
         });
-    }
-
-    /**
-     * Remove tiles from scene that are inactive in all views
-     */
-    removeInactiveTilesFromScene() {
-        this.forEachTile((tile) => {
-            if (!tile.added || tile.tileLayers || !tile.mesh) return;
-
-            tile.cancelPendingLoads();
-
-            const children = this.getChildren(tile);
-            if (!children) return;
-
-            const allChildrenLoaded = children.every(child => child && child.loaded);
-            if (allChildrenLoaded) {
-                this.scene.remove(tile.mesh);
-                if (tile.skirtMesh) {
-                    this.scene.remove(tile.skirtMesh);
-                }
-                tile.added = false;
-                
-                // Reset lazy loading flags when tile is removed from scene
-                // This prevents inactive tiles from being counted in lazy loading stats
-                if (tile.usingParentData) {
-                    tile.needsHighResLoad = false;
-                }
-                
-                this.refreshDebugGeometry(tile);
-            }
-        });
-    }
-
-    /**
-     * Prune complete sets of four sibling tiles that have been inactive for too long
-     * Only prunes if all four siblings exist, are inactive, have no children, and have been inactive long enough
-     */
-    pruneInactiveTileSets() {
-        const now = Date.now();
-        let prunedCount = 0;
-        
-        // Iterate through all tiles to find parent tiles with complete sets of inactive children
-        this.forEachTile((tile) => {
-            // Check if this tile has all four children
-            const children = this.getChildren(tile);
-            if (!children) return;
-            
-            // Check if all four children meet pruning criteria:
-            // 1. Inactive (tileLayers === 0)
-            // 2. Have no children of their own
-            // 3. Have been inactive for longer than the timeout
-            const allChildrenPrunable = children.every(child => {
-                if (child.tileLayers !== 0) return false; // Still active
-                if (this.hasChildren(child)) return false; // Has children
-                if (!child.inactiveSince) return false; // No timestamp (shouldn't happen)
-                if (now - child.inactiveSince < this.inactiveTileTimeout) return false; // Not old enough
-                return true;
-            });
-            
-            if (allChildrenPrunable) {
-                // Delete all four children as a set
-                children.forEach(child => {
-                    // Clean up the tile
-                    if (child.mesh) {
-                        this.scene.remove(child.mesh);
-                        // Dispose of geometry and material to free memory
-                        if (child.mesh.geometry) child.mesh.geometry.dispose();
-                        if (child.mesh.material) {
-                            if (child.mesh.material.map) child.mesh.material.map.dispose();
-                            child.mesh.material.dispose();
-                        }
-                    }
-                    if (child.skirtMesh) {
-                        this.scene.remove(child.skirtMesh);
-                        if (child.skirtMesh.geometry) child.skirtMesh.geometry.dispose();
-                        if (child.skirtMesh.material) child.skirtMesh.material.dispose();
-                    }
-                    
-                    // Cancel any pending loads
-                    child.cancelPendingLoads();
-                    
-                    // Remove from cache
-                    this.deleteTile(child.x, child.y, child.z);
-                    prunedCount++;
-                });
-            }
-        });
-        
-        if (prunedCount > 0 && isLocal) {
-            debugLog(`Pruned ${prunedCount} inactive tiles (${prunedCount / 4} sets of 4)`);
-        }
     }
 
     /**
