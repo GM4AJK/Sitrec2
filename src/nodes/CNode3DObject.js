@@ -265,6 +265,50 @@ function computeGroupBoundingSphere(object) {
     return sphere;
 }
 
+/**
+ * Compute the height from the center of an object to its lowest point
+ * This is useful for ground clamping to ensure objects sit properly on terrain
+ * @param {Object3D} object - The Three.js object to compute height for
+ * @returns {number} The distance from the object's center to its lowest point
+ */
+function computeCenterToLowestPoint(object) {
+    // Create a bounding box that encompasses all children
+    const box = new Box3();
+    
+    // Temporarily detach from parent and reset transform to get local bounds
+    const parent = object.parent;
+    if (parent) {
+        parent.remove(object);
+    }
+    
+    // Store original matrix
+    const originalMatrix = object.matrix.clone();
+    
+    // Set to identity to get local bounds
+    object.matrix.identity();
+    object.updateMatrixWorld(true);
+    
+    // Compute bounding box from all children
+    box.setFromObject(object);
+    
+    // Restore original matrix
+    object.matrix.copy(originalMatrix);
+    object.updateMatrixWorld(true);
+    
+    // Re-attach to parent
+    if (parent) {
+        parent.add(object);
+    }
+
+    // these are relative to the objects local coordinate system
+    // min.y will be negative as it's below the center of the object, and we are y-up
+    // so just negate it to make it positive, and that's the distance from the object origin
+    // to the lowest point of the object.
+    const centerToLowest = - box.min.y;
+    
+    return centerToLowest;
+}
+
 
 // Describe the parameters of each geometry type
 // any numeric entry is [default, min, max, step]
@@ -1508,6 +1552,10 @@ export class CNode3DObject extends CNode3DGroup {
                         this.cachedBoundingSphere = computeGroupBoundingSphere(this.model);
                         console.log("Cached bounding sphere for model:", model.file, "radius:", this.cachedBoundingSphere.radius);
                         
+                        // Cache the height from center to lowest point for ground clamping
+                        this.cachedCenterToLowestPoint = computeCenterToLowestPoint(this.model);
+                        console.log("Cached center to lowest point for model:", model.file, "height:", this.cachedCenterToLowestPoint);
+                        
                         this.propagateLayerMask()
                         this.recalculate()
                         this.applyMaterialToModel();
@@ -1614,6 +1662,14 @@ export class CNode3DObject extends CNode3DGroup {
         // For geometry objects, compute it from the geometry's bounding sphere
         this.geometry.computeBoundingSphere();
         this.cachedBoundingSphere = this.geometry.boundingSphere.clone();
+        
+        // Cache the height from center to lowest point for ground clamping
+        // For geometry objects, compute it from the geometry's bounding box
+        this.geometry.computeBoundingBox();
+        const geomBox = this.geometry.boundingBox;
+        const geomCenter = new Vector3();
+        geomBox.getCenter(geomCenter);
+        this.cachedCenterToLowestPoint = geomCenter.y - geomBox.min.y;
         
         this.propagateLayerMask()
         this.recalculate()

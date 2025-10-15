@@ -627,8 +627,7 @@ export function clampAboveGround(point, height) {
     const ground = getPointBelow(point);
     const aboveGround = calculateAltitude(point) - calculateAltitude(ground);
     if (aboveGround <= height) {
-      //  return pointAbove(ground, height);
-        return ground;
+        return pointAbove(ground, height);
     }
     return point;
 }
