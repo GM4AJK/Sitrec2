@@ -1093,8 +1093,10 @@ export class CCustomManager {
         // Recursively mirror the folder contents
         this.mirrorGUIControls(folder, mirroredFolder);
         
-        // Copy folder open/closed state
-        if (!folder._closed) {
+        // Copy folder open/closed state to match the source
+        if (folder._closed) {
+            mirroredFolder.close();
+        } else {
             mirroredFolder.open();
         }
         
