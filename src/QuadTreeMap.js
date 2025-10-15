@@ -31,7 +31,7 @@ export class QuadTreeMap {
         this.maxZoom = options.maxZoom ?? 15; // default max zoom level
         this.minZoom = options.minZoom ?? 0; // default min zoom level
         this.lastLoggedStats = new Map(); // Track last logged stats per view to reduce console spam
-        this.inactiveTileTimeout = 1000; // Time in ms before pruning inactive tiles (1 seconds)
+        this.inactiveTileTimeout = 100000; // Time in ms before pruning inactive tiles (100 seconds)
         this.currentStats = new Map(); // Store current stats per view for debug display
         this.parentTiles = new Set(); // Track tiles that have children for efficient iteration
 
@@ -268,12 +268,12 @@ export class QuadTreeMap {
                             this.scene.remove(tile.skirtMesh);
                         }
                         tile.added = false;
-                        
+
                         // Reset lazy loading flags when tile is removed from scene
                         if (tile.usingParentData) {
                             tile.needsHighResLoad = false;
                         }
-                        
+
                         this.refreshDebugGeometry(tile);
                     }
                 }
@@ -371,7 +371,7 @@ export class QuadTreeMap {
 
         // PASS 1: Debug logging (view-specific)
         if (isLocal) {
-          //  this.logDebugStats(tileLayers, view.id);
+            this.logDebugStats(tileLayers, view.id);
         }
 
         // PASS 2: Deactivate parent tiles whose children are fully loaded (texture maps only, view-specific)
@@ -395,9 +395,24 @@ export class QuadTreeMap {
             const isActiveInView = (tile.tileLayers & tileLayers) !== 0;
             if (!isActiveInView && !hasChildren) return;
 
+            // OPTIMIZATION #4: Hierarchical frustum culling
+            // If parent is completely outside frustum, skip this tile (children can't be visible)
+            // Exception: Root tiles (z=0) have no parent, so always check them
+            if (tile.z > 0) {
+                const parent = this.getParent(tile);
+                if (parent && parent._frustumCulled) {
+                    // Parent was culled, so this tile and all its descendants are also culled
+                    tile._frustumCulled = true;
+                    return;
+                }
+            }
+
             // Calculate visibility and screen size
             // This is expensive, so we only do it after early exit checks
             const visibility = this.calculateTileVisibility(tile, camera);
+            
+            // Store frustum culling result for hierarchical culling of children
+            tile._frustumCulled = !visibility.frustumIntersects;
             
             // OPTIMIZATION #7: Early exit for invisible tiles without children
             // If tile is not visible and has no children to merge, skip further processing
