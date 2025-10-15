@@ -22,6 +22,21 @@ module.exports = merge(common, {
                 aggregateTimeout: 300, // Wait 300ms after change before rebuilding
             },
         },
+        // CRITICAL: Serve from memory instead of disk (huge performance boost on Windows Docker)
+        devMiddleware: {
+            writeToDisk: false, // Keep bundle in memory, don't write to slow volume mount
+        },
+        // Enable compression to reduce bundle transfer size
+        compress: true,
+        // Optimize client-side webpack connection
+        client: {
+            logging: 'warn', // Reduce console noise
+            overlay: {
+                errors: true,
+                warnings: false, // Don't show warnings overlay
+            },
+            progress: false, // Disable progress reporting (reduces overhead)
+        },
         historyApiFallback: {
             rewrites: [
                 // Don't rewrite API requests
@@ -76,4 +91,15 @@ module.exports = merge(common, {
             },
         }),
     ],
+    // Override output settings for dev mode
+    output: {
+        filename: '[name].bundle.js', // Remove contenthash for faster builds
+        pathinfo: false, // Don't include path info comments (faster)
+    },
+    // Optimize module resolution
+    optimization: {
+        removeAvailableModules: false, // Skip this optimization in dev
+        removeEmptyChunks: false, // Skip this optimization in dev
+        splitChunks: false, // Don't split chunks in dev (faster)
+    },
 });
