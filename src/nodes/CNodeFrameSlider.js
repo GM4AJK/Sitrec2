@@ -38,6 +38,17 @@ export class CNodeFrameSlider extends CNode {
         this.isHoveringSlider = false;
         this.lastDisplayedFrame = null;
 
+        // Track state for canvas redraw optimization
+        this.lastCanvasWidth = 0;
+        this.lastCanvasHeight = 0;
+        this.lastAFrame = -1;
+        this.lastBFrame = -1;
+        this.lastHoveringALimit = false;
+        this.lastHoveringBLimit = false;
+        this.lastDraggingALimit = false;
+        this.lastDraggingBLimit = false;
+        this.needsCanvasRedraw = true;
+
         this.setupFrameSlider();
     }
 
@@ -238,8 +249,8 @@ export class CNodeFrameSlider extends CNode {
 
         // Add ResizeObserver to redraw canvas when it's resized
         this.resizeObserver = new ResizeObserver(() => {
-            // Trigger a redraw by calling update with current frame
-            this.update(par.frame);
+            // Mark for redraw on resize
+            this.needsCanvasRedraw = true;
         });
         this.resizeObserver.observe(this.canvas);
 
@@ -550,8 +561,16 @@ export class CNodeFrameSlider extends CNode {
                 const mousePos = getMousePos(event);
                 // Update cursor and hover state based on proximity to limits
                 const nearLimit = getNearLimit(mousePos.x, mousePos.y);
-                this.hoveringALimit = (nearLimit === 'A');
-                this.hoveringBLimit = (nearLimit === 'B');
+                const newHoveringA = (nearLimit === 'A');
+                const newHoveringB = (nearLimit === 'B');
+                
+                // Mark for redraw if hover state changed
+                if (newHoveringA !== this.hoveringALimit || newHoveringB !== this.hoveringBLimit) {
+                    this.needsCanvasRedraw = true;
+                }
+                
+                this.hoveringALimit = newHoveringA;
+                this.hoveringBLimit = newHoveringB;
                 
                 if (nearLimit) {
                     this.canvas.style.cursor = 'ew-resize';
@@ -569,11 +588,13 @@ export class CNodeFrameSlider extends CNode {
                 
                 if (this.draggingALimit) {
                     Sit.aFrame = newFrame;
+                    this.needsCanvasRedraw = true;
                     setRenderOne(true);
                     // Update frame display for A limit
                     this.updateFrameDisplay(newFrame, event.clientX);
                 } else if (this.draggingBLimit) {
                     Sit.bFrame = newFrame;
+                    this.needsCanvasRedraw = true;
                     setRenderOne(true);
                     // Update frame display for B limit
                     this.updateFrameDisplay(newFrame, event.clientX);
@@ -602,6 +623,9 @@ export class CNodeFrameSlider extends CNode {
 
         // Mouse leave event (only reset hover states, don't stop dragging)
         this.canvas.addEventListener('mouseleave', (event) => {
+            if (this.hoveringALimit || this.hoveringBLimit) {
+                this.needsCanvasRedraw = true;
+            }
             this.hoveringALimit = false;
             this.hoveringBLimit = false;
             // Don't stop dragging on mouse leave - let global mouse up handle it
@@ -714,10 +738,42 @@ export class CNodeFrameSlider extends CNode {
             par.frame = Math.max(parseInt(par.frame, 10) - 10, 0);
         }
 
+        // Check if canvas needs to be redrawn
+        const currentWidth = this.canvas.offsetWidth;
+        const currentHeight = this.canvas.offsetHeight;
+        const sizeChanged = (currentWidth !== this.lastCanvasWidth || currentHeight !== this.lastCanvasHeight);
+        const aFrameChanged = (Sit.aFrame !== this.lastAFrame);
+        const bFrameChanged = (Sit.bFrame !== this.lastBFrame);
+        const hoverStateChanged = (
+            this.hoveringALimit !== this.lastHoveringALimit ||
+            this.hoveringBLimit !== this.lastHoveringBLimit
+        );
+        const dragStateChanged = (
+            this.draggingALimit !== this.lastDraggingALimit ||
+            this.draggingBLimit !== this.lastDraggingBLimit
+        );
+
+        // Only redraw if something changed or explicitly marked for redraw
+        if (!this.needsCanvasRedraw && !sizeChanged && !aFrameChanged && !bFrameChanged && 
+            !hoverStateChanged && !dragStateChanged) {
+            return; // Skip expensive canvas operations
+        }
+
+        // Update tracked state
+        this.lastCanvasWidth = currentWidth;
+        this.lastCanvasHeight = currentHeight;
+        this.lastAFrame = Sit.aFrame;
+        this.lastBFrame = Sit.bFrame;
+        this.lastHoveringALimit = this.hoveringALimit;
+        this.lastHoveringBLimit = this.hoveringBLimit;
+        this.lastDraggingALimit = this.draggingALimit;
+        this.lastDraggingBLimit = this.draggingBLimit;
+        this.needsCanvasRedraw = false;
+
         // resize the canvas to the actualy pixels of the div
         const ctx = this.canvas.getContext('2d');
-        this.canvas.width = this.canvas.offsetWidth;
-        this.canvas.height = this.canvas.offsetHeight;
+        this.canvas.width = currentWidth;
+        this.canvas.height = currentHeight;
 
         // Add padding to ensure handles are visible at the edges
         const padding = 5; // pixels of padding on each side
