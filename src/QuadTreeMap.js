@@ -7,6 +7,11 @@ import {isLocal} from "./configUtils";
 import {altitudeAboveSphere, distanceToHorizon, hiddenByGlobe} from "./SphericalMath";
 import * as LAYER from "./LayerMasks";
 
+// Reusable Vector3 objects to avoid garbage collection pressure
+// These are reused across all tile visibility calculations
+const _cameraForward = new Vector3();
+const _toSphere = new Vector3();
+const _cameraPositionClone = new Vector3();
 
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // QuadTreeMap is the base class of a QuadTreeMapTexture and a QuadTreeMapElevation
@@ -549,8 +554,8 @@ export class QuadTreeMap {
             
             // Check if sphere center is behind the camera FIRST
             // Project sphere center onto camera's forward direction
-            const cameraForward = camera.getWorldDirection(new Vector3());
-            const toSphere = worldSphere.center.clone().sub(camera.position);
+            const cameraForward = camera.getWorldDirection(_cameraForward);
+            const toSphere = _toSphere.copy(worldSphere.center).sub(camera.position);
             const projectionOnForward = toSphere.dot(cameraForward);
             
             // If center is behind camera (negative projection) but frustum intersects,
@@ -564,7 +569,7 @@ export class QuadTreeMap {
             } else {
                 // Normal case: center is in front of camera
                 // Now perform horizon and globe occlusion checks
-                const cameraAltitude = altitudeAboveSphere(camera.position.clone());
+                const cameraAltitude = altitudeAboveSphere(_cameraPositionClone.copy(camera.position));
                 const closestDistance = Math.max(0, distance - radius);
                 const horizon = distanceToHorizon(cameraAltitude);
 
