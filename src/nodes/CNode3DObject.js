@@ -31,6 +31,7 @@ import {
     OctahedronGeometry,
     QuadraticBezierCurve3,
     RingGeometry,
+    Sphere,
     SphereGeometry,
     TetrahedronGeometry,
     TorusGeometry,
@@ -221,8 +222,48 @@ function createTube(A, B, C, R, K) {
 
 }
 
-
-
+/**
+ * Compute a bounding sphere for an entire Object3D (including all children)
+ * This works for complex hierarchies like loaded GLTF models
+ * The bounding sphere is computed in local coordinates (relative to the object's position)
+ * @param {Object3D} object - The Three.js object to compute bounding sphere for
+ * @returns {Sphere} A bounding sphere in local coordinates
+ */
+function computeGroupBoundingSphere(object) {
+    // Create a bounding box that encompasses all children
+    const box = new Box3();
+    
+    // Temporarily detach from parent and reset transform to get local bounds
+    const parent = object.parent;
+    if (parent) {
+        parent.remove(object);
+    }
+    
+    // Store original matrix
+    const originalMatrix = object.matrix.clone();
+    
+    // Set to identity to get local bounds
+    object.matrix.identity();
+    object.updateMatrixWorld(true);
+    
+    // Compute bounding box from all children
+    box.setFromObject(object);
+    
+    // Restore original matrix
+    object.matrix.copy(originalMatrix);
+    object.updateMatrixWorld(true);
+    
+    // Re-attach to parent
+    if (parent) {
+        parent.add(object);
+    }
+    
+    // Create bounding sphere from the box
+    const sphere = new Sphere();
+    box.getBoundingSphere(sphere);
+    
+    return sphere;
+}
 
 
 // Describe the parameters of each geometry type
@@ -1462,6 +1503,11 @@ export class CNode3DObject extends CNode3DGroup {
                         this.extractLightsFromModel(this.model);
 
                         this.group.add(this.model);
+                        
+                        // Cache the bounding sphere in local coordinates for efficient camera collision detection
+                        this.cachedBoundingSphere = computeGroupBoundingSphere(this.model);
+                        console.log("Cached bounding sphere for model:", model.file, "radius:", this.cachedBoundingSphere.radius);
+                        
                         this.propagateLayerMask()
                         this.recalculate()
                         this.applyMaterialToModel();
@@ -1563,6 +1609,12 @@ export class CNode3DObject extends CNode3DGroup {
             this.object.receiveShadow = true;
         }
         this.group.add(this.object);
+        
+        // Cache the bounding sphere in local coordinates for efficient camera collision detection
+        // For geometry objects, compute it from the geometry's bounding sphere
+        this.geometry.computeBoundingSphere();
+        this.cachedBoundingSphere = this.geometry.boundingSphere.clone();
+        
         this.propagateLayerMask()
         this.recalculate()
 

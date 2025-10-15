@@ -2263,16 +2263,13 @@ export class CCustomManager {
             // is it derived from CNode3D?
             if (node instanceof CNode3DObject) {
                 const ob = node._object;
-                disableIfNearCameraTrack(ob, view.camera)
+                disableIfNearCameraTrack(node, ob, view.camera)
 
-                // rather messy logic now
-                // if we've got a target object then disable THAT if it's too close to this object
                 // This is for when we set the target object to follow one of the other object tracks, like a KML track
                 // we don't want two objects in the same spot.
                 if (ob !== tob) {
                     const targetObjectDist = ob.position.distanceTo(tob.position);
-                    // we do a quick 100m check, as it's not worth doing a full tree search on everything
-                    if (targetObjectDist < 100 && tob.customOldVisible === undefined) {
+                    if (tob.customOldVisible === undefined) {
 
                         // removed this assert as it was sometimes triggering on the first frame
                         // due to async issues
@@ -2393,38 +2390,23 @@ export class CCustomManager {
 }
 
 
-function disableIfNearCameraTrack(ob, camera) {
+function disableIfNearCameraTrack(node, ob, camera) {
     // Check if the camera is inside the object's bounding sphere
     let shouldHide = false;
 
-
-    // if the first child is a mesh, use its geometry for bounding sphere calculation
-    let mesh = ob.children[0]
-
-    // if that's a group, then check the first child of the group
-    if (mesh && mesh.type === "Group") {
-        mesh = mesh.children[0]
-    }
-
-    // TODO: not working for complex object, we need to pre-compute a bounding sphere centered on the postition
-
-    // If the object has geometry with a bounding sphere, use that
-    if (mesh && mesh.geometry) {
-        // Ensure bounding sphere is computed
-        if (!mesh.geometry.boundingSphere) {
-            mesh.geometry.computeBoundingSphere();
-        }
+    // Use the cached bounding sphere if available (computed when model/geometry was loaded)
+    if (node.cachedBoundingSphere) {
+        // Clone the cached bounding sphere (in local coordinates)
+        const boundingSphere = node.cachedBoundingSphere.clone();
         
-   //     if (mesh.geometry.boundingSphere) {
-            // Get the bounding sphere in world space
-            const boundingSphere = mesh.geometry.boundingSphere.clone();
-            boundingSphere.applyMatrix4(mesh.matrixWorld);
-            
-            // Check if camera is inside the bounding sphere
-            const distToCenter = camera.position.distanceTo(boundingSphere.center);
-            shouldHide = distToCenter < boundingSphere.radius;
-     //   }
+        // Transform to world space using the object's world matrix
+        boundingSphere.applyMatrix4(ob.matrixWorld);
+        
+        // Check if camera is inside the bounding sphere
+        const distToCenter = camera.position.distanceTo(boundingSphere.center);
+        shouldHide = distToCenter < boundingSphere.radius;
     } else {
+        // Fallback: use simple distance check if no cached bounding sphere
         const dist = ob.position.distanceTo(camera.position);
         shouldHide = dist < 1;
     }
