@@ -22,6 +22,11 @@ COPY config ./config
 COPY docker/docker-config-install.js ./config/config-install.js
 COPY .git .git
 
+
+# We don't want Puppeteer to try to download anything, as it can give errors on some systems
+# and we don't run the regression tests in Docker yet
+ENV PUPPETEER_SKIP_DOWNLOAD=true
+
 # We use npm ci (Clean Install) to install the dependencies
 RUN npm ci
 
