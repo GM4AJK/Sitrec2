@@ -549,51 +549,100 @@ self.onmessage = async (event) => {
             console.warn('Could not create worker blob:', err);
         }
 
-        // TEST 5: Web Worker (off-thread processing)
-        registry.register(
-            'Web Worker (Off-Thread)',
-            async function(tiles, options) {
+        // Helper function to create worker pool with configurable worker count
+        const createWorkerPool = (numWorkers) => {
+            return async function(tiles, options) {
                 if (!workerBlobUrl) {
                     throw new Error('Web Worker not available - try running via http://localhost instead of file://');
                 }
 
-                const worker = new Worker(workerBlobUrl);
+                const tilesToProcess = [...tiles]; // Copy array so we don't mutate original
                 const results = [];
-                let pending = 0;
-                let nextId = 0;
 
                 return new Promise((resolve, reject) => {
-                    worker.onerror = (err) => {
-                        worker.terminate();
-                        reject(new Error(`Error in Web Worker: ${err.message}`));
-                    };
+                    const workers = [];
+                    let tileIndex = 0;
+                    let completedCount = 0;
 
-                    worker.onmessage = (event) => {
-                        const { id, success, url, width, height, error } = event.data;
-                        results.push({ url, success, width, height, error });
-                        pending--;
-
-                        if (tiles.length === 0 && pending === 0) {
-                            worker.terminate();
+                    const checkComplete = () => {
+                        if (completedCount === tilesToProcess.length) {
+                            // All tiles processed, terminate all workers
+                            workers.forEach(w => w.terminate());
                             resolve(results);
-                            return;
-                        }
-
-                        processQueue();
-                    };
-
-                    const processQueue = () => {
-                        while (pending < 10 && tiles.length > 0) {
-                            const url = tiles.shift();
-                            pending++;
-                            worker.postMessage({ url, id: nextId++ });
                         }
                     };
 
-                    processQueue();
+                    const assignTile = (workerIndex) => {
+                        if (tileIndex >= tilesToProcess.length) {
+                            return; // No more tiles
+                        }
+
+                        const url = tilesToProcess[tileIndex];
+                        const id = tileIndex;
+                        tileIndex++;
+
+                        workers[workerIndex].postMessage({ url, id });
+                    };
+
+                    // Create worker pool
+                    for (let i = 0; i < numWorkers; i++) {
+                        const worker = new Worker(workerBlobUrl);
+
+                        worker.onerror = (err) => {
+                            console.error(`Worker ${i} error:`, err);
+                            reject(new Error(`Error in Web Worker ${i}: ${err.message}`));
+                        };
+
+                        worker.onmessage = (event) => {
+                            const { id, success, url, width, height, error } = event.data;
+                            results[id] = { url, success, width, height, error };
+                            completedCount++;
+
+                            // Assign next tile if available
+                            if (tileIndex < tilesToProcess.length) {
+                                assignTile(i);
+                            } else {
+                                // Check if we're done
+                                checkComplete();
+                            }
+                        };
+
+                        workers.push(worker);
+                    }
+
+                    // Initial distribution: assign one tile to each worker
+                    const initialTiles = Math.min(numWorkers, tilesToProcess.length);
+                    for (let i = 0; i < initialTiles; i++) {
+                        assignTile(i);
+                    }
+
+                    // Edge case: if fewer tiles than workers
+                    if (tilesToProcess.length === 0) {
+                        resolve(results);
+                    }
                 });
-            },
-            'Web Worker for parallel off-thread processing'
+            };
+        };
+
+        // TEST 5: Web Worker Pool (1 Thread)
+        registry.register(
+            'Web Worker Pool (1 Thread)',
+            createWorkerPool(1),
+            'Web Worker Pool with 1 thread (serial processing)'
+        );
+
+        // TEST 6: Web Worker Pool (4 Threads)
+        registry.register(
+            'Web Worker Pool (4 Threads)',
+            createWorkerPool(4),
+            'Web Worker Pool with 4 parallel threads'
+        );
+
+        // TEST 7: Web Worker Pool (8 Threads)
+        registry.register(
+            'Web Worker Pool (8 Threads)',
+            createWorkerPool(8),
+            'Web Worker Pool with 8 parallel threads'
         );
 
         // Utility functions
