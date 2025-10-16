@@ -14,7 +14,7 @@ const CustomCSVFormats = {
         time:     ["TIME", "TIMESTAMP", "DATE", "UTC", "DATETIME", "DATE_TIME", "DATETIME_UTC"],
         lat:      ["LAT", "LATITUDE", "TPLAT"],
         lon:      ["LON", "LONG", "LONGITUDE", "TPLON"],
-        alt:      ["ALTITUDE", "ALT", "ALTITUDE (m)*", "TPHAE"],
+        alt:      ["ALTITUDE", "ALT", "ALTITUDE (m)*", "TPHAE", "alt_m"],
         agl:      ["AGL", "ALT (m/agl)"],
         aircraft: ["AIRCRAFT", "AIRCRAFTSPECIFICTYPE"],
         callsign: ["CALLSIGN", "TAILNUMBER"],
