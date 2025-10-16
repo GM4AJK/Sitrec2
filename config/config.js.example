@@ -36,44 +36,45 @@ export const _configParams = {
             supportsOceanSurface: true, // MapBox satellite imagery can have ocean surface overlay
         },
 
-        mapboxProxied: {
-            name: "MapBox (Legacy)",
-            mapURL: (z, x, y, layer) => {
-                // let's try get the md5 hash of the URL
-
-                const url = `https://api.mapbox.com/v4/mapbox.${layer}/${z}/${x}/${y}@2x.jpg80`;
-                const urlMD5 = md5(url);
-
-
-                // This calculates the correct DIRECT URL for the cache
-                // so we can try this first and if it fails, then try the server
-                // this is much faster than trying the server first
-                // we add "?prefetch=1" to the URL to ensure it's a different cached version
-                // to the one that is returned from cachemaps.php
-                // otherwise Cloudflare and others will think it's not there even after
-                // cachemaps.php has cached it
-                const url1 = SITREC_CACHE + urlMD5 + ".jpg" + "?prefetch=1";
-
-                // and this the the request to the server to cache it
-                // if url1 does not exist then try url2
-                const url2 = SITREC_SERVER + "cachemaps.php?url=" +
-                    encodeURIComponent(url)
-
-                return[url1, url2];
-            },
-
-
-
-            layers: {
-                "satellite": {
-                    type: "jpg", //not used here yet
-                }
-            },
-            layer: "satellite",
-            maxZoom: 15,
-            supportsOceanSurface: true, // MapBox legacy satellite imagery can have ocean surface overlay
-
-        },
+        // mapboxProxied: {
+        //     excludeFromMenu: true,
+        //     name: "MapBox (Legacy)",
+        //     mapURL: (z, x, y, layer) => {
+        //         // let's try get the md5 hash of the URL
+        //
+        //         const url = `https://api.mapbox.com/v4/mapbox.${layer}/${z}/${x}/${y}@2x.jpg80`;
+        //         const urlMD5 = md5(url);
+        //
+        //
+        //         // This calculates the correct DIRECT URL for the cache
+        //         // so we can try this first and if it fails, then try the server
+        //         // this is much faster than trying the server first
+        //         // we add "?prefetch=1" to the URL to ensure it's a different cached version
+        //         // to the one that is returned from cachemaps.php
+        //         // otherwise Cloudflare and others will think it's not there even after
+        //         // cachemaps.php has cached it
+        //         const url1 = SITREC_CACHE + urlMD5 + ".jpg" + "?prefetch=1";
+        //
+        //         // and this the the request to the server to cache it
+        //         // if url1 does not exist then try url2
+        //         const url2 = SITREC_SERVER + "cachemaps.php?url=" +
+        //             encodeURIComponent(url)
+        //
+        //         return[url1, url2];
+        //     },
+        //
+        //
+        //
+        //     layers: {
+        //         "satellite": {
+        //             type: "jpg", //not used here yet
+        //         }
+        //     },
+        //     layer: "satellite",
+        //     maxZoom: 15,
+        //     supportsOceanSurface: true, // MapBox legacy satellite imagery can have ocean surface overlay
+        //
+        // },
         osm: {
             name: "Open Streetmap",
             mapURL: (z,x,y) => {
@@ -123,6 +124,18 @@ export const _configParams = {
 
         },
 
+        ESRI: {
+            name: "ESRI World Imagery",
+            mapURL: (z,x,y) => {
+                return `https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/${z}/${y}/${x}`;
+            },
+            maxZoom: 20,
+            textureSubSize: 1500, // needs more detailed subdivision, as smaller textures,
+            // not there's a loading bug where the default map type should NOT have capabilities, as the loading of them will change execution order.
+          //  capabilities:"https://services.arcgisonline.com/arcgis/rest/services/World_Imagery/MapServer/WMTS/1.0.0/WMTSCapabilities.xml",
+
+        },
+
         // Try make this just use the base url https://geoint.nrlssc.org/nrltileserver/wms/category/Imagery
         // or perhaps just the capabilities URL?
 
@@ -151,6 +164,17 @@ export const _configParams = {
             supportsOceanSurface: true, // NRL WMTS imagery can have ocean surface overlay
 
         },
+
+        GIBS_BM: {
+            name: "Black Marble (City Lights)",
+            mapURL: function (z,x,y,  layerName, layerType) {
+
+                // note y and x flipped compared to other sources
+            return (`https://gibs.earthdata.nasa.gov/wmts/epsg3857/best/VIIRS_Black_Marble/default/default/GoogleMapsCompatible_Level8/${z}/${y}/${x}.png`);
+            },
+            maxZoom: 8,
+
+        }
 
     },
 
@@ -182,7 +206,21 @@ export const _configParams = {
             tileSize: 256,
             attribution: "National Map 3DEP GeoTIFF",
             mapping: 4326,
-        }
+        },
+
+        MapBoxRGB: {
+            name: "Mapbox Terrain-RGB",
+            mapURL: (z,x,y) => {
+                return`https://api.mapbox.com/v4/mapbox.terrain-rgb/${z}/${x}/${y}.pngraw?access_token=pk.eyJ1IjoibWlja3dlc3QiLCJhIjoiY21ianEydHIwMGliaTJrcHB4cDgzbGZuaSJ9.J7jU9B_pz4Mo723klYpywQ`;
+            },
+
+            maxZoom: 15,
+            minZoom: 7,  // Mapbox gives 404 errors for 6 or lower zooms (big tiles)
+            tileSize: 256,
+            attribution: "AWS Terrarium Elevation Data",
+        },
+
+
 
     },
 
