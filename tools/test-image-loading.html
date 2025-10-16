@@ -4,8 +4,9 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Image Loading Performance Test</title>
-    <script src="https://cdn.jsdelivr.net/npm/ndarray@1.0.19/ndarray.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/pako@2.0.4/dist/pako.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/upng-js@2.1.0/UPNG.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/ndarray@1.0.19/ndarray.js"></script>
     <style>
         * {
             box-sizing: border-box;
@@ -437,12 +438,19 @@
         registry.register(
             'CPU PNG Decoder (UPNG.js)',
             async function(tiles, options) {
+                if (!window.UPNG) {
+                    console.error('UPNG.js not available');
+                    throw new Error('UPNG.js library not loaded');
+                }
+
                 const results = [];
                 let loaded = 0;
+                let completed = 0;
 
-                return new Promise((resolve) => {
+                return new Promise((resolve, reject) => {
                     const processQueue = async () => {
                         if (tiles.length === 0 && loaded === 0) {
+                            console.log(`CPU PNG Decoder: Completed ${completed}/${completed + results.length} tiles`);
                             resolve(results);
                             return;
                         }
@@ -451,35 +459,49 @@
                             loaded++;
                             const url = tiles.shift();
 
-                            try {
-                                const response = await fetch(url);
-                                const arrayBuffer = await response.arrayBuffer();
-                                
-                                // Decode PNG using CPU (no canvas, no GPU)
-                                const data = new Uint8Array(arrayBuffer);
-                                const img = UPNG.decode(data);
-                                
-                                // Get raw pixel data
-                                const pixelArray = UPNG.toRGBA8(img)[0];
-                                
-                                results.push({ 
-                                    url, 
-                                    success: true, 
-                                    width: img[0], 
-                                    height: img[1] 
-                                });
+                            (async () => {
+                                try {
+                                    const response = await fetch(url);
+                                    
+                                    if (!response.ok) {
+                                        throw new Error(`HTTP ${response.status}`);
+                                    }
+                                    
+                                    const arrayBuffer = await response.arrayBuffer();
+                                    const data = new Uint8Array(arrayBuffer);
+                                    
+                                    // Decode using UPNG
+                                    const img = UPNG.decode(data);
+                                    
+                                    // UPNG returns an object with width, height, depth, ctype, frames
+                                    const width = img.width;
+                                    const height = img.height;
+                                    
+                                    results.push({ 
+                                        url, 
+                                        success: true, 
+                                        width: width, 
+                                        height: height 
+                                    });
+                                    completed++;
 
-                                loaded--;
-                                processQueue();
-                            } catch (err) {
-                                results.push({ url, success: false, error: err.message });
-                                loaded--;
-                                processQueue();
-                            }
+                                    loaded--;
+                                    processQueue();
+                                } catch (err) {
+                                    console.error('CPU PNG Decoder error:', err);
+                                    results.push({ url, success: false, error: err.message });
+                                    loaded--;
+                                    processQueue();
+                                }
+                            })();
                         }
                     };
 
-                    processQueue();
+                    try {
+                        processQueue();
+                    } catch (err) {
+                        reject(err);
+                    }
                 });
             },
             'CPU-based PNG decoding using UPNG.js (pure JavaScript, no GPU/Canvas)'
