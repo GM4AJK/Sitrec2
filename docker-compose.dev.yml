@@ -73,6 +73,7 @@ services:
       # Webpack configuration files
       - ./webpack.common.js:/app/webpack.common.js:cached
       - ./webpack.dev.js:/app/webpack.dev.js:cached
+      - ./webpack.dev.docker.js:/app/webpack.dev.docker.js:cached
       - ./webpack.prod.js:/app/webpack.prod.js:cached
       - ./webpackCopyPatterns.js:/app/webpackCopyPatterns.js:cached
       
@@ -134,6 +135,10 @@ services:
       # Enable polling for file watching (required for Docker volume mounts)
       # Without this, webpack may not detect file changes on the host
       - CHOKIDAR_USEPOLLING=true
+      
+      # Use Docker-optimized webpack config for better performance
+      # (caching + polling + in-memory serving)
+      - WEBPACK_CLI_CONFIG_FILE=webpack.dev.docker.js
       
       # Version identifier (fallback since .git directory is not mounted)
       - VERSION=dev
