@@ -18,6 +18,7 @@ import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
 import {fastComputeVertexNormalsAsync} from "./FastComputeVertexNormalsAsync";
+import {applyElevationInterpolationAsync} from "./ApplyElevationInterpolationAsync";
 import {showError} from "./showError";
 import {processTextureColors} from "./TextureColorProcessor";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
@@ -889,90 +890,29 @@ export class QuadTreeTile {
 //            console.log(`Tile ${this.key()}: geometry ${nPosition}x${nPosition} vertices, elevation ${elevationSize}x${elevationSize} data points`);
         }
 
-        // Apply elevation data directly to vertices
-        for (let i = 0; i < geometry.attributes.position.count; i++) {
-            const xIndex = i % nPosition;
-            const yIndex = Math.floor(i / nPosition);
+        // Apply elevation data asynchronously using web worker
+        // This offloads the expensive vertex interpolation calculations (10K+ vertices)
+        // to a background thread, keeping the main thread responsive
+        const elevationResult = await applyElevationInterpolationAsync(
+            geometry,
+            elevationTile,
+            elevationSize,
+            elevationZoom,
+            this.x,
+            this.y,
+            this.z,
+            tileOffsetX,
+            tileOffsetY,
+            tileFractionX,
+            tileFractionY,
+            this.map.elevationMap.options.zScale,
+            tileCenter,
+            this.map.options.mapProjection
+        );
 
-            // Calculate the fraction of the tile that the vertex is in
-            let yTileFraction = yIndex / (nPosition - 1);
-            let xTileFraction = xIndex / (nPosition - 1);
-
-            // Clamp fractions to tile bounds
-            if (xTileFraction >= 1) xTileFraction = 1 - 1e-6;
-            if (yTileFraction >= 1) yTileFraction = 1 - 1e-6;
-
-            // Get world tile coordinates
-            const xWorld = this.x + xTileFraction;
-            const yWorld = this.y + yTileFraction;
-
-            // Convert to lat/lon
-            const lat = this.map.options.mapProjection.getNorthLatitude(yWorld, this.z);
-            const lon = this.map.options.mapProjection.getLeftLongitude(xWorld, this.z);
-
-            // Get elevation with bilinear interpolation from the elevation tile data
-            // Map vertex position to elevation data coordinates, accounting for tile fraction and offset
-            // If we're using a higher-zoom elevation tile, we need to map to the correct portion
-            let elevationLocalX, elevationLocalY;
-
-            if (elevationZoom === this.z) {
-                // Same zoom level - direct mapping
-                elevationLocalX = xTileFraction * (elevationSize - 1);
-                elevationLocalY = yTileFraction * (elevationSize - 1);
-            } else {
-                // Lower zoom level (parent tile) - map to the specific portion of the parent
-                // Calculate the offset within the parent tile and add the texture tile fraction
-                const parentOffsetX = (tileOffsetX + xTileFraction) * tileFractionX;
-                const parentOffsetY = (tileOffsetY + yTileFraction) * tileFractionY;
-                elevationLocalX = parentOffsetX * (elevationSize - 1);
-                elevationLocalY = parentOffsetY * (elevationSize - 1);
-            }
-
-            // Get the four surrounding elevation data points for interpolation
-            const x0 = Math.floor(elevationLocalX);
-            const x1 = Math.min(elevationSize - 1, x0 + 1);
-            const y0 = Math.floor(elevationLocalY);
-            const y1 = Math.min(elevationSize - 1, y0 + 1);
-
-            // Get the fractional parts for interpolation
-            const fx = elevationLocalX - x0;
-            const fy = elevationLocalY - y0;
-
-            // Sample the four corner elevation values
-            const e00 = elevationTile.elevation[y0 * elevationSize + x0];
-            const e01 = elevationTile.elevation[y0 * elevationSize + x1];
-            const e10 = elevationTile.elevation[y1 * elevationSize + x0];
-            const e11 = elevationTile.elevation[y1 * elevationSize + x1];
-
-            // Bilinear interpolation
-            const e0 = e00 + (e01 - e00) * fx;
-            const e1 = e10 + (e11 - e10) * fx;
-            let elevation = e0 + (e1 - e0) * fy;
-
-            // Apply z-scale if available
-            if (this.map.elevationMap.options.zScale) {
-                elevation *= this.map.elevationMap.options.zScale;
-            }
-
-            // Clamp to sea level to avoid z-fighting with ocean tiles
-            if (elevation < 0) elevation = 0;
-
-            if (elevation > this.highestAltitude) {
-                this.highestAltitude = elevation;
-            }
-
-            // Convert to EUS coordinates
-            const vertexESU = LLAToEUS(lat, lon, elevation);
-
-            // Subtract the center of the tile for relative positioning
-            const vertex = vertexESU.sub(tileCenter);
-
-            assert(!isNaN(vertex.x), 'vertex.x is NaN in QuadTreeTile.js i=' + i);
-            assert(!isNaN(vertex.y), 'vertex.y is NaN in QuadTreeTile.js');
-            assert(!isNaN(vertex.z), 'vertex.z is NaN in QuadTreeTile.js');
-
-            // Set the vertex position in tile space
-            geometry.attributes.position.setXYZ(i, vertex.x, vertex.y, vertex.z);
+        // Update highest altitude from worker results
+        if (elevationResult && elevationResult.highestAltitude > this.highestAltitude) {
+            this.highestAltitude = elevationResult.highestAltitude;
         }
 
         // Generate elevation color texture if needed
@@ -981,7 +921,9 @@ export class QuadTreeTile {
         });
 
         // Update geometry using async worker for normal computation
-        await fastComputeVertexNormalsAsync(geometry);
+        await fastComputeVertexNormalsAsync(geometry).catch(error => {
+            console.warn(`Failed to compute vertex normals for tile ${this.key()}:`, error);
+        });
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
@@ -1056,7 +998,9 @@ export class QuadTreeTile {
         });
 
         // Update geometry using async worker for normal computation
-        await fastComputeVertexNormalsAsync(geometry);
+        await fastComputeVertexNormalsAsync(geometry).catch(error => {
+            console.warn(`Failed to compute vertex normals for tile ${this.key()}:`, error);
+        });
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
@@ -1243,7 +1187,9 @@ export class QuadTreeTile {
         });
 
         // Update geometry using async worker for normal computation
-        await fastComputeVertexNormalsAsync(geometry);
+        await fastComputeVertexNormalsAsync(geometry).catch(error => {
+            console.warn(`Failed to compute vertex normals for tile ${this.key()}:`, error);
+        });
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
