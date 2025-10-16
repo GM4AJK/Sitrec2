@@ -103,6 +103,10 @@ class QuadTreeMapTexture extends QuadTreeMap {
 
         this.getAllTiles().forEach(tile => {
             tile.removeDebugGeometry(); // any debug arrows, etc
+            // Abort any in-flight elevation computations on individual tiles
+            if (tile.elevationAbortController) {
+                tile.elevationAbortController.abort();
+            }
             if (tile.mesh !== undefined) {
                 this.scene.remove(tile.mesh)
                 tile.mesh.geometry.dispose();

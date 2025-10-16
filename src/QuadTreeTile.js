@@ -67,6 +67,9 @@ export class QuadTreeTile {
         // AbortController for cancelling texture loading
         this.textureAbortController = null;
 
+        // AbortController for cancelling elevation computation
+        this.elevationAbortController = null;
+
         // Private property to store tileLayers value
         this._tileLayers = undefined;
 
@@ -407,9 +410,13 @@ export class QuadTreeTile {
     async applyWebMercatorElevation(geometry, nPosition, elevationTile, elevationSize, 
                                      tileBaseX, tileBaseY, numTiles, lonScale, lonOffset, latScale,
                                      elevationZoom, tileZ, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY,
-                                     tileCenter) {
+                                     tileCenter, abortSignal) {
         // Apply elevation data directly to vertices
         for (let i = 0; i < geometry.attributes.position.count; i++) {
+            // Check if this operation was aborted (tile switched or cancelled)
+            if (abortSignal?.aborted) {
+                return;
+            }
             const xIndex = i % nPosition;
             const yIndex = Math.floor(i / nPosition);
 
@@ -1186,13 +1193,19 @@ export class QuadTreeTile {
         const nPosition = Math.sqrt(geometry.attributes.position.count); // size of side of mesh in points
         const elevationSize = Math.sqrt(elevationTile.elevation.length); // size of elevation data
 
+        // Create abort controller for elevation computation (allows cancellation if tile is switched)
+        this.elevationAbortController = new AbortController();
+
         // Apply elevation and then run texture generation and normal computation in parallel
         await this.applyWebMercatorElevation(
             geometry, nPosition, elevationTile, elevationSize, 
             tileBaseX, tileBaseY, numTiles, lonScale, lonOffset, latScale,
             elevationZoom, this.z, tileOffsetX, tileOffsetY, tileFractionX, tileFractionY,
-            tileCenter
+            tileCenter, this.elevationAbortController.signal
         );
+        
+        // Clear the abort controller after elevation is complete
+        this.elevationAbortController = null;
 
         // Generate elevation color texture and compute normals in parallel
         // Both operations are independent and can run concurrently
@@ -1677,6 +1690,13 @@ export class QuadTreeTile {
         if (this.isLoadingElevation) {
             // Clear the elevation loading state
             this.isLoadingElevation = false;
+            cancelledCount++;
+        }
+
+        // Cancel elevation computation if in progress
+        if (this.elevationAbortController) {
+            this.elevationAbortController.abort();
+            this.elevationAbortController = null;
             cancelledCount++;
         }
 
