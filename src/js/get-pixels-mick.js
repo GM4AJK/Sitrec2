@@ -23,7 +23,7 @@ self.onmessage = async (event) => {
             success: true,
             width: bitmap.width,
             height: bitmap.height,
-            data: imageData.data,
+            data: new Uint8Array(imageData.data),
             url
         });
 

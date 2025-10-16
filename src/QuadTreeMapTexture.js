@@ -79,9 +79,12 @@ class QuadTreeMapTexture extends QuadTreeMap {
             return;
         }
         this.radius = radius
-        this.getAllTiles().forEach(tile => {
-            tile.recalculateCurve(radius)
-        })
+        // Fire off all tile normal calculations in background (non-blocking)
+        const promises = this.getAllTiles().map(tile => 
+            tile.recalculateCurve(radius).catch(error => {
+                console.warn(`Failed to recalculate curve for tile ${tile.key()}:`, error);
+            })
+        );
         setRenderOne(true);
     }
 
@@ -278,7 +281,10 @@ class QuadTreeMapTexture extends QuadTreeMap {
         const center = LLAToEUS(lat, lon, 0);
 
         tile.setPosition(center); // ???
-        tile.recalculateCurve()
+        // Fire off normal calculation in background (non-blocking)
+        tile.recalculateCurve().catch(error => {
+            console.warn(`Failed to recalculate curve for tile ${z}/${x}/${y}:`, error);
+        });
         this.setTile(x, y, z, tile);
         
         // Set up parent relationship in tree structure

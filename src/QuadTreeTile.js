@@ -17,6 +17,7 @@ import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
 import {globalMipmapGenerator} from "./MipmapGenerator";
 import {fastComputeVertexNormals} from "./FastComputeVertexNormals";
+import {fastComputeVertexNormalsAsync} from "./FastComputeVertexNormalsAsync";
 import {showError} from "./showError";
 import {processTextureColors} from "./TextureColorProcessor";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
@@ -701,7 +702,7 @@ export class QuadTreeTile {
     // recalculate the X,Y, Z values for all the verticles of a tile
     // at this point we are Z-up
     // OLD VERSION - inefficient for tiles of different sizes
-    recalculateCurveOld(radius) {
+    async recalculateCurveOld(radius) {
         var geometry = this.geometry;
         if (this.mesh !== undefined) {
             geometry = this.mesh.geometry;
@@ -789,9 +790,8 @@ export class QuadTreeTile {
         // Also check if we can now use actual elevation tile data instead of interpolated
         this.checkAndApplyElevationColorTexture();
 
-        // Optimized version - much faster than the original
-        // might be an ideal candidate for multi-threading
-        fastComputeVertexNormals(geometry)
+        // Update geometry using async worker for normal computation
+        await fastComputeVertexNormalsAsync(geometry)
 
         geometry.computeBoundingBox()
         geometry.computeBoundingSphere()
@@ -807,7 +807,7 @@ export class QuadTreeTile {
     // NEW OPTIMIZED VERSION - works with elevation tiles at same or lower zoom levels
     // Tries exact coordinate match first, then searches parent tiles (lower zoom) and uses tile fractions
     // Applies elevation data directly from elevation tiles with bilinear interpolation
-    recalculateCurve(radius = wgs84.RADIUS) {
+    async recalculateCurve(radius = wgs84.RADIUS) {
 
         this.highestAltitude = 0;
 
@@ -980,8 +980,8 @@ export class QuadTreeTile {
             console.warn(`Failed to generate elevation color texture for tile ${this.key()}:`, error);
         });
 
-        // Update geometry
-        fastComputeVertexNormals(geometry);
+        // Update geometry using async worker for normal computation
+        await fastComputeVertexNormalsAsync(geometry);
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
@@ -996,7 +996,7 @@ export class QuadTreeTile {
     // Flat version of recalculateCurve that assumes elevation is always 0
     // This skips all elevation tile lookups and interpolation for better performance
     // when using flat terrain
-    recalculateCurveFlat(radius) {
+    async recalculateCurveFlat(radius) {
         this.highestAltitude = 0;
 
         var geometry = this.geometry;
@@ -1055,8 +1055,8 @@ export class QuadTreeTile {
             console.warn(`Failed to generate flat elevation color texture for tile ${this.key()}:`, error);
         });
 
-        // Update geometry
-        fastComputeVertexNormals(geometry);
+        // Update geometry using async worker for normal computation
+        await fastComputeVertexNormalsAsync(geometry);
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;
@@ -1070,7 +1070,7 @@ export class QuadTreeTile {
     // Optimized Web Mercator version of recalculateCurve that steps directly over tile coordinates
     // This avoids the expensive mapProjection method calls by calculating lat/lon directly
     // Assumes Web Mercator projection (EPSG:3857) - use only when mapProjection is CTileMappingGoogleMapsCompatible
-    recalculateCurveWebMercator(radius) {
+    async recalculateCurveWebMercator(radius) {
         // Performance timing for optimization verification
         const startTime = performance.now();
 
@@ -1242,8 +1242,8 @@ export class QuadTreeTile {
             console.warn(`Failed to generate elevation color texture for tile ${this.key()}:`, error);
         });
 
-        // Update geometry
-        fastComputeVertexNormals(geometry);
+        // Update geometry using async worker for normal computation
+        await fastComputeVertexNormalsAsync(geometry);
         geometry.computeBoundingBox();
         geometry.computeBoundingSphere();
         geometry.attributes.position.needsUpdate = true;

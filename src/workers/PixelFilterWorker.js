@@ -13,5 +13,5 @@ onmessage = (e) => {
     filterNoise(image.data)
 
     // pass back frame number and ImageData
-    postMessage([e.data[0],image])
+    postMessage([e.data[0],image], [image.data.buffer])
 }

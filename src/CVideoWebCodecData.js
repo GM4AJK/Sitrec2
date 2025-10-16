@@ -639,7 +639,7 @@ export class CVideoWebCodecData extends CVideoData {
                 //            clonedImageData.data[i*4 + 0] += Math.random()*255
             }
 
-            this.filterWorkers[this.nextWorker].postMessage([frameNumber, clonedImageData]);
+            this.filterWorkers[this.nextWorker].postMessage([frameNumber, clonedImageData], [clonedImageData.data.buffer]);
             this.nextWorker++
             if (this.nextWorker >= this.numWorkers)
                 this.nextWorker = 0;

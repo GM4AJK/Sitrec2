@@ -562,8 +562,10 @@ export class CNodeTerrain extends CNode {
             return; // no parent for root tile
         }
 
-        // apply elevation to the parent tile
-        parentTile.recalculateCurve();
+        // apply elevation to the parent tile (fire off in background)
+        parentTile.recalculateCurve().catch(error => {
+            console.warn('Failed to recalculate curve for parent tile:', error);
+        });
 
         // and recursively apply to the parent's parent
         this.applyElevationToParents(parentTile, terrainMap);
@@ -585,7 +587,11 @@ export class CNodeTerrain extends CNode {
 
             // any tile that has a mesh, we need to recalculate the curve map (i.e. the elevation of the mesh
             if (tile.mesh) {
-                tile.recalculateCurve()
+                // Fire off normal calculation in background (non-blocking)
+                tile.recalculateCurve().catch(error => {
+                    console.log(error)
+                    assert(0,'Failed to recalculate curve for tile:');
+                });
             }
 
             assert(terrainMap.tileCache !== undefined, "CNodeTerrain: tileCache is undefined, cannot apply elevation to tile");
