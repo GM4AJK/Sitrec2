@@ -11,11 +11,20 @@
  *   npm run start-serverless
  * 
  * Then navigate to http://localhost:3000/sitrec
+ * Or for HTTPS: https://localhost:3000/sitrec
+ * 
+ * Environment variables:
+ *   PORT - Server port (default: 3000)
+ *   USE_HTTPS - Enable HTTPS (default: false) (Can set this in PHPStorm Configuration.)
+ *   CERT_FILE - Path to SSL certificate file (auto-generated if not provided)
+ *   KEY_FILE - Path to SSL key file (auto-generated if not provided)
  */
 
 const express = require('express');
 const path = require('path');
 const fs = require('fs');
+const https = require('https');
+const { exec } = require('child_process');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -213,9 +222,72 @@ app.use((err, req, res, next) => {
 });
 
 /**
+ * Generate self-signed certificate for HTTPS
+ */
+function generateSelfSignedCert(certPath, keyPath) {
+    return new Promise((resolve, reject) => {
+        // Use openssl to generate a self-signed certificate
+        const cmd = `openssl req -x509 -newkey rsa:2048 -keyout "${keyPath}" -out "${certPath}" -days 365 -nodes -subj "/CN=localhost"`;
+        
+        console.log('🔐 Generating self-signed certificate...');
+        exec(cmd, (error, stdout, stderr) => {
+            if (error) {
+                console.warn('⚠️  Could not generate self-signed certificate:');
+                console.warn(error.message);
+                console.warn('\nNote: openssl is required. You can still use HTTP mode.');
+                reject(error);
+            } else {
+                console.log('✅ Self-signed certificate generated successfully');
+                resolve();
+            }
+        });
+    });
+}
+
+/**
+ * Load or create HTTPS certificates
+ */
+async function setupHTTPS() {
+    const useHTTPS = process.env.USE_HTTPS === 'true';
+    
+    if (!useHTTPS) {
+        return null;
+    }
+
+    const certDir = path.join(__dirname, '.certs');
+    const certPath = process.env.CERT_FILE || path.join(certDir, 'cert.pem');
+    const keyPath = process.env.KEY_FILE || path.join(certDir, 'key.pem');
+
+    // Create .certs directory if it doesn't exist
+    if (!fs.existsSync(certDir)) {
+        fs.mkdirSync(certDir, { recursive: true });
+    }
+
+    // Check if certificates already exist
+    if (!fs.existsSync(certPath) || !fs.existsSync(keyPath)) {
+        try {
+            await generateSelfSignedCert(certPath, keyPath);
+        } catch (error) {
+            console.error('\n❌ HTTPS setup failed. Falling back to HTTP mode.');
+            return null;
+        }
+    }
+
+    // Load certificates
+    try {
+        const cert = fs.readFileSync(certPath, 'utf-8');
+        const key = fs.readFileSync(keyPath, 'utf-8');
+        return { cert, key };
+    } catch (error) {
+        console.error('❌ Failed to load certificates:', error.message);
+        return null;
+    }
+}
+
+/**
  * Start the server
  */
-function startServer() {
+async function startServer() {
     // Check if build directory exists
     if (!fs.existsSync(DIST_DIR)) {
         console.error(`\n❌ Build directory not found: ${DIST_DIR}`);
@@ -223,25 +295,51 @@ function startServer() {
         process.exit(1);
     }
 
-    app.listen(PORT, () => {
+    // Setup HTTPS if enabled
+    const httpsOptions = await setupHTTPS();
+    const protocol = httpsOptions ? 'https' : 'http';
+    const url = `${protocol}://localhost:${PORT}/sitrec`;
+
+    // Start server
+    const server = httpsOptions 
+        ? https.createServer(httpsOptions, app)
+        : require('http').createServer(app);
+
+    server.listen(PORT, () => {
         console.log('\n' + '='.repeat(60));
         console.log('🚀 Sitrec Serverless (No PHP Required!)');
         console.log('='.repeat(60));
-        console.log(`\n📱 Frontend: http://localhost:${PORT}/sitrec`);
+        console.log(`\n📱 Frontend: ${url}`);
+        
+        if (httpsOptions) {
+            console.log('\n🔐 HTTPS is enabled!');
+            console.log('   Note: Certificate is self-signed. Your browser may show a warning.');
+            console.log('   This is normal for local development.');
+        }
+        
         console.log('\n✨ Features:');
         console.log('   ✅ Local saves via IndexedDB');
         console.log('   ✅ Offline-first architecture');
         console.log('   ✅ No backend server required');
         console.log('   ✅ No PHP dependency');
+        
+        if (httpsOptions) {
+            console.log('   ✅ File System Access API (showSaveFilePicker) enabled');
+        }
+        
         console.log('\n⚠️  Limitations:');
         console.log('   ❌ No server-side file upload');
         console.log('   ❌ No AI chat feature');
         console.log('   ❌ No cloud sync');
+        
         console.log('\n📊 Debug Endpoints:');
-        console.log(`   http://localhost:${PORT}/api/debug/status`);
-        console.log(`   http://localhost:${PORT}/api/debug/files`);
-        console.log(`   http://localhost:${PORT}/api/manifest`);
+        console.log(`   ${protocol}://localhost:${PORT}/api/debug/status`);
+        console.log(`   ${protocol}://localhost:${PORT}/api/debug/files`);
+        console.log(`   ${protocol}://localhost:${PORT}/api/manifest`);
+        
         console.log('\n💡 Tip: Open browser console for more information');
+        console.log('\n📌 To enable HTTPS:');
+        console.log('   USE_HTTPS=true npm run start-serverless');
         console.log('\nPress Ctrl+C to stop the server\n');
     });
 
