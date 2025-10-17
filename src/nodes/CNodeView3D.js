@@ -1,10 +1,21 @@
 import {par} from "../par";
 import {normalizeLayerType} from "../utils";
 import {XYZ2EA, XYZJ2PR} from "../SphericalMath";
-import {CustomManager, Globals, guiMenus, guiTweaks, keyHeld, NodeMan, setRenderOne, Sit} from "../Globals";
+import {
+    CustomManager,
+    Globals,
+    guiMenus,
+    guiTweaks,
+    keyHeld,
+    NodeMan,
+    setGPUMemoryMonitor,
+    setRenderOne,
+    Sit
+} from "../Globals";
 import {GlobalDaySkyScene, GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene} from "../LocalFrame";
 import {DRAG, makeMouseRay} from "../mouseMoveView";
 import {TrackManager} from "../TrackManager";
+import {GPUMemoryMonitor} from "../GPUMemoryMonitor";
 import {
     Camera,
     Color,
@@ -244,6 +255,27 @@ export class CNodeView3D extends CNodeViewCanvas {
         this.renderer.setPixelRatio(this.in.canvasWidth ? 1 : window.devicePixelRatio);
         this.renderer.setSize(this.widthDiv, this.heightDiv, false);
         this.renderer.colorSpace = SRGBColorSpace;
+        
+        // Initialize GPU Memory Monitor on the first renderer created (only in local/dev mode)
+        if (isLocal) {
+            if (!Globals.GPUMemoryMonitor) {
+                console.log("[CNodeView3D] Creating new GPU Memory Monitor");
+                try {
+                    const monitor = new GPUMemoryMonitor(this.renderer, GlobalScene);
+                    setGPUMemoryMonitor(monitor);
+                    console.log("✓ GPU Memory Monitor initialized successfully");
+                    
+                    // Make it globally accessible for testing
+                    window._gpuMonitor = monitor;
+                    console.log("✓ Monitor available as: window._gpuMonitor or window.Globals.GPUMemoryMonitor");
+                } catch (e) {
+                    console.error("[CNodeView3D] Error initializing GPU Memory Monitor:", e);
+                }
+            } else {
+                // Update scene reference if it changed
+                Globals.GPUMemoryMonitor.setScene(GlobalScene);
+            }
+        }
         if (Globals.shadowsEnabled) {
             this.renderer.shadowMap.enabled = true;
         }

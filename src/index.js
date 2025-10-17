@@ -339,6 +339,13 @@ if (dateTime) {
 windowChanged()
 
 infoDiv.innerHTML = ""
+
+// Setup GPU Memory Monitor GUI
+if (Globals.GPUMemoryMonitor) {
+    Globals.GPUMemoryMonitor.setupGUI(guiMenus);
+    console.log("GPU Memory Monitor GUI setup complete");
+}
+
 console.log("............... Done with setup, starting animation")
 startAnimating(Sit.fps);
 
@@ -709,6 +716,7 @@ async function initializeOnce() {
     addGUIMenu("contents", "Contents").tooltip("The contents of the scene, mostly used for tracks");
 
     addGUIMenu("help", "Help").tooltip("Links to the documentation and other help resources");
+    addGUIMenu("debug", "Debug").tooltip("Debug tools and monitoring\nGPU memory usage, performance metrics, and other debugging information");
 
 
     function addHelpLink(name, file) {
@@ -1390,6 +1398,11 @@ function renderMain(elapsed) {
 
         }
     })
+
+    // Update GPU Memory Monitor display
+    if (Globals.GPUMemoryMonitor && Globals.GPUMemoryMonitor.enabled) {
+        Globals.GPUMemoryMonitor.updateGUI();
+    }
 
 }
 

@@ -5,7 +5,12 @@ export function incrementMainLoopCount() {
 };
 
 export var Globals = {
-    editingTrack: null  // Reference to the CMetaTrack currently being edited
+    editingTrack: null,  // Reference to the CMetaTrack currently being edited
+    GPUMemoryMonitor: null  // GPU Memory Monitor instance
+}
+
+export function setGPUMemoryMonitor(monitor) {
+    Globals.GPUMemoryMonitor = monitor;
 }
 
 export function setSitchEstablished(bool) {
