@@ -177,17 +177,9 @@ export class QuadTreeMap {
     }
 
     getOptions(providedOptions) {
-        const options = Object.assign({}, this.defaultOptions, providedOptions)
+        const options = Object.assign({}, providedOptions)
         options.tileSegments = Math.min(256, Math.round(options.tileSegments))
         return options
-    }
-
-    defaultOptions = {
-        nTiles: 3,
-        zoom: 11,
-        tileSize: 600,
-        tileSegments: 100,
-        zScale: 1,
     }
 
     initTilePositions() {

@@ -820,9 +820,9 @@ export class QuadTreeTile {
         //
         const tileCenter = this.mesh.position;
 
-        // for a 100x100 mesh, that's 100 squares on a side
+        // for a tileSegments x tileSegments mesh, that's tileSegments squares on a side
         // but an extra row and column of vertices
-        // so 101x101 points = 10201 points
+        // so (tileSegments+1) x (tileSegments+1) points
         //
 
         const nPosition = Math.sqrt(geometry.attributes.position.count) // size of side of mesh in points

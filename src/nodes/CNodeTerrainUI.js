@@ -635,7 +635,7 @@ export class CNodeTerrainUI extends CNode {
             if (this.terrainNode.elevationMap !== undefined) {
                 // For elevation, call with all views so both cameras are applied for subdivision decisions
                 // not sure about this. elevation is used at a lower resolution than the textures
-                // as the tiles are 100x100
+                // as the tiles are configurable (default: tileSegments x tileSegments)
                 for (const view of views) {
                     if (view && view.visible) {
                         this.terrainNode.elevationMap.subdivideTilesViewSpecific(view, this.elevationSubSize / this.elevationDetail);
