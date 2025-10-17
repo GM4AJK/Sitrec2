@@ -395,24 +395,9 @@ export class QuadTreeMap {
             const isActiveInView = (tile.tileLayers & tileLayers) !== 0;
             if (!isActiveInView && !hasChildren) return;
 
-            // OPTIMIZATION #4: Hierarchical frustum culling
-            // If parent is completely outside frustum, skip this tile (children can't be visible)
-            // Exception: Root tiles (z=0) have no parent, so always check them
-            if (tile.z > 0) {
-                const parent = this.getParent(tile);
-                if (parent && parent._frustumCulled) {
-                    // Parent was culled, so this tile and all its descendants are also culled
-                    tile._frustumCulled = true;
-                    return;
-                }
-            }
-
             // Calculate visibility and screen size
             // This is expensive, so we only do it after early exit checks
             const visibility = this.calculateTileVisibility(tile, camera);
-            
-            // Store frustum culling result for hierarchical culling of children
-            tile._frustumCulled = !visibility.frustumIntersects;
             
             // OPTIMIZATION #7: Early exit for invisible tiles without children
             // If tile is not visible and has no children to merge, skip further processing
