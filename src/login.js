@@ -6,7 +6,7 @@
 
 import {Globals} from "./Globals";
 import {_configParams} from "../config/config";
-import {SITREC_SERVER} from "./configUtils";
+import {isServerless, SITREC_SERVER} from "./configUtils";
 
 export const configParams = _configParams;
 
@@ -21,6 +21,14 @@ export function asyncCheckLogin() {
     if (!configParams.rehostRequiresLogin) {
         console.log("Rehost attempt does not require login")
         Globals.userID = 12345678;
+        return Promise.resolve();
+    }
+
+
+    // In serverless mode, we don't have access to rehost.php, so just use a default ID
+    if (isServerless) {
+        console.log("Serverless mode: using default user ID")
+        Globals.userID = 88888888;
         return Promise.resolve();
     }
 
