@@ -19,3 +19,4 @@ tests/__image_snapshots__/
 /dist-standalone/
 /dist/
 /dist-serverless/
+/.certs/
