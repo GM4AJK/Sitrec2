@@ -116,9 +116,15 @@ class ImageQueueManager {
     dispose() {
         this.queue = [];
         this.activeRequests = 0;
+        this.errorOccurred = false;
+        if (this.pendingRequests) {
+            this.pendingRequests.clear();
+        }
         if (this.useWorkerPool && this.workers.length > 0) {
             this.workers.forEach(w => w.terminate());
             this.workers = [];
+            // Reinitialize worker pool for next sitch
+            this.initWorkerPool();
         }
     }
 
