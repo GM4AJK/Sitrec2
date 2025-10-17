@@ -15,7 +15,13 @@
     "start-standalone": "node standalone-server.js",
     "start-standalone-debug": "node --inspect standalone-server.js",
     "dev-standalone": "npm run build-standalone && npm run start-standalone",
-    "dev-standalone-debug": "npm run build-standalone-debug && npm run start-standalone-debug"
+    "dev-standalone-debug": "npm run build-standalone-debug && npm run start-standalone-debug",
+    "build-serverless": "npx webpack --config webpack.serverless.js",
+    "build-serverless-debug": "npx webpack --config webpack.serverless.js --mode development",
+    "start-serverless": "node standalone-serverless.js",
+    "start-serverless-debug": "node --inspect standalone-serverless.js",
+    "dev-serverless": "npm run build-serverless && npm run start-serverless",
+    "dev-serverless-debug": "npm run build-serverless-debug && npm run start-serverless-debug"
   },
   "jest": {
     "testPathIgnorePatterns": [

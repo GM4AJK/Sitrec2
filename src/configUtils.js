@@ -1,5 +1,17 @@
 export const isConsole = (typeof window == 'undefined');
 
+// Serverless mode is determined at build time via webpack DefinePlugin
+// true = static serverless build (no PHP backend), false = server-backed deployment
+export const isServerless = process.env.IS_SERVERLESS_BUILD === 'true';
+
+// For compatibility, provide a no-op function (kept for backwards compatibility)
+export async function checkServerlessMode() {
+    // This is now a no-op since serverless mode is determined at build time
+    if (!isConsole) {
+        console.log("Serverless mode (build-time flag):", isServerless);
+    }
+}
+
 export async function getConfigFromServer() {
 
 // Log the chosen configuration.
@@ -12,6 +24,8 @@ export async function getConfigFromServer() {
 
         // reconstruct the url from parts to strip off any filename or query string
         const configURL = window.location.origin + window.location.pathname + "sitrecServer/" + "config_paths.php" + "?FETCH_CONFIG";
+        console.log("Fetching configuration from server URL: ", configURL);
+
         const response = await fetch(configURL);
         const server_config = await response.json();
         console.log(server_config);
@@ -105,26 +119,44 @@ export async function setupConfigPaths() {
     SITREC_CACHE = null;
     SITREC_TERRAIN = null;
 
-    const serverConfig = await getConfigFromServer();
-    if (serverConfig !== null) {
-        SITREC_UPLOAD = serverConfig.UPLOAD;
-        SITREC_CACHE = serverConfig.CACHE;
-        SITREC_TERRAIN = serverConfig.TERRAIN;
+    // In serverless mode, skip the PHP config call and use relative paths
+    if (!isServerless) {
+        const serverConfig = await getConfigFromServer();
+        if (serverConfig !== null) {
+            SITREC_UPLOAD = serverConfig.UPLOAD;
+            SITREC_CACHE = serverConfig.CACHE;
+            SITREC_TERRAIN = serverConfig.TERRAIN;
 
-        // log all the exported variables
-        console.log("SITREC_DOMAIN: ", SITREC_DOMAIN);
-        console.log("SITREC_APP: ", SITREC_APP);
+            // log all the exported variables
+            console.log("SITREC_DOMAIN: ", SITREC_DOMAIN);
+            console.log("SITREC_APP: ", SITREC_APP);
 
-        console.log("SITREC_SERVER: ", SITREC_SERVER);
-        console.log("SITREC_UPLOAD: ", SITREC_UPLOAD);
-        console.log("SITREC_CACHE: ", SITREC_CACHE);
-        console.log("SITREC_TERRAIN: ", SITREC_TERRAIN);
-        console.log("SITREC_DEV_DOMAIN: ", SITREC_DEV_DOMAIN);
+            console.log("SITREC_SERVER: ", SITREC_SERVER);
+            console.log("SITREC_UPLOAD: ", SITREC_UPLOAD);
+            console.log("SITREC_CACHE: ", SITREC_CACHE);
+            console.log("SITREC_TERRAIN: ", SITREC_TERRAIN);
+            console.log("SITREC_DEV_DOMAIN: ", SITREC_DEV_DOMAIN);
 
-        return;
+            return;
+        }
+
+        assert(0, "No server configuration loaded");
     }
-
-    assert(0, "No server configuration loaded");
+    
+    // Serverless mode: use relative paths
+    console.log("Serverless mode: using relative paths for UPLOAD, CACHE, and TERRAIN");
+    SITREC_UPLOAD = "/user-files/";
+    SITREC_CACHE = "/cache/";
+    SITREC_TERRAIN = "../sitrec-terrain/";
+    
+    // log all the exported variables in serverless mode
+    console.log("SITREC_DOMAIN: ", SITREC_DOMAIN);
+    console.log("SITREC_APP: ", SITREC_APP);
+    console.log("SITREC_SERVER: ", SITREC_SERVER);
+    console.log("SITREC_UPLOAD: ", SITREC_UPLOAD);
+    console.log("SITREC_CACHE: ", SITREC_CACHE);
+    console.log("SITREC_TERRAIN: ", SITREC_TERRAIN);
+    console.log("SITREC_DEV_DOMAIN: ", SITREC_DEV_DOMAIN);
 
     // Old method of client-side configuration, not currently used.
     // if we don't have a server, then UPLOAD and CACHE are irrelevant

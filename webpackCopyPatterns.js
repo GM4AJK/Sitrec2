@@ -9,15 +9,6 @@ const patterns = [
     // copies the data directory
     { from: "data", to: "./data"},
 
-    // copy the shared.env file, renaming it to shared.env.php to prevent direct access
-    // combined with the initial <?php tag, this will prevent the file from being served
-    { from: "./config/shared.env", to: "./shared.env.php",
-        transform: (content, absoluteFrom) => {
-            // Convert Buffer to string, prepend '<?php\n', then return as Buffer again
-            const updatedContent = `<?php /*;\n${content.toString()}\n*/`;
-            return Buffer.from(updatedContent);
-        },},
-
     // Web worker source code needs to be loaded at run time
     // so we just copy it over
     // This is currently not used
@@ -28,8 +19,13 @@ const patterns = [
     { from: "tools", to: "./tools"},
 ];
 
-// Only copy sitrecServer and config.php in production or non-Docker environments
-if (!isDockerDev) {
+// Only copy sitrecServer and config.php in non-serverless, non-Docker environments
+// - Docker dev: Apache serves sitrecServer via proxy, so don't copy
+// - Serverless: Zero PHP files in output
+// - Local NGINX/prod: Copy sitrecServer for serving PHP
+const isServerlessBuild = process.env.IS_SERVERLESS_BUILD === 'true';
+
+if (!isDockerDev && !isServerlessBuild) {
     // Copy sitrecServer directory, but exclude config.php (we'll copy it separately)
     // This prevents copying the empty placeholder file that Docker creates
     patterns.push(
@@ -47,6 +43,20 @@ if (!isDockerDev) {
     patterns.push(
         { from: "./config/config.php", to: "./sitrecServer/config.php"}
     );
+}
+
+// copy the shared.env file, renaming it to shared.env.php to prevent direct access
+// combined with the initial <?php tag, this will prevent the file from being served
+if (!isServerlessBuild) {
+    patterns.push({
+        from: "./config/shared.env", 
+        to: "./shared.env.php",
+        transform: (content, absoluteFrom) => {
+            // Convert Buffer to string, prepend '<?php\n', then return as Buffer again
+            const updatedContent = `<?php /*;\n${content.toString()}\n*/`;
+            return Buffer.from(updatedContent);
+        }
+    });
 }
 
 module.exports = patterns;

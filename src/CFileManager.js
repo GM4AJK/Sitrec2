@@ -26,7 +26,7 @@ import {textSitchToObject} from "./RegisterSitches";
 import {addOptionToGUIMenu, removeOptionFromGUIMenu} from "./lil-gui-extras";
 import {isCustom1, isFR24CSV, parseCustom1CSV, parseCustomFLLCSV, parseFR24CSV} from "./ParseCustom1CSV";
 import {stripDuplicateTimes} from "./ParseUtils";
-import {isConsole, isLocal, SITREC_APP, SITREC_DOMAIN, SITREC_SERVER} from "./configUtils";
+import {isConsole, isLocal, isServerless, SITREC_APP, SITREC_DOMAIN, SITREC_SERVER} from "./configUtils";
 import {resetGlobalOrigin} from "./ResetOrigin";
 import {probeTransportStreamBufferDetailed, TSParser} from "./TSParser";
 import {showError} from "./showError";
@@ -53,7 +53,7 @@ export class CFileManager extends CManager {
             // the Save and Load buttons should only be available for the custom sitch
 
 
-            if (parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) {
+            if ((parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) && !isServerless) {
 
                 let serverName = SITREC_DOMAIN;
                 if (parseBoolean(process.env.SAVE_TO_S3)) {
@@ -130,7 +130,7 @@ export class CFileManager extends CManager {
                 this.guiLocal.show();
             }
             if (Globals.userID > 0) {
-                if (parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) {
+                if ((parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) && !isServerless) {
                     this.guiServer.show();
                 }
             }
@@ -138,7 +138,7 @@ export class CFileManager extends CManager {
             if (parseBoolean(process.env.SAVE_TO_LOCAL)) {
                 this.guiLocal.hide();
             }
-            if (parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) {
+            if ((parseBoolean(process.env.SAVE_TO_SERVER) || parseBoolean(process.env.SAVE_TO_S3)) && !isServerless) {
                 this.guiServer.hide();
             }
         }
@@ -162,7 +162,7 @@ export class CFileManager extends CManager {
     }
 
     addServerButtons() {
-        if (! parseBoolean(process.env.SAVE_TO_SERVER) && !parseBoolean(process.env.SAVE_TO_S3))
+        if ((! parseBoolean(process.env.SAVE_TO_SERVER) && !parseBoolean(process.env.SAVE_TO_S3)) || isServerless)
             return;
 
         this.guiServer.add(this, "saveSitchFromMenu").name("Save").perm().tooltip("Save the current sitch to the server");

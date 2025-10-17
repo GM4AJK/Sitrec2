@@ -56,10 +56,13 @@ export function registerSitches(textSitches) {
         sitchContext = {};
     }
 
-    sitchContext.keys().forEach(key => {
-        const moduleExports = sitchContext(key);
-        registerSitchModule(key, moduleExports)
-    });
+    // Only iterate if sitchContext has a keys method (i.e., it's a webpack require.context object)
+    if (sitchContext && typeof sitchContext.keys === 'function') {
+        sitchContext.keys().forEach(key => {
+            const moduleExports = sitchContext(key);
+            registerSitchModule(key, moduleExports)
+        });
+    }
 
 //    console.log("Starting Text Sitches")
 

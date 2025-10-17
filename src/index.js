@@ -60,7 +60,15 @@ import {CNodeDateTime} from "./nodes/CNodeDateTime";
 import {addAlignedGlobe} from "./Globe";
 import JSURL from "./js/jsurl";
 import {localSituation} from "../config/config";
-import {isConsole, isLocal, setupConfigPaths, SITREC_APP, SITREC_SERVER} from "./configUtils.js"
+import {
+    checkServerlessMode,
+    isConsole,
+    isLocal,
+    isServerless,
+    setupConfigPaths,
+    SITREC_APP,
+    SITREC_SERVER
+} from "./configUtils.js"
 import {SituationSetup, startLoadingInlineAssets} from "./SituationSetup";
 import {CUnits} from "./CUnits";
 import {updateLockTrack} from "./updateLockTrack";
@@ -120,6 +128,7 @@ checkUserAgent();
 // 5 just means wait 5 frames before showing the message
 Globals.wasPending = 5;
 
+await checkServerlessMode();
 await setupConfigPaths();
 
 //await getConfigFromServer();
@@ -526,6 +535,9 @@ async function initializeOnce() {
 // Check to see if we are running in a local environment
     checkLocal()
 
+    // Check if running in serverless mode (IndexedDB-based)
+    await checkServerlessMode();
+
     await checkLogin();
 
     console.log('About to initialize NodeMan and DragDropHandler');
@@ -576,14 +588,33 @@ async function initializeOnce() {
 // Get all the text based sitches from the server
 
 // these are the sitches defined by <name>.sitch.js files inside the folder of the same name in data
-    let textSitches = [];
-    console.log("Getting TEXT BASED Sitches from: "+ SITREC_SERVER+"getsitches.php");
-    await fetch((SITREC_SERVER+"getsitches.php"), {mode: 'cors'}).then(response => response.text()).then(data => {
-//        console.log("TEXT BASED Sitches: " + data)
-//        console.log ("parsed data: ")
-        textSitches = JSON.parse(data) // will give an array of text based sitches
-//        console.log ("parse done");
-    })
+    let textSitches = {};
+    
+    if (isServerless) {
+        // In serverless mode, fetch text sitches from the data folder
+        console.log("Serverless mode: loading text-based sitches from data folder");
+        try {
+            // Try to load SitCustom.js from the data folder
+            const customSitchResponse = await fetch('./data/custom/SitCustom.js');
+            if (customSitchResponse.ok) {
+                const customSitchText = await customSitchResponse.text();
+                textSitches['custom'] = customSitchText;
+                console.log("Loaded SitCustom from data folder");
+            } else {
+                console.warn("Failed to load SitCustom.js - status: " + customSitchResponse.status);
+            }
+        } catch (e) {
+            console.error("Error loading SitCustom.js in serverless mode: " + e);
+        }
+    } else {
+        // In server mode, fetch text sitches from PHP endpoint
+        const sitchesURL = SITREC_SERVER + "getsitches.php";
+        console.log("Getting TEXT BASED Sitches from: " + sitchesURL);
+        
+        await fetch(sitchesURL, {mode: 'cors'}).then(response => response.text()).then(data => {
+            textSitches = JSON.parse(data); // will give an object of text based sitches
+        });
+    }
 
     registerSitches(textSitches);
 

@@ -1,8 +1,10 @@
 // SettingsManager.js
-// Handles loading and saving user settings from both cookies and server (S3)
+// Handles loading and saving user settings from cookies, server (S3), or IndexedDB
 // The setting UI is set up in setupSettingsMenu()
 
 import {Globals} from "./Globals";
+import {indexedDBManager} from "./IndexedDBManager";
+import {isServerless} from "./configUtils";
 
 // Cookie helper functions for settings
 function setCookie(name, value, days) {
@@ -20,7 +22,7 @@ function getCookie(name) {
 // Sanitize settings to prevent exploits
 // NOTE: When adding new settings, you must update BOTH:
 //   1. This function (SettingsManager.js)
-//   2. sanitizeSettings() in settings.php (server-side)
+//   2. sanitizeSettings() in settings.php (server-side) if using PHP backend
 export function sanitizeSettings(settings) {
     const sanitized = {};
     
@@ -32,6 +34,36 @@ export function sanitizeSettings(settings) {
     }
     
     return sanitized;
+}
+
+// IndexedDB-based settings functions (for serverless mode)
+export async function loadSettingsFromIndexedDB() {
+    try {
+        const settings = await indexedDBManager.getAllSettings();
+        if (Object.keys(settings).length > 0) {
+            const sanitized = sanitizeSettings(settings);
+            console.log("Loaded settings from IndexedDB:", sanitized);
+            return sanitized;
+        }
+        return null;
+    } catch (e) {
+        console.warn("Failed to load settings from IndexedDB:", e);
+        return null;
+    }
+}
+
+export async function saveSettingsToIndexedDB(settings) {
+    try {
+        const sanitized = sanitizeSettings(settings);
+        for (const [key, value] of Object.entries(sanitized)) {
+            await indexedDBManager.setSetting(key, value);
+        }
+        console.log("Saved settings to IndexedDB:", sanitized);
+        return true;
+    } catch (e) {
+        console.warn("Failed to save settings to IndexedDB:", e);
+        return false;
+    }
 }
 
 // Load settings from cookie
@@ -133,11 +165,16 @@ export async function saveSettingsToServer(settings) {
 }
 
 /**
- * Initialize settings by loading from server (if logged in) or cookies
+ * Initialize settings by loading from appropriate source
+ * Priority order:
+ * 1. Server (if logged in and not serverless)
+ * 2. IndexedDB (if serverless)
+ * 3. Cookie (fallback)
+ * 
  * NOTE: When adding new settings, remember to:
  *   1. Add default value here
  *   2. Update sanitizeSettings() in this file
- *   3. Update sanitizeSettings() in settings.php
+ *   3. Update sanitizeSettings() in settings.php (if using PHP backend)
  *   4. Add UI control in CustomSupport.js setupSettingsMenu()
  *   5. Add tests in SettingsManager.test.js
  * @returns {Promise<Object>} The loaded settings object
@@ -150,7 +187,24 @@ export async function initializeSettings() {
         };
     }
     
-    // Try to load from server first (if logged in)
+    // Serverless mode - use IndexedDB
+    if (isServerless) {
+        const indexedDBSettings = await loadSettingsFromIndexedDB();
+        if (indexedDBSettings && Object.keys(indexedDBSettings).length > 0) {
+            Object.assign(Globals.settings, indexedDBSettings);
+            console.log("Using IndexedDB settings (serverless mode)");
+            return Globals.settings;
+        }
+        // Fall back to cookie if IndexedDB is empty
+        const savedSettings = loadSettingsFromCookie();
+        if (savedSettings) {
+            Object.assign(Globals.settings, savedSettings);
+            console.log("Using cookie settings (serverless mode)");
+        }
+        return Globals.settings;
+    }
+    
+    // Server mode - try server first (if logged in)
     if (Globals.userID > 0) {
         const serverSettings = await loadSettingsFromServer();
         if (serverSettings && Object.keys(serverSettings).length > 0) {
@@ -171,12 +225,22 @@ export async function initializeSettings() {
 }
 
 /**
- * Save settings to server (if logged in) and/or cookies
+ * Save settings to appropriate storage
+ * Serverless mode: saves to IndexedDB + cookie
+ * Server mode: saves to server + cookie
  * @param {Object} settings - The settings object to save
  * @returns {Promise<boolean>} True if saved successfully
  */
 export async function saveSettings(settings) {
-    // Try to save to server first (if logged in)
+    // Serverless mode - use IndexedDB
+    if (isServerless) {
+        const indexedDBSuccess = await saveSettingsToIndexedDB(settings);
+        // Also save to cookie as backup/compatibility
+        saveSettingsToCookie(settings);
+        return indexedDBSuccess;
+    }
+    
+    // Server mode - try to save to server first (if logged in)
     if (Globals.userID > 0) {
         const success = await saveSettingsToServer(settings);
         if (success) {
