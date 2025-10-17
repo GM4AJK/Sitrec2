@@ -95,6 +95,29 @@ module.exports = {
         new MiniCssExtractPlugin(),
         new HtmlWebpackPlugin({
             title: "Sitrec - Metabunk's Situation Recreation Tool",
+            meta: {
+                'apple-touch-icon': {
+                    rel: 'apple-touch-icon',
+                    sizes: '180x180',
+                    href: '/apple-touch-icon.png'
+                },
+                'favicon-32': {
+                    rel: 'icon',
+                    type: 'image/png',
+                    sizes: '32x32',
+                    href: '/favicon-32x32.png'
+                },
+                'favicon-16': {
+                    rel: 'icon',
+                    type: 'image/png',
+                    sizes: '16x16',
+                    href: '/favicon-16x16.png'
+                },
+                'manifest': {
+                    rel: 'manifest',
+                    href: '/site.webmanifest'
+                }
+            }
         }),
         new webpack.ProvidePlugin({
             Buffer: ['buffer', 'Buffer'],

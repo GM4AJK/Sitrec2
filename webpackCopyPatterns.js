@@ -68,4 +68,13 @@ if (!isServerlessBuild) {
     });
 }
 
+// Copy favicon and manifest files
+patterns.push(
+    { from: "apple-touch-icon.png", to: "./" },
+    { from: "favicon-512.png", to: "./" },
+    { from: "favicon-32x32.png", to: "./" },
+    { from: "favicon-16x16.png", to: "./" },
+    { from: "site.webmanifest", to: "./" }
+);
+
 module.exports = patterns;
