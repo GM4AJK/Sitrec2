@@ -1162,6 +1162,41 @@ function windowChanged() {
     updateSize();
 }
 
+/**
+ * Check if there are any pending tile loads in QuadTree maps
+ * @returns {boolean} true if any tiles are currently loading
+ */
+function hasPendingTiles() {
+    let hasPending = false;
+    
+    NodeMan.iterate((key, node) => {
+        // Check for terrain nodes with elevation and texture maps
+        if (node.elevationMap !== undefined && node.elevationMap.getTileCount !== undefined) {
+            // Check elevation map for pending tiles
+            node.elevationMap.forEachTile((tile) => {
+                if (tile.isLoading || tile.isLoadingElevation) {
+                    hasPending = true;
+                }
+            });
+        }
+        
+        // Check texture maps for pending tiles
+        if (node.maps !== undefined) {
+            for (const mapID in node.maps) {
+                if (node.maps[mapID].map !== undefined && node.maps[mapID].map.forEachTile !== undefined) {
+                    node.maps[mapID].map.forEachTile((tile) => {
+                        if (tile.isLoading) {
+                            hasPending = true;
+                        }
+                    });
+                }
+            }
+        }
+    });
+    
+    return hasPending;
+}
+
 
 function renderMain(elapsed) {
 
@@ -1176,8 +1211,15 @@ function renderMain(elapsed) {
         console.log("Pending actions: " + Globals.pendingActions)
     } else if (Globals.wasPending > 0) {
         Globals.wasPending--;
-        if (Globals.wasPending === 0)
-            console.log("No pending actions")
+        if (Globals.wasPending === 0) {
+            // Check for pending tiles before declaring all actions complete
+            if (!hasPendingTiles()) {
+                console.log("No pending actions")
+            } else {
+                // If there are pending tiles, reset the counter to wait for them
+                Globals.wasPending = 5;
+            }
+        }
 
     }
 
