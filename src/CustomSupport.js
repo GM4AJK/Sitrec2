@@ -76,6 +76,33 @@ export class CCustomManager {
     async saveSettings(immediate = false) {
         await this.settingsSaver.save(immediate);
     }
+
+    /**
+     * Dispose a 3D object and all its controllers
+     * Properly cleans up controller resources (like smoothedTracks in ObjectTilt)
+     * @param {string|CNode} nodeId - The node ID or node instance to dispose
+     */
+    disposeObjectWithControllers(nodeId) {
+        const node = NodeMan.get(nodeId, false);
+        if (!node) return;
+        
+        // Dispose all controllers first (they may have their own resources to clean up)
+        const controllerIds = [];
+        for (const inputId in node.inputs) {
+            const input = node.inputs[inputId];
+            if (input.isController) {
+                controllerIds.push(input.id);
+            }
+        }
+        
+        // Dispose controllers
+        for (const controllerId of controllerIds) {
+            NodeMan.disposeRemove(controllerId);
+        }
+        
+        // Finally dispose the object itself
+        NodeMan.disposeRemove(nodeId);
+    }
     
     setupSettingsMenu() {
         // Create Settings folder in the Sitrec menu
@@ -1340,8 +1367,18 @@ export class CCustomManager {
                     objectNode.addController("TrackPosition", {
                         sourceTrack: trackOb.trackID
                     });
+
+                    // Add ObjectTilt controller to the object to face the track direction
+                    // NOTE: ObjectTilt creates internal CNodeSmoothedPositionTrack that must be cleaned up
+                    // When disposing this object, use: CustomMan.disposeObjectWithControllers(objectID)
+                    objectNode.addController("ObjectTilt", {
+                        track: trackOb.trackID,
+                        tiltType: "frontPointing"
+                    });
                 }
-                
+
+
+
                 console.log(`Created object ${objectID} with track at ${lat}, ${lon}, ${alt}m`);
                 menu.destroy();
             },
@@ -1521,6 +1558,22 @@ export class CCustomManager {
 
 
     removeAllTracks() {
+        // First, dispose any synthetic objects that might be associated with tracks
+        // This ensures their controllers are properly cleaned up
+        const nodesToDispose = [];
+        NodeMan.iterate((id, node) => {
+            // Find any synthetic 3D objects (typically starting with "syntheticObject_")
+            if (id.startsWith("syntheticObject_") && node.inputs) {
+                nodesToDispose.push(id);
+            }
+        });
+        
+        // Dispose objects with their controllers
+        for (const objectId of nodesToDispose) {
+            this.disposeObjectWithControllers(objectId);
+        }
+        
+        // Then dispose all tracks
         TrackManager.iterate( (id, track) => {
             TrackManager.disposeRemove(id)
         })
