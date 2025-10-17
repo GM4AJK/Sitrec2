@@ -122,6 +122,6 @@ export function debugLog(text) {
     if (debugView) {
         debugView.log(text);
     } else {
-        console.log("Debug:", text);
+      //  console.log("Debug:", text);
     }
 }
