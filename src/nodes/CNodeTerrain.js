@@ -166,53 +166,53 @@ export class CNodeTerrain extends CNode {
             const terrain = this;
             
             // Show elevation map stats for mainView
-            labelMainViewTerrain.addText("elevationTileStatsMainView", "", 100, 4, 1.5, "#f0f00080", "right").update(function() {
+            labelMainViewTerrain.addText("elevationTileStatsMainView", "", 100, 4, 1.5, "#FFFFFF", "right").update(function() {
                 this.text = "";
-                
+
                 // Get stats from elevation map
                 if (terrain.elevationMap && terrain.elevationMap.currentStats) {
                     const elevStats = terrain.elevationMap.currentStats.get('mainView');
                     if (elevStats) {
-                        this.text = `Elev [mainView] Total: ${elevStats.totalTileCount}, Active: ${elevStats.activeTileCount}, Inactive: ${elevStats.inactiveTileCount}, Pending: ${elevStats.pendingLoads}, Lazy: ${elevStats.lazyLoading}`;
+                        this.text = `Elev [main] ${elevStats.totalTileCount}, Act ${elevStats.activeTileCount}, In: ${elevStats.inactiveTileCount}, Pend: ${elevStats.pendingLoads}, Lazy: ${elevStats.lazyLoading}`;
                     }
                 }
             });
             
             // Show texture map stats for mainView
-            labelMainViewTerrain.addText("textureTileStatsMainView", "", 100, 5.5, 1.5, "#f0f00080", "right").update(function() {
+            labelMainViewTerrain.addText("textureTileStatsMainView", "", 100, 5.5, 1.5, "#FFFFFF", "right").update(function() {
                 this.text = "";
                 
                 // Get stats from texture map
                 if (terrain.UI && terrain.maps[terrain.UI.mapType] && terrain.maps[terrain.UI.mapType].map && terrain.maps[terrain.UI.mapType].map.currentStats) {
                     const texStats = terrain.maps[terrain.UI.mapType].map.currentStats.get('mainView');
                     if (texStats) {
-                        this.text = `Tex [mainView] Total: ${texStats.totalTileCount}, Active: ${texStats.activeTileCount}, Inactive: ${texStats.inactiveTileCount}, Pending: ${texStats.pendingLoads}, Lazy: ${texStats.lazyLoading}`;
+                        this.text = `Tex [mainView] ${texStats.totalTileCount}, Act: ${texStats.activeTileCount}, In: ${texStats.inactiveTileCount}, Pend: ${texStats.pendingLoads}, Lazy: ${texStats.lazyLoading}`;
                     }
                 }
             });
             
             // Show elevation map stats for lookView
-            labelMainViewTerrain.addText("elevationTileStatsLookView", "", 100, 7, 1.5, "#f0f00080", "right").update(function() {
+            labelMainViewTerrain.addText("elevationTileStatsLookView", "", 100, 7, 1.5, "#FFFFFF", "right").update(function() {
                 this.text = "";
                 
                 // Get stats from elevation map for lookView
                 if (terrain.elevationMap && terrain.elevationMap.currentStats) {
                     const elevStats = terrain.elevationMap.currentStats.get('lookView');
                     if (elevStats) {
-                        this.text = `Elev [lookView] Total: ${elevStats.totalTileCount}, Active: ${elevStats.activeTileCount}, Inactive: ${elevStats.inactiveTileCount}, Pending: ${elevStats.pendingLoads}, Lazy: ${elevStats.lazyLoading}`;
+                        this.text = `Elev [lookView] ${elevStats.totalTileCount}, Act: ${elevStats.activeTileCount}, In: ${elevStats.inactiveTileCount}, Pend: ${elevStats.pendingLoads}, Lazy: ${elevStats.lazyLoading}`;
                     }
                 }
             });
             
             // Show texture map stats for lookView
-            labelMainViewTerrain.addText("textureTileStatsLookView", "", 100, 8.5, 1.5, "#f0f00080", "right").update(function() {
+            labelMainViewTerrain.addText("textureTileStatsLookView", "", 100, 8.5, 1.5, "#FFFFFF", "right").update(function() {
                 this.text = "";
                 
                 // Get stats from texture map for lookView
                 if (terrain.UI && terrain.maps[terrain.UI.mapType] && terrain.maps[terrain.UI.mapType].map && terrain.maps[terrain.UI.mapType].map.currentStats) {
                     const texStats = terrain.maps[terrain.UI.mapType].map.currentStats.get('lookView');
                     if (texStats) {
-                        this.text = `Tex [lookView] Total: ${texStats.totalTileCount}, Active: ${texStats.activeTileCount}, Inactive: ${texStats.inactiveTileCount}, Pending: ${texStats.pendingLoads}, Lazy: ${texStats.lazyLoading}`;
+                        this.text = `Tex [lookView] ${texStats.totalTileCount}, Act: ${texStats.activeTileCount}, In: ${texStats.inactiveTileCount}, Pend: ${texStats.pendingLoads}, Lazy: ${texStats.lazyLoading}`;
                     }
                 }
             });
