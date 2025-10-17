@@ -5,26 +5,35 @@ const InstallPaths = require('./config/config-install');
 // So we don't need to copy it to the webpack output directory
 const isDockerDev = process.env.NODE_ENV === 'development' && InstallPaths.dev_path === '/var/www/html';
 
-const patterns = [
-    // copies the data directory
-    { from: "data", to: "./data"},
+const isServerlessBuild = process.env.IS_SERVERLESS_BUILD === 'true';
 
-    // Web worker source code needs to be loaded at run time
-    // so we just copy it over
-    // This is currently not used
-    { from: "./src/workers/*.js", to:""},
-    { from: "./src/PixelFilters.js", to:"./src"},
-    
-    // Copy tools directory
-    { from: "tools", to: "./tools"},
-];
+const patterns = [];
+
+// Data directory handling
+if (isServerlessBuild) {
+    // For serverless: only copy essential data directories
+    const serverlessDataDirs = ['custom', 'images', 'models', 'modelInspector', 'nightsky'];
+    serverlessDataDirs.forEach(dir => {
+        patterns.push({ from: `data/${dir}`, to: `./data/${dir}` });
+    });
+} else {
+    // For non-serverless: copy entire data directory
+    patterns.push({ from: "data", to: "./data" });
+}
+
+// Web worker source code needs to be loaded at run time
+// so we just copy it over
+// This is currently not used
+patterns.push({ from: "./src/workers/*.js", to:"" });
+patterns.push({ from: "./src/PixelFilters.js", to:"./src" });
+
+// Copy tools directory
+patterns.push({ from: "tools", to: "./tools" });
 
 // Only copy sitrecServer and config.php in non-serverless, non-Docker environments
 // - Docker dev: Apache serves sitrecServer via proxy, so don't copy
 // - Serverless: Zero PHP files in output
 // - Local NGINX/prod: Copy sitrecServer for serving PHP
-const isServerlessBuild = process.env.IS_SERVERLESS_BUILD === 'true';
-
 if (!isDockerDev && !isServerlessBuild) {
     // Copy sitrecServer directory, but exclude config.php (we'll copy it separately)
     // This prevents copying the empty placeholder file that Docker creates

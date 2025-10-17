@@ -1,8 +1,13 @@
+// Set the serverless build flag FIRST, before any imports
+// This must happen before webpack.common.js is loaded, since it imports webpackCopyPatterns
+process.env.IS_SERVERLESS_BUILD = 'true';
+
 const { merge } = require('webpack-merge');
 const common = require('./webpack.common.js');
 const path = require('path');
 const fs = require('fs');
 const CopyPlugin = require("copy-webpack-plugin");
+
 const copyPatterns = require('./webpackCopyPatterns');
 
 // Create a serverless build directory
@@ -15,10 +20,14 @@ class GenerateSitchesManifestPlugin {
             const dataDir = path.resolve(__dirname, 'data');
             const manifest = {};
 
+            // Exclude non-text sitches (data-dependent sitches not suitable for serverless)
+            const excludedSitches = ['agua', 'faa2023', 'gimbal', 'gofast', 'pvs14'];
+
             // Read all directories in data folder
             const folders = fs.readdirSync(dataDir).filter(f => {
                 return fs.statSync(path.join(dataDir, f)).isDirectory() &&
-                       f !== '.' && f !== '..';
+                       f !== '.' && f !== '..' &&
+                       !excludedSitches.includes(f.toLowerCase());
             });
 
             // For each folder, look for a Sit*.js file
@@ -104,33 +113,7 @@ module.exports = merge(common, {
             'process.env.IS_SERVERLESS_BUILD': JSON.stringify('true'),
         }),
         new CopyPlugin({
-            patterns: [
-                // Copy data folder (for sitches)
-                {
-                    from: path.resolve(__dirname, 'data'),
-                    to: path.resolve(serverlessPath, 'data'),
-                    globOptions: {
-                        ignore: [
-                            '**/*.map', // Ignore source maps
-                            '**/.DS_Store', // Ignore macOS files
-                        ],
-                    },
-                },
-                // Copy docs
-                {
-                    from: path.resolve(__dirname, 'docs'),
-                    to: path.resolve(serverlessPath, 'docs'),
-                    globOptions: {
-                        ignore: ['**/*.md'],
-                    },
-                },
-                // Copy config file if exists
-                {
-                    from: path.resolve(__dirname, 'src', 'config.default.js'),
-                    to: path.resolve(serverlessPath, 'config.default.js'),
-                    noErrorOnMissing: true,
-                },
-            ],
+            patterns: copyPatterns,  // Use copyPatterns which respects !isServerlessBuild conditions
         }),
         new GenerateSitchesManifestPlugin(),
         new CreateDirectoriesPlugin(),

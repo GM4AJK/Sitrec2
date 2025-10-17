@@ -3,6 +3,7 @@ import {SitchMan} from "./Globals";
 import {parseJavascriptObject} from "./Serialize";
 import {checkForModding} from "./utils";
 import {showError} from "./showError";
+import {isServerless} from "./configUtils";
 
 //////////////////////////////////////////////////////////////////////////////////////
 // Note. This failed once due to what seemed to be a circular dependency
@@ -30,12 +31,18 @@ import {showError} from "./showError";
 // this might be worth normalizing so names are consistent (i.e. SitAguadilla is added as "aguadilla")
 
 export function registerSitchModule(key, moduleExports) {
+    // Exclude non-text sitches in serverless mode
+    const excludedInServerless = isServerless ? ['agua', 'faa2023', 'gimbal', 'gimbalnear', 'gimbalsr71', 'gofast', 'pvs14'] : [];
+    
     Object.keys(moduleExports).forEach(exportKey => {
         const exportObject = moduleExports[exportKey];
 //            console.log("Checking key: "+key+ " Which exports = "+exportKey)
         if(exportKey.startsWith('Sit')) {
 //            console.log("Found Sitch: "+key+ " Sitch Object Name = "+exportKey)
-            SitchMan.add(exportObject.name, exportObject);
+            // Skip excluded sitches in serverless mode
+            if (!excludedInServerless.includes(exportObject.name)) {
+                SitchMan.add(exportObject.name, exportObject);
+            }
             //const sitchName = exportKey.substring(3);
             //SitchMan.add(sitchName, exportObject);
 
