@@ -5,7 +5,7 @@
 // take their size from the div.
 //
 import {CNode} from './CNode.js'
-import {Globals, guiShowHideViews, infoDiv, NodeMan, Sit} from "../Globals";
+import {Globals, guiShowHideViews, NodeMan} from "../Globals";
 import {assert} from "../assert.js";
 import {ViewMan} from "../CViewManager";
 import {makeDraggable, makeResizable, removeDraggable, removeResizable} from "../DragResizeUtils";
@@ -414,9 +414,9 @@ class CNodeView extends CNode {
             this.div.style.height = this.heightPx + 'px'
         }
 
-       // if (oldHeight !== this.heightPx || oldWidth !== this.widthPx) {
+        if (oldHeight !== this.heightPx || oldWidth !== this.widthPx) {
             this.changedSize();
-       // }
+        }
 
 
     }
