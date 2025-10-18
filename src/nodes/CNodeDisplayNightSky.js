@@ -445,6 +445,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.addSimpleSerial("showConstellations")
         this.addConstellationLines(this.constellationsGroup)
         
+        this.showStars = (v.showStars !== undefined) ? v.showStars : true;
+        this.celestialGUI.add(this,"showStars" ).listen().onChange(()=>{
+            setRenderOne(true);
+            this.updateVis()
+        }).name("Render Stars")
+        this.addSimpleSerial("showStars")
 
         this.addConstellationNames(this.constellationsGroup);
 
@@ -1389,6 +1395,9 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         this.equatorialSphereGroup.visible = this.showEquatorialGrid;
         this.constellationsGroup.visible = this.showConstellations;
+        if (this.starSprites) {
+            this.starSprites.visible = this.showStars;
+        }
 
         // equatorial lines might not want to be in the look view
         this.equatorialSphereGroup.layers.mask = this.showEquatorialGridLook ? LAYER.MASK_MAINRENDER : LAYER.MASK_HELPERS;
