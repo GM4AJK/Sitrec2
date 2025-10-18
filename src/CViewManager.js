@@ -71,6 +71,26 @@ class CViewManager extends CManager {
         }
     }
 
+    // Detect if we're in side-by-side rendering mode
+    // Returns true if both mainView and lookView are visible and positioned side-by-side
+    isSideBySideMode() {
+        const mainView = this.get("mainView", false);
+        const lookView = this.get("lookView", false);
+        
+        if (!mainView || !lookView || !mainView.visible || !lookView.visible) {
+            return false;
+        }
+        
+        // Check if views are positioned horizontally (side-by-side)
+        // Typically: mainView width < 1 and lookView width < 1
+        const mainWidth = Math.abs(mainView.width ?? 1);
+        const lookWidth = Math.abs(lookView.width ?? 1);
+        
+        // Side-by-side if combined width is approximately 1 (accounting for negative widths)
+        // and both have reduced width
+        return mainWidth < 0.9 && lookWidth < 0.9 && (mainWidth + lookWidth) > 0.9;
+    }
+
 }
 
 export var ViewMan = new CViewManager()

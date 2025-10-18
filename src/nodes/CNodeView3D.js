@@ -52,6 +52,7 @@ import {VRButton} from 'three/addons/webxr/VRButton.js';
 import {mouseInViewOnly, mouseToView} from "../ViewUtils";
 import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {CameraMapControls} from "../js/CameraControls";
+import {ViewMan} from "../CViewManager";
 import * as LAYER from "../LayerMasks";
 
 
@@ -146,6 +147,32 @@ export class CNodeView3D extends CNodeViewCanvas {
 
         this.setupRenderPipeline(v);
 
+        // Setup debug GUI once (shared across all views)
+        // Only add debug GUI if this is the first mainView and help menu exists
+        if (isLocal && this.id === "mainView" && guiMenus && guiMenus.help && !guiMenus.help._renderDebugFolderAdded) {
+            const debugFolder = guiMenus.debug.addFolder("Render Debug");
+            
+            // Add controls for global render debug flags (affects ALL views)
+            debugFolder.add(Globals.renderDebugFlags, "dbg_clearBackground").name("Clear Background").onChange(() => setRenderOne(true));
+            debugFolder.add(Globals.renderDebugFlags, "dbg_renderSky").name("Render Sky").onChange(() => setRenderOne(true));
+            debugFolder.add(Globals.renderDebugFlags, "dbg_renderDaySky").name("Render Day Sky").onChange(() => setRenderOne(true));
+            debugFolder.add(Globals.renderDebugFlags, "dbg_renderMainScene").name("Render Main Scene").onChange(() => setRenderOne(true));
+            debugFolder.add(Globals.renderDebugFlags, "dbg_renderEffects").name("Render Effects").onChange(() => setRenderOne(true));
+            debugFolder.add(Globals.renderDebugFlags, "dbg_copyToScreen").name("Copy To Screen").onChange(() => setRenderOne(true));
+            debugFolder.add(Globals.renderDebugFlags, "dbg_updateCameraMatrices").name("Update Camera Matrices").onChange(() => setRenderOne(true));
+            
+            // Add renderSky sub-folder
+            const skyFolder = debugFolder.addFolder("Sky Steps");
+            skyFolder.add(Globals.renderDebugFlags, "dbg_updateStarScales").name("Update Star Scales").onChange(() => setRenderOne(true));
+            skyFolder.add(Globals.renderDebugFlags, "dbg_updateSatelliteScales").name("Update Satellite Scales").onChange(() => setRenderOne(true));
+            skyFolder.add(Globals.renderDebugFlags, "dbg_updateSatelliteText").name("Update Satellite Text").onChange(() => setRenderOne(true));
+            skyFolder.add(Globals.renderDebugFlags, "dbg_renderNightSky").name("Render Night Sky").onChange(() => setRenderOne(true));
+            skyFolder.add(Globals.renderDebugFlags, "dbg_renderFullscreenQuad").name("Render Fullscreen Quad").onChange(() => setRenderOne(true));
+            skyFolder.add(Globals.renderDebugFlags, "dbg_renderSunSky").name("Render Sun Sky").onChange(() => setRenderOne(true));
+            
+            // Mark that we've added the render debug folder to avoid duplicates
+            guiMenus.help._renderDebugFolderAdded = true;
+        }
 
         this.addEffects(v.effects)
         this.otherSetup(v);
@@ -227,6 +254,17 @@ export class CNodeView3D extends CNodeViewCanvas {
             this.widthPx = this.widthDiv * window.devicePixelRatio;
             this.heightPx = this.heightDiv * window.devicePixelRatio;
         }
+
+        // Apply resolution scaling for side-by-side rendering on integrated GPU
+        // Reduces internal rendering resolution by ~70% when both views are visible
+        // This dramatically improves performance on Windows integrated graphics
+        // while maintaining visual quality (CSS scaling blurs imperceptibly)
+        if (ViewMan.isSideBySideMode()) {
+            const sideBySideResolutionScale = 0.7; // ~50% pixel reduction (0.7^2 ≈ 0.49)
+            this.widthPx = Math.floor(this.widthPx * sideBySideResolutionScale);
+            this.heightPx = Math.floor(this.heightPx * sideBySideResolutionScale);
+        }
+
         this.canvas.width = this.widthPx;
         this.canvas.height = this.heightPx;
 
@@ -279,36 +317,34 @@ export class CNodeView3D extends CNodeViewCanvas {
         if (Globals.shadowsEnabled) {
             this.renderer.shadowMap.enabled = true;
         }
-        if (!Globals.renderTargetAntiAliased) {
-            // intial rendering is done to the renderTargetAntiAliased
-            // which is anti-aliased with MSAA
-            Globals.renderTargetAntiAliased = new WebGLRenderTarget(256, 256, {
-                format: RGBAFormat,
-                type: UnsignedByteType,
-                //   type: FloatType, // Use FloatType for HDR
-                colorSpace: SRGBColorSpace,
-                minFilter: NearestFilter,
-                magFilter: NearestFilter,
-                samples: 4, // Number of samples for MSAA, usually 4 or 8
-            });
+        // Per-view render targets to avoid thrashing GPU memory in split-screen mode
+        // Each view maintains its own render targets instead of sharing globals
+        this.renderTargetAntiAliased = new WebGLRenderTarget(256, 256, {
+            format: RGBAFormat,
+            type: UnsignedByteType,
+            colorSpace: SRGBColorSpace,
+            minFilter: NearestFilter,
+            magFilter: NearestFilter,
+            samples: 4, // Number of samples for MSAA
+        });
 
-            // Create the primary render target with the desired size
-            Globals.renderTargetA = new WebGLRenderTarget(256, 256, {
-                minFilter: NearestFilter,
-                magFilter: NearestFilter,
-                format: RGBAFormat,
-                colorSpace: SRGBColorSpace,
-            });
+        this.renderTargetA = new WebGLRenderTarget(256, 256, {
+            minFilter: NearestFilter,
+            magFilter: NearestFilter,
+            format: RGBAFormat,
+            colorSpace: SRGBColorSpace,
+        });
 
-            // Create the temporary render target with the desired size
-            Globals.renderTargetB = new WebGLRenderTarget(256, 256, {
-                minFilter: NearestFilter,
-                magFilter: NearestFilter,
-                format: RGBAFormat,
-                colorSpace: SRGBColorSpace,
+        this.renderTargetB = new WebGLRenderTarget(256, 256, {
+            minFilter: NearestFilter,
+            magFilter: NearestFilter,
+            format: RGBAFormat,
+            colorSpace: SRGBColorSpace,
+        });
 
-            });
-        }
+        // Track last dimensions to avoid redundant setSize() calls
+        this.lastRenderTargetWidth = 256;
+        this.lastRenderTargetHeight = 256;
 
         // Ensure GlobalScene and this.camera are defined
         if (!GlobalScene || !this.camera) {
@@ -420,24 +456,37 @@ export class CNodeView3D extends CNodeViewCanvas {
                         width = Math.floor(long * this.widthPx / this.heightPx);
                     }
 
+                    // Apply side-by-side resolution scaling to render targets as well
+                    if (ViewMan.isSideBySideMode()) {
+                        const sideBySideResolutionScale = 0.7;
+                        width = Math.floor(width * sideBySideResolutionScale);
+                        height = Math.floor(height * sideBySideResolutionScale);
+                    }
 
                 } else {
                     width = this.widthPx;
                     height = this.heightPx;
                 }
 
-
-                Globals.renderTargetAntiAliased.setSize(width, height);
-
-                if (this.effectsEnabled) {
-                    Globals.renderTargetA.setSize(width, height);
-                    Globals.renderTargetB.setSize(width, height);
+                // Only resize render targets if dimensions actually changed
+                // This avoids thrashing GPU memory in split-screen mode
+                if (width !== this.lastRenderTargetWidth || height !== this.lastRenderTargetHeight) {
+                    this.renderTargetAntiAliased.setSize(width, height);
+                    if (this.effectsEnabled) {
+                        this.renderTargetA.setSize(width, height);
+                        this.renderTargetB.setSize(width, height);
+                    }
+                    this.lastRenderTargetWidth = width;
+                    this.lastRenderTargetHeight = height;
                 }
 
-
-
-                currentRenderTarget = Globals.renderTargetAntiAliased;
+                currentRenderTarget = this.renderTargetAntiAliased;
                 this.renderer.setRenderTarget(currentRenderTarget);
+                
+                // [DBG] Clear background
+                if (Globals.renderDebugFlags.dbg_clearBackground) {
+                    this.renderer.clear(true, true, true);
+                }
                 //}
 
                 /*
@@ -485,13 +534,17 @@ export class CNodeView3D extends CNodeViewCanvas {
                     sunNode.update();
                 }
 
-
-                this.renderSky();
+                // [DBG] Render sky
+                if (Globals.renderDebugFlags.dbg_renderSky) {
+                    this.renderSky();
+                }
 
 
                 // render the day sky
                 if (GlobalDaySkyScene !== undefined) {
 
+                    // [DBG] Render day sky
+                if (Globals.renderDebugFlags.dbg_renderDaySky) {
                     var tempPos = this.camera.position.clone();
                     this.camera.position.set(0, 0, 0)
                     this.camera.updateMatrix();
@@ -507,8 +560,11 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                     this.renderer.clearDepth()
                     this.camera.position.copy(tempPos)
-                    this.camera.updateMatrix();
-                    this.camera.updateMatrixWorld();
+                    if (Globals.renderDebugFlags.dbg_updateCameraMatrices) {
+                        this.camera.updateMatrix();
+                        this.camera.updateMatrixWorld();
+                    }
+                }
 
 
                     // if tone mapping the sky, insert the tone mapping shader here
@@ -523,14 +579,14 @@ export class CNodeView3D extends CNodeViewCanvas {
 // test patch in the block of code from the effect loop
                     acesFilmicToneMappingPass.uniforms['tDiffuse'].value = currentRenderTarget.texture;
                     // flip the render targets
-                    const useRenderTarget = currentRenderTarget === Globals.renderTargetA ? Globals.renderTargetB : Globals.renderTargetA;
+                    const useRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
 
                     this.renderer.setRenderTarget(useRenderTarget);
                     this.fullscreenQuad.material = acesFilmicToneMappingPass.material;  // Set the material to the current effect pass
-                    this.renderer.render(this.fullscreenQuad, new Camera());
+                    this.renderer.render(this.fullscreenQuadScene, this.fullscreenQuadCamera);
                     this.renderer.clearDepth()
 
-                    currentRenderTarget = currentRenderTarget === Globals.renderTargetA ? Globals.renderTargetB : Globals.renderTargetA;
+                    currentRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
                 }
 
 
@@ -549,9 +605,11 @@ export class CNodeView3D extends CNodeViewCanvas {
                 }
 
 
-                // Render the scene to the off-screen canvas or render target
-
-                this.renderer.render(GlobalScene, this.camera);
+                // [DBG] Render main scene
+                if (Globals.renderDebugFlags.dbg_renderMainScene) {
+                    // Render the scene to the off-screen canvas or render target
+                    this.renderer.render(GlobalScene, this.camera);
+                }
 
                 if (this.layers !== undefined) {
                     this.camera.layers.mask = oldLayers;
@@ -569,47 +627,50 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                 if (this.effectsEnabled) {
 
-                    //   this.renderer.setRenderTarget(null);
+                    // [DBG] Render effects
+                    if (Globals.renderDebugFlags.dbg_renderEffects) {
+                        //   this.renderer.setRenderTarget(null);
 
-                    // Apply each effect pass sequentially
-                    for (let effectName in this.effectPasses) {
-                        const effectNode = this.effectPasses[effectName];
-                        if (!effectNode.enabled) continue;
-                        let effectPass = effectNode.pass;
+                        // Apply each effect pass sequentially
+                        for (let effectName in this.effectPasses) {
+                            const effectNode = this.effectPasses[effectName];
+                            if (!effectNode.enabled) continue;
+                            let effectPass = effectNode.pass;
 
-                        // the efferctNode has an optional filter type for the source texture
-                        // which will be from the PREVIOUS effect pass's render target
-                        switch (effectNode.filter.toLowerCase()) {
-                            case "linear":
-                                forceFilterChange(currentRenderTarget.texture, LinearFilter, this.renderer);
-                                break;
-                            case "nearest":
-                            default:
-                                forceFilterChange(currentRenderTarget.texture, NearestFilter, this.renderer);
-                                break;
+                            // the efferctNode has an optional filter type for the source texture
+                            // which will be from the PREVIOUS effect pass's render target
+                            switch (effectNode.filter.toLowerCase()) {
+                                case "linear":
+                                    forceFilterChange(currentRenderTarget.texture, LinearFilter, this.renderer);
+                                    break;
+                                case "nearest":
+                                default:
+                                    forceFilterChange(currentRenderTarget.texture, NearestFilter, this.renderer);
+                                    break;
+                            }
+
+                            // Ensure the texture parameters are applied
+                            // currentRenderTarget.texture.needsUpdate = true;
+
+                            effectPass.uniforms['tDiffuse'].value = currentRenderTarget.texture;
+                            // flip the render targets
+                            const useRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
+
+                            this.renderer.setRenderTarget(useRenderTarget);
+                            //this.renderer.clear(true, true, true);
+                            this.fullscreenQuad.material = effectPass.material;  // Set the material to the current effect pass
+                            this.renderer.render(this.fullscreenQuad, this.fullscreenQuadCamera);
+                            currentRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
                         }
-
-                        // Ensure the texture parameters are applied
-                        // currentRenderTarget.texture.needsUpdate = true;
-
-                        effectPass.uniforms['tDiffuse'].value = currentRenderTarget.texture;
-                        // flip the render targets
-                        const useRenderTarget = currentRenderTarget === Globals.renderTargetA ? Globals.renderTargetB : Globals.renderTargetA;
-
-                        this.renderer.setRenderTarget(useRenderTarget);
-                        //this.renderer.clear(true, true, true);
-                        this.fullscreenQuad.material = effectPass.material;  // Set the material to the current effect pass
-                        this.renderer.render(this.fullscreenQuad, new Camera());
-                        currentRenderTarget = currentRenderTarget === Globals.renderTargetA ? Globals.renderTargetB : Globals.renderTargetA;
                     }
                 }
 
-                // Render the final texture to the screen, id we were using a render target.
-                if (currentRenderTarget !== null) {
+                // [DBG] Render the final texture to the screen, id we were using a render target.
+                if (Globals.renderDebugFlags.dbg_copyToScreen && currentRenderTarget !== null) {
                     this.copyMaterial.uniforms['tDiffuse'].value = currentRenderTarget.texture;
                     this.fullscreenQuad.material = this.copyMaterial;  // Set the material to the copy material
                     this.renderer.setRenderTarget(null);
-                    this.renderer.render(this.fullscreenQuad, new Camera());
+                    this.renderer.render(this.fullscreenQuad, this.fullscreenQuadCamera);
                 }
 
 
@@ -648,7 +709,13 @@ export class CNodeView3D extends CNodeViewCanvas {
 
         this.fullscreenQuadGeometry = new PlaneGeometry(2, 2);
 
-        this.skyCamera = new Camera();
+        // Reuse camera for fullscreen quads instead of creating new ones every frame
+        // This prevents GC pressure from allocating 6-9 Camera objects per frame in split-screen
+        this.fullscreenQuadCamera = new Camera();
+        this.fullscreenQuadCamera.position.z = 1;
+        this.fullscreenQuadCamera.parent = null;  // Ensure parent is set to avoid undefined access
+        this.fullscreenQuadCamera.updateMatrix();
+        this.fullscreenQuadCamera.updateMatrixWorld();
 
         this.fullscreenQuad = new Mesh(this.fullscreenQuadGeometry, this.skyBrightnessMaterial);
         this.fullscreenQuadScene = new Scene();
@@ -674,11 +741,18 @@ export class CNodeView3D extends CNodeViewCanvas {
 
             // // scale the sprites one for each viewport
             const nightSkyNode = NodeMan.get("NightSkyNode")
-            nightSkyNode.updateStarScales(this)
-            nightSkyNode.updateSatelliteScales(this)
+            
+            if (Globals.renderDebugFlags.dbg_updateStarScales) {
+                nightSkyNode.updateStarScales(this)
+            }
+            
+            if (Globals.renderDebugFlags.dbg_updateSatelliteScales) {
+                nightSkyNode.updateSatelliteScales(this)
+            }
 
-            if (this.id === "lookView" && nightSkyNode.showSatelliteNames
-            || this.id === "mainView" && nightSkyNode.showSatelliteNamesMain) {
+            if (Globals.renderDebugFlags.dbg_updateSatelliteText && (
+                this.id === "lookView" && nightSkyNode.showSatelliteNames
+                || this.id === "mainView" && nightSkyNode.showSatelliteNamesMain)) {
                 // updating the satellite text is just applying the offset per viewport
                 nightSkyNode.updateSatelliteText(this)
             }
@@ -707,7 +781,7 @@ export class CNodeView3D extends CNodeViewCanvas {
 
 
             // only draw the night sky if it will be visible
-            if (skyOpacity < 1) {
+            if (skyOpacity < 1 && Globals.renderDebugFlags.dbg_renderNightSky) {
 
                 this.renderer.clear(true, true, true);
 
@@ -745,14 +819,16 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                 this.updateSkyUniforms(skyColor, skyOpacity);
 
-
-                this.renderer.autoClear = false;
-                this.renderer.render(this.fullscreenQuadScene, this.skyCamera);
-                //this.renderer.autoClear = true;
-                this.renderer.clearDepth();
+                
+                if (Globals.renderDebugFlags.dbg_renderFullscreenQuad) {
+                    this.renderer.autoClear = false;
+                    this.renderer.render(this.fullscreenQuadScene, this.fullscreenQuadCamera);
+                    //this.renderer.autoClear = true;
+                    this.renderer.clearDepth();
+                }
                 
                 // Render the day sky scene (which contains the sun) on top of the sky brightness overlay
-                if (GlobalSunSkyScene) {
+                if (GlobalSunSkyScene && Globals.renderDebugFlags.dbg_renderSunSky) {
 
                     var tempPos = this.camera.position.clone();
                     this.camera.position.set(0, 0, 0);
@@ -982,8 +1058,12 @@ export class CNodeView3D extends CNodeViewCanvas {
 
 //      this.renderer.setClearColor(this.background);
 
-        let rgb = new Color(this.background)
-        let srgb = linearToSrgb(rgb);
+        // Reuse color objects to avoid GC pressure in the render loop
+        if (!this._bgColor) this._bgColor = new Color(this.background);
+        else this._bgColor.set(this.background);
+        
+        if (!this._srgbColor) this._srgbColor = linearToSrgb(this._bgColor);
+        else this._srgbColor.copy(linearToSrgb(this._bgColor));
 //        console.log("this.background = "+this.background);
 //        console.log("Background = "+rgb.r+","+rgb.g+","+rgb.b+" sRGB = "+srgb.r+","+srgb.g+","+srgb.b)
 

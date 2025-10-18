@@ -6,7 +6,26 @@ export function incrementMainLoopCount() {
 
 export var Globals = {
     editingTrack: null,  // Reference to the CMetaTrack currently being edited
-    GPUMemoryMonitor: null  // GPU Memory Monitor instance
+    GPUMemoryMonitor: null,  // GPU Memory Monitor instance
+    debugGPUBacklog: false,  // Enable logging of GPU buffer flushes
+    
+    // Granular render debug flags - shared across ALL views
+    renderDebugFlags: {
+        dbg_clearBackground: true,
+        dbg_renderSky: true,
+        dbg_renderDaySky: true,
+        dbg_renderMainScene: true,
+        dbg_renderEffects: true,
+        dbg_copyToScreen: true,
+        dbg_updateCameraMatrices: true,
+        // Granular renderSky() step flags
+        dbg_updateStarScales: true,
+        dbg_updateSatelliteScales: true,
+        dbg_updateSatelliteText: true,
+        dbg_renderNightSky: true,
+        dbg_renderFullscreenQuad: true,
+        dbg_renderSunSky: true
+    }
 }
 
 export function setGPUMemoryMonitor(monitor) {

@@ -137,6 +137,16 @@ export class CCustomManager {
                 }
             })
             .listen();
+        
+        // Add FPS Limit dropdown
+        settingsFolder.add(Globals.settings, "fpsLimit", [60, 30, 20, 15])
+            .name("Frame Rate Limit")
+            .tooltip("Set maximum frame rate (60, 30, 20, or 15 fps)")
+            .onChange(() => {
+                // Save settings when changed
+                this.saveSettings();
+            })
+            .listen();
     }
 
     /**

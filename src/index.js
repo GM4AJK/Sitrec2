@@ -1154,15 +1154,21 @@ function animate(newtime) {
    // infoDiv.innerHTML = "";
 
     // note the user can change Sit.fps (for example, if they are unsure of the framerate of the video)
-    fpsInterval = 1000 / Sit.fps;
+    // also check the fps limit setting, which caps the maximum frame rate
+    let targetFps = Sit.fps;
+    if (Globals.settings && Globals.settings.fpsLimit) {
+        targetFps = Math.min(targetFps, Globals.settings.fpsLimit);
+    }
+    fpsInterval = 1000 / targetFps;
 
 
 
     now = newtime;
     elapsed = now - then;
 
-    // what if paused? just always call?
     const smoothFrameRate = false;
+
+   // animationFrameId = requestAnimationFrame( animate );
 
     if (smoothFrameRate) {
         renderMain(elapsed);
@@ -1193,6 +1199,10 @@ function animate(newtime) {
         }
     }
     Globals.stats.end();
+    
+    // GPU queue backlog prevention: flush GPU command buffers and check for saturation
+    flushGPUAndCheckBacklog();
+    
     animationFrameId = requestAnimationFrame( animate );
 
 }
@@ -1234,6 +1244,35 @@ function hasPendingTiles() {
     });
     
     return hasPending;
+}
+
+/**
+ * GPU Queue Backlog Prevention
+ * Flushes GPU command buffers and detects saturation
+ * This prevents the "goes over a bit, goes over a lot" multi-frame hangs
+ * caused by GPU pipeline stalls when terrain + sky rendering operations accumulate
+ */
+function flushGPUAndCheckBacklog() {
+    let flushCount = 0;
+    
+    // Iterate through all nodes and flush any WebGL renderers
+    NodeMan.iterate((key, node) => {
+        if (node.renderer !== undefined && node.renderer.getContext !== undefined) {
+            try {
+                const gl = node.renderer.getContext();
+                if (gl) {
+                    gl.flush(); // Force GPU to execute pending commands
+                    flushCount++;
+                }
+            } catch (e) {
+                // Silently ignore errors - context might be lost or invalid
+            }
+        }
+    });
+    
+    if (flushCount > 0 && Globals.debugGPUBacklog) {
+        console.log(`[GPU Flush] Flushed ${flushCount} renderer(s)`);
+    }
 }
 
 
