@@ -290,7 +290,7 @@ export class CCustomManager {
         }
 
         // Add GUI mirroring functionality to help menu
-        guiMenus.help.add(this, "showMirrorMenuDemo").name("Mirror Menu Demo").tooltip("Demonstrates how to mirror any GUI menu to create a standalone floating menu");
+        // guiMenus.help.add(this, "showMirrorMenuDemo").name("Mirror Menu Demo").tooltip("Demonstrates how to mirror any GUI menu to create a standalone floating menu");
 
         // TODO - Multiple events passed to EventManager.addEventListener
 
