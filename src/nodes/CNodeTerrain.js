@@ -617,6 +617,14 @@ export class CNodeTerrain extends CNode {
     elevationTileLoaded(tile) {
 //        console.log("CNodeTerrain: elevation tile loaded " + tile.z + "/" + tile.x + "/" + tile.y)
 
+        // DEFENSIVE: Verify this terrain node is still valid
+        // During situation transitions, old async operations may still complete
+        // and shouldn't try to update disposed terrain
+        if (!this.maps || !this.UI) {
+            console.warn("CNodeTerrain: elevationTileLoaded called on disposed terrain node, ignoring");
+            return;
+        }
+
         // get the terrain map for the current map type
         if (this.maps[this.UI.mapType].map === undefined) {
             // Store pending elevation updates for when the texture map is ready

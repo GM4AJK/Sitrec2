@@ -145,6 +145,26 @@ class AsyncOperationRegistry {
     }
 
     /**
+     * Get a formatted multi-line string of all pending operations
+     * Useful for debugging what's stuck
+     * @returns {string} Multi-line string of pending operations, or empty if none
+     */
+    getPendingOperationsString() {
+        if (this.operations.size === 0) return '';
+        
+        const lines = [];
+        const now = Date.now();
+        
+        this.operations.forEach((op, id) => {
+            const ageMs = now - op.created;
+            const ageSec = (ageMs / 1000).toFixed(1);
+            lines.push(`  [${id}] ${op.type.padEnd(20)} - ${op.description} (${ageSec}s)`);
+        });
+        
+        return `${this.operations.size} pending async ops:\n${lines.join('\n')}`;
+    }
+
+    /**
      * Clear all tracking without cancelling
      * (used when operations are already disposed externally)
      */

@@ -826,6 +826,12 @@ async function newSitch(situation, customSetup = false ) {
     const cancelSummary = asyncOperationRegistry.cancelAll();
     console.log(`Cancelled ${cancelSummary.count} in-flight operations during transition`);
     
+    // CRITICAL: Wait for all promise chains to settle after cancellation
+    // When operations are aborted, their promise handlers still execute
+    // Without this delay, those handlers run while Sit is being replaced,
+    // causing them to read undefined properties from the new situation
+    await new Promise(resolve => setTimeout(resolve, 50));
+    
     disposeEverything();
     if (!customSetup) {
         // if it's not custom, then "situation" is a name of a default sitch
@@ -1639,14 +1645,43 @@ function hasPendingTiles() {
  * @returns {Promise} - Resolves when all pending actions and tiles are loaded
  */
 async function waitForAllPendingOperations() {
+    const maxWaitTime = 30000; // 30 second timeout to prevent infinite waiting
+    const startTime = Date.now();
+    let timeoutWarningShown = false;
+    let lastPendingString = ''; // Track changes to pending ops list
+    
     return new Promise((resolve) => {
         const checkPending = () => {
-            if (Globals.pendingActions === 0 && !hasPendingTiles()) {
+            const elapsedTime = Date.now() - startTime;
+            const pendingCount = asyncOperationRegistry.getCount();
+            const pendingOpsString = asyncOperationRegistry.getPendingOperationsString();
+            
+            if (Globals.pendingActions === 0 && !hasPendingTiles() && pendingCount === 0) {
                 console.log("All pending operations completed");
                 resolve();
+            } else if (elapsedTime > maxWaitTime) {
+                // CRITICAL: Cancel stuck operations IMMEDIATELY before resolving
+                // This prevents orphaned callbacks from the 5 stuck ops
+                console.warn(`\n=== ASYNC OPS TIMEOUT (${elapsedTime}ms) ===`);
+                if (pendingOpsString) {
+                    console.warn(pendingOpsString);
+                }
+                const cancelSummary = asyncOperationRegistry.cancelAll();
+                console.warn(`Force-cancelled ${cancelSummary.count} operations.`);
+                console.warn(`=== END TIMEOUT ===\n`);
+                resolve(); // Now safe to proceed
             } else {
-                if (Globals.pendingActions > 0 || hasPendingTiles()) {
-                    console.log("Waiting for operations: pendingActions=" + Globals.pendingActions + ", pendingTiles=" + hasPendingTiles());
+                // Only log if the pending ops list changed
+                if (pendingOpsString !== lastPendingString) {
+                    lastPendingString = pendingOpsString;
+                    if (pendingOpsString) {
+                        console.log(`\nWaiting for operations (${elapsedTime}ms elapsed):\n${pendingOpsString}\n`);
+                    }
+                }
+                
+                if (!timeoutWarningShown && elapsedTime > 10000) {
+                    console.warn(`Still waiting for operations after ${elapsedTime}ms: pendingActions=${Globals.pendingActions}, pendingTiles=${hasPendingTiles()}, asyncOps=${pendingCount}`);
+                    timeoutWarningShown = true;
                 }
                 // Check again in the next frame
                 requestAnimationFrame(checkPending);

@@ -895,6 +895,7 @@ export class CFileManager extends CManager {
             console.log(`>>> loadAsset() Loading Started: ${filename} (id: ${id})`);
 
             var bufferPromise = null;
+            let fetchOperationId = null; // Track for cleanup
             if(!isUrl && isConsole) {
                 // read the asset from the local filesystem if this is not running inside a browser
                 bufferPromise = import('node:fs')
@@ -909,7 +910,7 @@ export class CFileManager extends CManager {
                 
                 // Create AbortController for this fetch and register it
                 const fetchController = new AbortController();
-                asyncOperationRegistry.registerAbortable(
+                fetchOperationId = asyncOperationRegistry.registerAbortable(
                     fetchController,
                     'fetch',
                     `loadAsset: ${filename}`
@@ -922,6 +923,12 @@ export class CFileManager extends CManager {
                         throw new Error('Network response was not ok');
                     }
                     return response.arrayBuffer(); // Return the promise for the next then()
+                })
+                .finally(() => {
+                    // CRITICAL: Unregister the fetch operation when complete (success or error)
+                    if (fetchOperationId !== null) {
+                        asyncOperationRegistry.unregister(fetchOperationId);
+                    }
                 })
             }
 
