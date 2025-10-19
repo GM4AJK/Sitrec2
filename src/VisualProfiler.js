@@ -294,13 +294,3 @@ export function initGlobalProfiler() {
     globalProfiler.init();
     return globalProfiler;
 }
-
-/**
- * Destroy the global profiler instance
- */
-export function destroyGlobalProfiler() {
-    if (globalProfiler) {
-        globalProfiler.destroy();
-        globalProfiler = null;
-    }
-}
