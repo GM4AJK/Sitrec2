@@ -97,6 +97,7 @@ import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
 import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./VisualProfiler";
+import {fileSystemFetch} from "./fileSystemFetch";
 
 
 console.log ("SITREC START - index.js after imports")
@@ -131,6 +132,9 @@ Globals.wasPending = 5;
 
 await checkServerlessMode();
 await setupConfigPaths();
+
+// Check if we're running from file:// protocol and request directory access
+await requestFileSystemAccessIfNeeded();
 
 //await getConfigFromServer();
 
@@ -394,6 +398,316 @@ setRenderOne(3)
 // *********** That's it for top-level code. Functions follow ***************************************
 // **************************************************************************************************
 
+// Helper functions for persisting directory handle
+async function saveDirectoryHandle(handle) {
+    try {
+        // Open IndexedDB
+        const db = await new Promise((resolve, reject) => {
+            const request = indexedDB.open('SitrecStorage', 1);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('handles')) {
+                    db.createObjectStore('handles');
+                }
+            };
+        });
+        
+        // Save the handle
+        const tx = db.transaction(['handles'], 'readwrite');
+        const store = tx.objectStore('handles');
+        const request = store.put(handle, 'directoryHandle');
+        
+        await new Promise((resolve, reject) => {
+            request.onsuccess = resolve;
+            request.onerror = reject;
+        });
+        
+        db.close();
+        
+        console.log("Directory handle saved to IndexedDB");
+    } catch (err) {
+        console.log("Failed to save to IndexedDB, trying cookie fallback:", err);
+        // Save the directory name in a cookie as a fallback hint
+        try {
+            // Get the directory name to save as a hint
+            const dirName = handle.name;
+            document.cookie = `sitrec_last_dir=${encodeURIComponent(dirName)}; max-age=31536000; path=/`;
+            console.log("Directory name saved to cookie as hint:", dirName);
+        } catch (cookieErr) {
+            console.log("Cookie save also failed:", cookieErr);
+        }
+    }
+}
+
+async function loadDirectoryHandle() {
+    try {
+        // Open IndexedDB
+        const db = await new Promise((resolve, reject) => {
+            const request = indexedDB.open('SitrecStorage', 1);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+            request.onupgradeneeded = (event) => {
+                const db = event.target.result;
+                if (!db.objectStoreNames.contains('handles')) {
+                    db.createObjectStore('handles');
+                }
+            };
+        });
+        
+        // Get the handle
+        const tx = db.transaction(['handles'], 'readonly');
+        const store = tx.objectStore('handles');
+        const request = store.get('directoryHandle');
+        
+        const handle = await new Promise((resolve, reject) => {
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+        });
+        
+        db.close();
+        
+        if (handle) {
+            console.log("Directory handle loaded from IndexedDB");
+            
+            // Verify we still have permission by trying to query permissions
+            const permissionStatus = await handle.queryPermission({ mode: 'read' });
+            
+            if (permissionStatus === 'granted') {
+                console.log("Permission still granted for saved directory");
+                return handle;
+            } else if (permissionStatus === 'prompt') {
+                console.log("Need to request permission again for saved directory");
+                // Request permission again
+                const newPermission = await handle.requestPermission({ mode: 'read' });
+                if (newPermission === 'granted') {
+                    console.log("Permission re-granted for saved directory");
+                    return handle;
+                }
+            }
+        }
+    } catch (err) {
+        console.log("Error loading directory handle:", err);
+    }
+    
+    return null;
+}
+
+// Global function to manually change directory (can be called from console or UI)
+window.changeServerlessDirectory = async function() {
+    if (window.location.protocol !== 'file:') {
+        alert("This function is only needed when running from the local filesystem.");
+        return;
+    }
+    
+    if (!window.showDirectoryPicker) {
+        alert("Your browser doesn't support the File System Access API.");
+        return;
+    }
+    
+    // Get expected path from SITREC_APP if available
+    let expectedPath = "";
+    if (SITREC_APP && SITREC_APP.startsWith('file://')) {
+        expectedPath = SITREC_APP.replace('file://', '');
+        if (expectedPath.endsWith('/')) {
+            expectedPath = expectedPath.slice(0, -1);
+        }
+    }
+    
+    try {
+        // Show informative message if we have the expected path
+        if (expectedPath) {
+            const confirmMsg = `Please select the Sitrec dist-serverless directory.\n\nExpected location:\n${expectedPath}`;
+            alert(confirmMsg);
+        }
+        
+        // Request new directory access
+        const dirHandle = await window.showDirectoryPicker({
+            mode: 'read',
+            startIn: 'documents'
+        });
+        
+        // Store the directory handle globally
+        window.fileSystemDirectoryHandle = dirHandle;
+        
+        // Save the handle for future sessions
+        await saveDirectoryHandle(dirHandle);
+        
+        // Verify we can access the directory
+        const entries = [];
+        for await (const entry of dirHandle.values()) {
+            entries.push(entry.name);
+        }
+        
+        if (entries.includes('index.html') || entries.includes('index.bundle.js') || entries.includes('data')) {
+            alert("Directory changed successfully! The page will now reload.");
+            window.location.reload();
+        } else {
+            let errorMsg = "This doesn't appear to be the Sitrec dist-serverless directory. Please select the correct folder.";
+            if (expectedPath) {
+                errorMsg += "\n\nExpected: " + expectedPath;
+            }
+            alert(errorMsg);
+        }
+    } catch (err) {
+        if (err.name !== 'AbortError') {
+            alert("Failed to change directory: " + err.message);
+        }
+    }
+};
+
+async function requestFileSystemAccessIfNeeded() {
+    // Check if we're running from file:// protocol
+    if (window.location.protocol === 'file:') {
+        console.log("Running from file:// protocol, checking for directory access...");
+        
+        // Check if File System Access API is available
+        if (!window.showDirectoryPicker) {
+            console.warn("File System Access API not available. Some features may not work.");
+            showError("Your browser doesn't support the File System Access API. Binary files may not load correctly.");
+            return;
+        }
+        
+        // Extract the expected directory path from SITREC_APP
+        let expectedPath = "";
+        if (SITREC_APP && SITREC_APP.startsWith('file://')) {
+            // Extract the path from SITREC_APP (e.g., file:///Users/mick/Dropbox/sitrec-dev/sitrec/dist-serverless/)
+            expectedPath = SITREC_APP.replace('file://', '');
+            // Remove trailing slash if present
+            if (expectedPath.endsWith('/')) {
+                expectedPath = expectedPath.slice(0, -1);
+            }
+            console.log("Expected directory path from SITREC_APP:", expectedPath);
+        }
+        
+        // Try to load a previously saved directory handle
+        const savedHandle = await loadDirectoryHandle();
+        if (savedHandle) {
+            // Verify this is still the right directory
+            try {
+                const entries = [];
+                for await (const entry of savedHandle.values()) {
+                    entries.push(entry.name);
+                }
+                
+                if (entries.includes('index.html') || entries.includes('index.bundle.js') || entries.includes('data')) {
+                    window.fileSystemDirectoryHandle = savedHandle;
+                    console.log("Using previously selected directory:", savedHandle.name);
+                    console.log("To change the directory, run: changeServerlessDirectory()");
+                    return;
+                } else {
+                    console.log("Saved directory doesn't appear to be correct, requesting new selection");
+                }
+            } catch (err) {
+                console.log("Error accessing saved directory, requesting new selection:", err);
+            }
+        }
+        
+        try {
+            // Create a div to show explanatory message
+            const messageDiv = document.createElement('div');
+            messageDiv.style.cssText = `
+                position: fixed;
+                top: 50%;
+                left: 50%;
+                transform: translate(-50%, -50%);
+                background: rgba(0, 0, 0, 0.9);
+                color: white;
+                padding: 30px;
+                border-radius: 10px;
+                z-index: 10000;
+                max-width: 600px;
+                text-align: center;
+                font-family: Arial, sans-serif;
+            `;
+            
+            // Add the expected path to the message if we have it
+            const pathHint = expectedPath 
+                ? `<p style="margin: 15px 0; padding: 10px; background: rgba(255,255,255,0.1); border-radius: 5px; font-family: monospace; font-size: 12px; word-break: break-all;">
+                    Expected location:<br/><strong>${expectedPath}</strong>
+                   </p>`
+                : '';
+            
+            messageDiv.innerHTML = `
+                <h2 style="margin-top: 0;">Directory Access Required</h2>
+                <p>Sitrec is running from the local filesystem.</p>
+                <p>To load data files properly, we need permission to access the directory where Sitrec is installed.</p>
+                ${pathHint}
+                <p style="margin-bottom: 10px;">Please select the <strong>dist-serverless</strong> folder when prompted.</p>
+                <p style="margin-bottom: 20px; font-size: 14px; color: #aaa;">
+                    <em>Your selection will be remembered for future sessions.</em>
+                </p>
+                <button id="requestAccessBtn" style="
+                    padding: 10px 20px;
+                    font-size: 16px;
+                    background: #4CAF50;
+                    color: white;
+                    border: none;
+                    border-radius: 5px;
+                    cursor: pointer;
+                ">Grant Access</button>
+            `;
+            document.body.appendChild(messageDiv);
+            
+            // Wait for button click
+            await new Promise((resolve) => {
+                document.getElementById('requestAccessBtn').addEventListener('click', async () => {
+                    messageDiv.remove();
+                    resolve();
+                });
+            });
+            
+            // Request directory access
+            // Unfortunately, we can't use the path to set the initial directory with showDirectoryPicker
+            // as it only accepts predefined well-known directories
+            const dirHandle = await window.showDirectoryPicker({
+                id: 'sitrec-directory',
+                mode: 'read',
+               // startIn: 'documents'  // Suggests starting in Documents folder
+            });
+            
+            // Store the directory handle globally for later use
+            window.fileSystemDirectoryHandle = dirHandle;
+            
+            // Save the handle for future sessions
+            await saveDirectoryHandle(dirHandle);
+            
+            // Verify we can access the directory
+            const entries = [];
+            for await (const entry of dirHandle.values()) {
+                entries.push(entry.name);
+            }
+            
+            console.log("Directory access granted. Found files:", entries.slice(0, 5), "...");
+            
+            // Check if this looks like the right directory
+            if (!entries.includes('index.html') && !entries.includes('index.bundle.js') && !entries.includes('data')) {
+                let errorMsg = "This doesn't appear to be the Sitrec dist-serverless directory. Expected to find index.html or data folder.";
+                if (expectedPath) {
+                    errorMsg += "\n\nExpected location: " + expectedPath;
+                    console.warn("Expected directory:", expectedPath);
+                }
+                showError(errorMsg);
+            } else {
+                // Directory looks correct - log the successful match
+                console.log("Directory validated successfully - contains expected Sitrec files");
+                if (expectedPath) {
+                    console.log("Matches expected path from SITREC_APP");
+                }
+            }
+            
+        } catch (err) {
+            if (err.name === 'AbortError') {
+                showError("Directory access was cancelled. Some features may not work properly.");
+            } else {
+                console.error("Error requesting directory access:", err);
+                showError("Failed to get directory access: " + err.message);
+            }
+        }
+    }
+}
+
 function checkUserAgent() {
     Globals.canVR = false;
     Globals.inVR = false;
@@ -633,7 +947,7 @@ async function initializeOnce() {
         console.log("Serverless mode: loading text-based sitches from data folder");
         try {
             // Try to load SitCustom.js from the data folder
-            const customSitchResponse = await fetch('./data/custom/SitCustom.js');
+            const customSitchResponse = await fileSystemFetch('./data/custom/SitCustom.js');
             if (customSitchResponse.ok) {
                 const customSitchText = await customSitchResponse.text();
                 textSitches['custom'] = customSitchText;

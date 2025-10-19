@@ -8,6 +8,7 @@ import {
     parseBoolean,
     versionString
 } from "./utils";
+import {fileSystemFetch} from "./fileSystemFetch";
 import JSZip from "jszip";
 import {parseSRT, parseXml} from "./KMLUtils";
 import {CRehoster} from "./CRehoster";
@@ -904,7 +905,8 @@ export class CFileManager extends CManager {
                 // the filename is the URL to the file, so we can just add a query string
                 // unless it already has one, in which case we add a &v=1
                 const versionExtension = (filename.includes("?") ? "&" : "?") + "v=1" + versionString;
-                bufferPromise = fetch(filename + versionExtension)
+                // Use custom fetch wrapper that supports File System Access API
+                bufferPromise = fileSystemFetch(filename + versionExtension)
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');

@@ -22,6 +22,7 @@ import {applyElevationInterpolationAsync} from "./ApplyElevationInterpolationAsy
 import {showError} from "./showError";
 import {processTextureColors} from "./TextureColorProcessor";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
+import {fileSystemFetch} from "./fileSystemFetch";
 
 //const tileMaterial = new MeshStandardMaterial({wireframe: true, color: "#408020", transparent: true, opacity: 0.5})
 
@@ -2603,7 +2604,7 @@ export class QuadTreeTile {
     }
 
     async handleGeoTIFFElevation(url) {
-        const response = await fetch(url);
+        const response = await fileSystemFetch(url);
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }

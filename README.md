@@ -55,19 +55,60 @@ Some types of situations covered:
 
 # Installation Methods
 
-Sitrec can be installed and run in three different ways:
+Sitrec can be installed and run in four different ways:
 
 1. **Docker (Recommended for quickest setup)** - Fully containerized, everything included in the container
-2. **Standalone Node.js Server** - Self-contained build using Node.js + your system's PHP, no web server needed
-3. **Local Web Server** - Traditional setup with Nginx/Apache + PHP, for full development environment
+2. **Serverless Build (PHPless)** - Runs without PHP backend, either as static files or a lightweight Node.js server
+3. **Standalone Node.js Server** - Self-contained build using Node.js + your system's PHP, no web server needed
+4. **Local Web Server** - Traditional setup with Nginx/Apache + PHP, for full development environment
 
 Choose the method that best fits your needs:
 
 | Method | Best For | Requirements | Build Time |
 |--------|----------|--------------|------------|
 | Docker | Quick testing, no configuration | **Only Docker Desktop** (no Node.js, PHP, or web server needed) | ~1 minute |
+| Serverless (PHPless) | Offline/portable use | **Node.js** (for server mode) or **just a modern browser** (for static mode) | ~10 seconds |
 | Standalone | Development without web server | **Node.js + PHP in PATH** (no web server needed) | ~10 seconds |
 | Local Server | Full development environment | **Node.js + Nginx/Apache + PHP** | ~5 seconds |
+
+## Serverless Build (No Backend Required)
+
+The serverless build creates a version of Sitrec that runs without any backend server (no PHP). It can be used in two ways:
+
+### Option 1: PHPless Node.js Server
+Run as a lightweight Node.js server without PHP dependencies:
+
+```bash
+git clone https://github.com/MickWest/sitrec2 sitrec-test-dev
+cd sitrec-test-dev
+for f in config/*.example; do cp "$f" "${f%.example}"; done  # Mac/Linux
+# OR for Windows: for %f in (config\*.example) do copy /Y "%f" "%~dpnf"
+npm install
+npm run build-serverless
+npm run start-serverless
+```
+
+Then open: http://localhost:3000/sitrec
+
+This provides a minimal Node.js server without any PHP backend. All data is stored locally in the browser's IndexedDB.
+
+### Option 2: Pure Static Files
+After building with `npm run build-serverless`, the files in `dist-serverless/` can be:
+- Opened directly in a browser via `file://` protocol (with File System Access API support)
+- Hosted on any static web server (GitHub Pages, S3, etc.)
+- Run completely offline
+
+**Serverless Limitations:**
+- No server-side file rehosting
+- No cloud sync or user accounts  
+- No AI chat feature (requires backend)
+- Data stored only in browser's IndexedDB
+
+**Serverless Advantages:**
+- Zero backend dependencies
+- Works completely offline
+- Privacy-focused (data never leaves your machine)
+- Easy deployment anywhere
 
 ## Quickest Local Install, Using Docker
 
