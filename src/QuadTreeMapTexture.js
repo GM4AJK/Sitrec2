@@ -6,6 +6,7 @@ import {showError} from "./showError";
 import {CanvasTexture} from "three/src/textures/CanvasTexture";
 import {NearestFilter} from "three/src/constants";
 import {createTerrainDayNightMaterial} from "./js/map33/material/TerrainDayNightMaterial";
+import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 
 class QuadTreeMapTexture extends QuadTreeMap {
     constructor(scene, terrainNode, geoLocation, options = {}) {
@@ -21,6 +22,15 @@ class QuadTreeMapTexture extends QuadTreeMap {
         // Track loading promises to properly call loadedCallback when all tiles are loaded
         // This only makes sense if not dynamic
         this.pendingTileLoads = new Set();
+
+        // Register the tile loading controller with async operation registry
+        if (this.controller) {
+            asyncOperationRegistry.registerAbortable(
+                this.controller,
+                'tile-texture-load',
+                `Terrain texture tiles at zoom ${this.zoom}`
+            );
+        }
 
         // this.initTilePositions(this.options.deferLoad) // now in super
 

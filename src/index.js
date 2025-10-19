@@ -98,6 +98,7 @@ import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
 import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./VisualProfiler";
 import {fileSystemFetch} from "./fileSystemFetch";
+import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 
 
 console.log ("SITREC START - index.js after imports")
@@ -122,6 +123,7 @@ let testing = false;
 let fpsInterval, rafInterval, startTime, now, then, thenRender, elapsed;
 
 let animationFrameId;
+let isTransitioning = false;
 
 checkUserAgent();
 
@@ -777,6 +779,7 @@ function checkFornewSitchObject() {
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 async function newSitch(situation, customSetup = false ) {
+    isTransitioning = true;
 
     setSitchEstablished(false);
 
@@ -817,6 +820,12 @@ async function newSitch(situation, customSetup = false ) {
         await waitForTerrainToLoad();
     }
     console.log("%%%%% AFTER the two AWAITS %%%%%%%%")
+    
+    // Cancel all in-flight async operations before disposal
+    // This ensures no dangling callbacks try to access disposed resources
+    const cancelSummary = asyncOperationRegistry.cancelAll();
+    console.log(`Cancelled ${cancelSummary.count} in-flight operations during transition`);
+    
     disposeEverything();
     if (!customSetup) {
         // if it's not custom, then "situation" is a name of a default sitch
@@ -834,6 +843,7 @@ async function newSitch(situation, customSetup = false ) {
     legacySetup();
     await setupFunctions();
     startAnimating(Sit.fps);
+    isTransitioning = false;
     setTimeout( checkForTest, Globals.quickTerrain?1:testCheckInterval);
 }
 
@@ -1709,6 +1719,11 @@ function flushGPUAndCheckBacklog() {
 
 
 function renderMain(elapsed) {
+    // Skip rendering during situation transitions to prevent accessing disposed nodes
+    if (isTransitioning) {
+        return;
+    }
+
     // Profile overall frame
     if (globalProfiler) globalProfiler.push('#1f77b4', 'Frame');
 

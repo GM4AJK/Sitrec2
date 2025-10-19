@@ -2,11 +2,20 @@ import {QuadTreeMap} from "./QuadTreeMap";
 import {QuadTreeTile} from "./QuadTreeTile";
 import * as LAYER from "./LayerMasks";
 import {showError} from "./showError";
+import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 
 export class QuadTreeMapElevation extends QuadTreeMap {
     constructor(terrainNode, geoLocation, options = {}) {
         super(terrainNode, geoLocation, options)
 
+        // Register the tile loading controller with async operation registry
+        if (this.controller) {
+            asyncOperationRegistry.registerAbortable(
+                this.controller,
+                'tile-elevation-load',
+                `Terrain elevation tiles at zoom ${this.zoom}`
+            );
+        }
 
         this.initTiles();
 

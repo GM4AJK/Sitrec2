@@ -31,6 +31,7 @@ import {isConsole, isLocal, isServerless, SITREC_APP, SITREC_DOMAIN, SITREC_SERV
 import {resetGlobalOrigin} from "./ResetOrigin";
 import {probeTransportStreamBufferDetailed, TSParser} from "./TSParser";
 import {showError} from "./showError";
+import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 
 
 // The file manager is a singleton that manages all the files
@@ -905,8 +906,17 @@ export class CFileManager extends CManager {
                 // the filename is the URL to the file, so we can just add a query string
                 // unless it already has one, in which case we add a &v=1
                 const versionExtension = (filename.includes("?") ? "&" : "?") + "v=1" + versionString;
+                
+                // Create AbortController for this fetch and register it
+                const fetchController = new AbortController();
+                asyncOperationRegistry.registerAbortable(
+                    fetchController,
+                    'fetch',
+                    `loadAsset: ${filename}`
+                );
+                
                 // Use custom fetch wrapper that supports File System Access API
-                bufferPromise = fileSystemFetch(filename + versionExtension)
+                bufferPromise = fileSystemFetch(filename + versionExtension, { signal: fetchController.signal })
                 .then(response => {
                     if (!response.ok) {
                         throw new Error('Network response was not ok');
@@ -973,6 +983,13 @@ export class CFileManager extends CManager {
                 });
         }
 
+        // Register the loading promise with the async operation registry
+        asyncOperationRegistry.registerPromise(
+            loadingPromise,
+            'file-load',
+            `${id}: ${filename}`
+        );
+        
         // Store the loading promise in the map and return it
         this.#loadingPromises.set(loadingKey, loadingPromise);
         
