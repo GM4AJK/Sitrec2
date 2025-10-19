@@ -96,7 +96,7 @@ import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
-import {globalProfiler} from "./VisualProfiler";
+import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./VisualProfiler";
 
 
 console.log ("SITREC START - index.js after imports")
@@ -347,9 +347,35 @@ if (Globals.GPUMemoryMonitor) {
     console.log("GPU Memory Monitor GUI setup complete");
 }
 
-// Initialize Visual Profiler
-// initGlobalProfiler();
-console.log("Visual Profiler initialized - click the profiler canvas to toggle on/off");
+// Setup Visual Profiler (only if running locally)
+if (isLocal) {
+    // Add profiler toggle to debug menu
+    const profilerControl = {
+        enabled: false,
+        update: function() {
+            if (this.enabled) {
+                if (!globalProfiler) {
+                    initGlobalProfiler();
+                }
+                if (globalProfiler) {
+                    globalProfiler.setEnabled(true);
+                }
+            } else {
+                destroyGlobalProfiler();
+            }
+        }
+    };
+    
+    // Add control to debug menu
+    guiMenus.debug.add(profilerControl, 'enabled')
+        .name('Visual Profiler')
+        .onChange(() => profilerControl.update())
+        .tooltip('Toggle the visual profiler display. Shows timing of code segments with a flame-graph-like visualization. Canvas is removed when disabled.');
+    
+    console.log("Visual Profiler controls added to Debug menu (local mode only)");
+} else {
+    console.log("Visual Profiler disabled (not running locally)");
+}
 
 console.log("............... Done with setup, starting animation")
 startAnimating(Sit.fps);
