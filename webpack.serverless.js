@@ -89,19 +89,22 @@ class CreateDirectoriesPlugin {
     }
 }
 
-module.exports = merge(common, {
-    mode: 'development',
-    devtool: 'eval-source-map',
-    optimization: {
-        minimize: false,
-        splitChunks: false,
-    },
-    output: {
-        filename: '[name].bundle.js',
-        path: serverlessPath,
-        clean: true,
-        devtoolModuleFilenameTemplate: 'webpack://[namespace]/[resource-path]?[loaders]',
-    },
+module.exports = (env, argv) => {
+    const isDevelopment = argv.mode !== 'production';
+    
+    return merge(common, {
+        mode: argv.mode || 'development',
+        devtool: isDevelopment ? 'eval-source-map' : false,
+        optimization: {
+            minimize: !isDevelopment,
+            splitChunks: false,
+        },
+        output: {
+            filename: isDevelopment ? '[name].bundle.js' : '[name].[contenthash].bundle.js',
+            path: serverlessPath,
+            clean: true,
+            devtoolModuleFilenameTemplate: isDevelopment ? 'webpack://[namespace]/[resource-path]?[loaders]' : undefined,
+        },
     plugins: [
         // Filter out the original CopyPlugin and DefinePlugin to override them
         ...common.plugins.filter(plugin => 
@@ -147,4 +150,5 @@ module.exports = merge(common, {
             });
         })(),
     ]
-});
+    });
+};

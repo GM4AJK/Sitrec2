@@ -16,7 +16,7 @@
     "start-standalone-debug": "node --inspect standalone-server.js",
     "dev-standalone": "npm run build-standalone && npm run start-standalone",
     "dev-standalone-debug": "npm run build-standalone-debug && npm run start-standalone-debug",
-    "build-serverless": "npx webpack --config webpack.serverless.js",
+    "build-serverless": "npx webpack --config webpack.serverless.js --mode production",
     "build-serverless-debug": "npx webpack --config webpack.serverless.js --mode development",
     "start-serverless": "node standalone-serverless.js",
     "start-serverless-debug": "node --inspect standalone-serverless.js",
