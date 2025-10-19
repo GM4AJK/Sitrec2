@@ -732,11 +732,15 @@ function checkUserAgent() {
     }
 }
 
-function checkForTest() {
+async function checkForTest() {
     console.log("Testing = " + testing + " toTest = " + toTest)
     if (toTest !== undefined && toTest !== "") {
 //        var url = SITREC_APP + "?test=" + toTest
 //        window.location.assign(url)
+
+        // Wait for all pending operations and tiles from the previous situation
+        // to complete before loading the next test situation
+        await waitForAllPendingOperations();
 
         const testArray = toTest.split(',');
         situation = testArray.shift() // remove the first (gimbal)
@@ -1617,6 +1621,29 @@ function hasPendingTiles() {
     });
     
     return hasPending;
+}
+
+/**
+ * Wait for all pending actions and tile loads to complete
+ * Used before transitioning to the next test/situation
+ * @returns {Promise} - Resolves when all pending actions and tiles are loaded
+ */
+async function waitForAllPendingOperations() {
+    return new Promise((resolve) => {
+        const checkPending = () => {
+            if (Globals.pendingActions === 0 && !hasPendingTiles()) {
+                console.log("All pending operations completed");
+                resolve();
+            } else {
+                if (Globals.pendingActions > 0 || hasPendingTiles()) {
+                    console.log("Waiting for operations: pendingActions=" + Globals.pendingActions + ", pendingTiles=" + hasPendingTiles());
+                }
+                // Check again in the next frame
+                requestAnimationFrame(checkPending);
+            }
+        };
+        checkPending();
+    });
 }
 
 /**
