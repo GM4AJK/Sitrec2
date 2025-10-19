@@ -193,7 +193,7 @@ export async function initializeSettings() {
     if (!Globals.settings) {
         Globals.settings = {
             maxDetails: 15, // Default value
-            fpsLimit: 60, // Frame rate limit (60, 30, 20, or 15)
+            fpsLimit: 30, // Frame rate limit (60, 30, 20, or 15)
         };
     }
     
