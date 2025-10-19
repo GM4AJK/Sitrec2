@@ -414,9 +414,10 @@ class CNodeView extends CNode {
             this.div.style.height = this.heightPx + 'px'
         }
 
-        if (oldHeight !== this.heightPx || oldWidth !== this.widthPx) {
+        // this check is now internal to changedSize
+     //   if (oldHeight !== this.heightPx || oldWidth !== this.widthPx) {
             this.changedSize();
-        }
+     //   }
 
 
     }
