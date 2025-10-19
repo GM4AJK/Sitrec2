@@ -60,6 +60,15 @@ function sanitizeSettings($settings) {
         $sanitized['maxDetails'] = max(5, min(30, $maxDetails));
     }
     
+    if (isset($settings['fpsLimit'])) {
+        $fpsLimit = intval($settings['fpsLimit']);
+        // Only allow specific allowed values
+        $allowedValues = [60, 30, 20, 15];
+        if (in_array($fpsLimit, $allowedValues)) {
+            $sanitized['fpsLimit'] = $fpsLimit;
+        }
+    }
+    
     // Add more settings here as needed
     // Remember to also update SettingsManager.js!
     

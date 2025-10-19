@@ -33,6 +33,15 @@ export function sanitizeSettings(settings) {
         sanitized.maxDetails = Math.max(5, Math.min(30, maxDetails));
     }
     
+    if (settings.fpsLimit !== undefined) {
+        const fpsLimit = Number(settings.fpsLimit);
+        // Only allow specific allowed values
+        const allowedValues = [60, 30, 20, 15];
+        if (allowedValues.includes(fpsLimit)) {
+            sanitized.fpsLimit = fpsLimit;
+        }
+    }
+    
     return sanitized;
 }
 

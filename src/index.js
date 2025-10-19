@@ -96,6 +96,7 @@ import {getApproximateLocationFromIP} from "./GeoLocation";
 import {LLAToEUS} from "./LLA-ECEF-ENU";
 import {QuadTreeTile} from "./QuadTreeTile";
 import {showError} from "./showError";
+import {globalProfiler} from "./VisualProfiler";
 
 
 console.log ("SITREC START - index.js after imports")
@@ -117,7 +118,7 @@ const toolSitches = {};
 const rootSitches = {};
 let toTest;
 let testing = false;
-let fpsInterval, startTime, now, then, elapsed;
+let fpsInterval, rafInterval, startTime, now, then, thenRender, elapsed;
 
 let animationFrameId;
 
@@ -345,6 +346,10 @@ if (Globals.GPUMemoryMonitor) {
     Globals.GPUMemoryMonitor.setupGUI(guiMenus);
     console.log("GPU Memory Monitor GUI setup complete");
 }
+
+// Initialize Visual Profiler
+// initGlobalProfiler();
+console.log("Visual Profiler initialized - click the profiler canvas to toggle on/off");
 
 console.log("............... Done with setup, starting animation")
 startAnimating(Sit.fps);
@@ -1134,11 +1139,19 @@ async function setupFunctions() {
 }
 
 function startAnimating(fps) {
-    fpsInterval = 1000 / fps ;           // e.g. 1000/30 = 33.333333
     startTime = performance.now();
     then = startTime;
+    thenRender = startTime;
     console.log("STARTUP TIME = " + startTime/1000);
-    animationFrameId = requestAnimationFrame( animate );
+    // fpsInterval controls logic updates (based on video framerate)
+    fpsInterval = 1000 / fps ;           // e.g. 1000/30 = 33.333333
+    // rafInterval controls how often RAF does any work (from fpsLimit setting, defaults to 60)
+    let rafFps = 60;
+    if (Globals.settings && Globals.settings.fpsLimit) {
+        rafFps = Globals.settings.fpsLimit;
+    }
+    rafInterval = 1000 / rafFps;
+    animationFrameId = setTimeout(() => animate(performance.now()), 16); // ~60fps RAF loop
     setRenderOne(true);
 }
 
@@ -1148,32 +1161,51 @@ function animate(newtime) {
     // http://jsfiddle.net/chicagogrooves/nRpVD/2/
     // uses the sub-ms resolution timer window.performance.now() (a double)
     // and does nothing if the time has not elapsed
-    // requestAnimationFrame( animate );
+
+    now = newtime;
+
+
+
+    // Update rafInterval based on current fpsLimit setting
+    let rafFps = 60;
+    if (Globals.settings && Globals.settings.fpsLimit) {
+        rafFps = Globals.settings.fpsLimit;
+    }
+    rafInterval = 1000 / rafFps;
+    
+    // Check if enough time has elapsed for RAF to do anything (fpsLimit gate)
+    const elapsedSinceRender = now - thenRender;
+    if (elapsedSinceRender < rafInterval) {
+        // Not yet time, reschedule and return early
+        animationFrameId = setTimeout(() => animate(performance.now()), 0);
+        return;
+    }
+
+    // Update render timer since we're doing work now
+    thenRender = now;
 
     Globals.stats.begin();
    // infoDiv.innerHTML = "";
 
-    // note the user can change Sit.fps (for example, if they are unsure of the framerate of the video)
-    // also check the fps limit setting, which caps the maximum frame rate
+    // Update fpsInterval based on current video fps and fpsLimit setting
     let targetFps = Sit.fps;
     if (Globals.settings && Globals.settings.fpsLimit) {
         targetFps = Math.min(targetFps, Globals.settings.fpsLimit);
     }
     fpsInterval = 1000 / targetFps;
 
-
-
-    now = newtime;
-    elapsed = now - then;
-
     const smoothFrameRate = false;
 
    // animationFrameId = requestAnimationFrame( animate );
 
     if (smoothFrameRate) {
+        elapsed = now - then;
         renderMain(elapsed);
         then = now;
     } else {
+        // Check time since last logic update
+        elapsed = now - then;
+        
         // if enough time has elapsed, draw the next frame
         if (elapsed >= fpsInterval) {
 
@@ -1189,7 +1221,7 @@ function animate(newtime) {
             renderMain(elapsed - remainder)
         } else {
             // It is not yet time for a new frame
-            // so just render - which will allow smooth 60 fps motion moving the camera
+            // so just render - which will allow smooth motion between logic updates
             // const oldPaused = par.paused
             //par.paused = true;
             par.noLogic = true;
@@ -1203,7 +1235,8 @@ function animate(newtime) {
     // GPU queue backlog prevention: flush GPU command buffers and check for saturation
     flushGPUAndCheckBacklog();
     
-    animationFrameId = requestAnimationFrame( animate );
+    // Schedule next RAF call (runs frequently, but does nothing until rafInterval elapses)
+    animationFrameId = setTimeout(() => animate(performance.now()), 0);
 
 }
 
@@ -1247,6 +1280,38 @@ function hasPendingTiles() {
 }
 
 /**
+ * Generate a consistent color for a given view key
+ * Uses a hash of the view name to pick from a predefined palette
+ * @param {string} viewKey - The view identifier
+ * @returns {string} - Hex color code
+ */
+function getViewProfileColor(viewKey) {
+    // Define a color palette with good visual distinction
+    const colors = [
+        '#ff6b6b',  // Red
+        '#4ecdc4',  // Teal
+        '#45b7d1',  // Blue
+        '#ffa502',  // Orange
+        '#95e1d3',  // Mint
+        '#f38181',  // Pink
+        '#aa96da',  // Purple
+        '#fcbad3',  // Light Pink
+        '#ffffd2',  // Light Yellow
+        '#a8d8ea',  // Light Blue
+    ];
+    
+    // Simple hash function for consistent color assignment
+    let hash = 0;
+    for (let i = 0; i < viewKey.length; i++) {
+        hash = ((hash << 5) - hash) + viewKey.charCodeAt(i);
+        hash = hash & hash; // Convert to 32bit integer
+    }
+    
+    const colorIndex = Math.abs(hash) % colors.length;
+    return colors[colorIndex];
+}
+
+/**
  * GPU Queue Backlog Prevention
  * Flushes GPU command buffers and detects saturation
  * This prevents the "goes over a bit, goes over a lot" multi-frame hangs
@@ -1277,7 +1342,8 @@ function flushGPUAndCheckBacklog() {
 
 
 function renderMain(elapsed) {
-
+    // Profile overall frame
+    if (globalProfiler) globalProfiler.push('#1f77b4', 'Frame');
 
     // since we are no longer call the logic on very frame, we need to update the listeners here
     // so that the GUI and other things can update
@@ -1348,6 +1414,7 @@ function renderMain(elapsed) {
     }
 
     if (!par.noLogic) {
+        if (globalProfiler) globalProfiler.push('#ff7f0e', 'Updates');
 
         if (Sit.updateFunction) {
             Sit.updateFunction(par.frame)
@@ -1360,21 +1427,47 @@ function renderMain(elapsed) {
         if (Sit.isCustom) {
             CustomManager.update()
         }
+        if (globalProfiler) globalProfiler.pop();
+        if (globalProfiler) globalProfiler.push('#7fff0e', 'Nodes');
 
-        NodeMan.iterate((key, node) => {
-            if (node.update !== undefined) {
-                node.update(par.frame)
+
+        if (0) {
+            // Collect timing data for all node updates
+            const nodeTimings = [];
+
+            NodeMan.iterate((key, node) => {
+                if (node.update !== undefined) {
+                    const startTime = performance.now();
+                    node.update(par.frame);
+                    const duration = performance.now() - startTime;
+
+                    nodeTimings.push({
+                        nodeName: key,
+                        duration: duration
+                    });
+                }
+            });
+
+            // Sort by duration (descending) and log top 10
+            if (nodeTimings.length > 0) {
+                nodeTimings.sort((a, b) => b.duration - a.duration);
+                console.log(`📊 Top 10 slowest node updates (Frame ${par.frame}):`);
+                nodeTimings.slice(0, 10).forEach((item, index) => {
+                    console.log(`  ${index + 1}. ${item.nodeName}: ${item.duration.toFixed(3)}ms`);
+                });
             }
-
-            // debug_v should not be used in production
-            if (node.debug_v !== undefined) {
-                node.debug_v()
-            }
-
-        })
+        } else  {
+            NodeMan.iterate((key, node) => {
+                if (node.update !== undefined) {
+                    node.update(par.frame)
+                }
+            })
+        }
 
 
         windowChanged();
+        
+        if (globalProfiler) globalProfiler.pop();
 
         if (Sit.jetStuff && Sit.showGlare) {
             if (glareSprite) {
@@ -1389,6 +1482,8 @@ function renderMain(elapsed) {
     }
 
     // render each viewport
+    if (globalProfiler) globalProfiler.push('#2ca02c', 'Viewports');
+    
     ViewMan.iterate((key, view) => {
 
         // if this is an overlay view, then inherit the "visible" flag from the parent view (this this view overlays)
@@ -1403,6 +1498,7 @@ function renderMain(elapsed) {
             visible = view.relativeTo.visible;
 
         if (visible) {
+            if (globalProfiler) globalProfiler.push(getViewProfileColor(key), `${key}`);
 
             // we set from div, which can be moved or resized by the user, or by screen/window resizing
             view.setFromDiv(view.div)
@@ -1426,23 +1522,30 @@ function renderMain(elapsed) {
 
             }
             updateLockTrack(view, par.frame)
+            
+            if (globalProfiler) globalProfiler.push('#9467bd', 'RenderCanvas');
             view.renderCanvas(par.frame)
-
+            if (globalProfiler) globalProfiler.pop();
 
             NodeMan.iterate((id, node) => {
                 if (node.postRender !== undefined) {
                     node.postRender(view)
                 }
             })
-
+            
+            if (globalProfiler) globalProfiler.pop();
         }
     })
+    
+    if (globalProfiler) globalProfiler.pop();
 
     // Update GPU Memory Monitor display
     if (Globals.GPUMemoryMonitor && Globals.GPUMemoryMonitor.enabled) {
         Globals.GPUMemoryMonitor.updateGUI();
     }
 
+    // Profile end of frame
+    if (globalProfiler) globalProfiler.pop();
 }
 
 function selectInitialSitch(force) {

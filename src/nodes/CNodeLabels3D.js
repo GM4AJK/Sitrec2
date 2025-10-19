@@ -252,6 +252,7 @@ export class CNodeLabel3D extends CNode3DGroup {
     }
 
     changeText(text) {
+        if (this.sprite.text === text) return;
         // using the settor will regenerate the sprite canvas
         this.sprite.text = text;
     }

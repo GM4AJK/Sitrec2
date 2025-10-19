@@ -9,8 +9,7 @@ import {
     keyHeld,
     NodeMan,
     setGPUMemoryMonitor,
-    setRenderOne,
-    Sit
+    setRenderOne
 } from "../Globals";
 import {GlobalDaySkyScene, GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene} from "../LocalFrame";
 import {DRAG, makeMouseRay} from "../mouseMoveView";
@@ -54,6 +53,7 @@ import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 import {CameraMapControls} from "../js/CameraControls";
 import {ViewMan} from "../CViewManager";
 import * as LAYER from "../LayerMasks";
+import {globalProfiler} from "../VisualProfiler";
 
 
 function linearToSrgb(color) {
@@ -416,6 +416,7 @@ export class CNodeView3D extends CNodeViewCanvas {
 
             if (this.visible) {
 
+                if (globalProfiler) globalProfiler.push('#ffa500', 'rtSetup');
                 // if the lookView, then check for the video view
                 if (this.id === "lookView") {
 
@@ -487,6 +488,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (Globals.renderDebugFlags.dbg_clearBackground) {
                     this.renderer.clear(true, true, true);
                 }
+                if (globalProfiler) globalProfiler.pop();
                 //}
 
                 /*
@@ -504,6 +506,8 @@ export class CNodeView3D extends CNodeViewCanvas {
                 //     return;
                 // }
 
+                // Profile: Lighting setup
+                if (globalProfiler) globalProfiler.push('#b3de69', 'lightingSetup');
                 // update lighting before rendering the sky
                 const lightingNode = NodeMan.get("lighting", true);
                 // if this is an IR viewport, then we need to render the IR ambient light
@@ -538,8 +542,10 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (Globals.renderDebugFlags.dbg_renderSky) {
                     this.renderSky();
                 }
+                if (globalProfiler) globalProfiler.pop();
 
-
+                // Profile: Sky rendering
+                if (globalProfiler) globalProfiler.push('#80b1d3', 'skyRender');
                 // render the day sky
                 if (GlobalDaySkyScene !== undefined) {
 
@@ -588,8 +594,10 @@ export class CNodeView3D extends CNodeViewCanvas {
 
                     currentRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
                 }
+                if (globalProfiler) globalProfiler.pop();
 
-
+                // Profile: Main scene rendering
+                if (globalProfiler) globalProfiler.push('#fb8072', 'sceneRender');
                 // viewport setting for fov, layer mask, override camera settings
                 // but we want to preserve the camera settings
 
@@ -624,9 +632,12 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (this.isIR && this.effectsEnabled) {
                     NodeMan.get("lighting").setIR(false);
                 }
+                if (globalProfiler) globalProfiler.pop();
 
                 if (this.effectsEnabled) {
 
+                    // Profile: Effects passes
+                    if (globalProfiler) globalProfiler.push('#bebada', 'effectsPasses');
                     // [DBG] Render effects
                     if (Globals.renderDebugFlags.dbg_renderEffects) {
                         //   this.renderer.setRenderTarget(null);
@@ -663,8 +674,11 @@ export class CNodeView3D extends CNodeViewCanvas {
                             currentRenderTarget = currentRenderTarget === this.renderTargetA ? this.renderTargetB : this.renderTargetA;
                         }
                     }
+                    if (globalProfiler) globalProfiler.pop();
                 }
 
+                // Profile: Copy to screen
+                if (globalProfiler) globalProfiler.push('#fdb462', 'copyToScreen');
                 // [DBG] Render the final texture to the screen, id we were using a render target.
                 if (Globals.renderDebugFlags.dbg_copyToScreen && currentRenderTarget !== null) {
                     this.copyMaterial.uniforms['tDiffuse'].value = currentRenderTarget.texture;
@@ -672,6 +686,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                     this.renderer.setRenderTarget(null);
                     this.renderer.render(this.fullscreenQuad, this.fullscreenQuadCamera);
                 }
+                if (globalProfiler) globalProfiler.pop();
 
 
             }
@@ -1011,14 +1026,18 @@ export class CNodeView3D extends CNodeViewCanvas {
     }
 
     renderCanvas(frame) {
-
         super.renderCanvas(frame)
 
+        // Profile: Update Effects
+        if (globalProfiler) globalProfiler.push('#ff7f0e', 'updateEffects');
         if (this.needUpdate) {
             this.updateEffects(frame);
             this.needUpdate = false;
         }
+        if (globalProfiler) globalProfiler.pop();
 
+        // Profile: Camera Setup
+        if (globalProfiler) globalProfiler.push('#1f77b4', 'cameraSetup');
         sharedUniforms.nearPlane.value = this.camera.near;
         sharedUniforms.farPlane.value = this.camera.far;
 
@@ -1028,17 +1047,12 @@ export class CNodeView3D extends CNodeViewCanvas {
         const focalLength = this.heightPx / (2 * Math.tan(fov / 2));
         sharedUniforms.cameraFocalLength.value = focalLength;
 
-
-        // const windowWidth  = window.innerWidth;
-        // const windowHeight = window.innerHeight;
-        //
-        //
-        // var divW = this.div.clientWidth;
-        // var divH = this.div.clientHeight;
-
         this.camera.aspect = this.canvas.width / this.canvas.height;
         this.camera.updateProjectionMatrix();
+        if (globalProfiler) globalProfiler.pop();
 
+        // Profile: Camera Controls
+        if (globalProfiler) globalProfiler.push('#2ca02c', 'cameraControls');
         if (this.controls) {
             this.controls.update(1);
 
@@ -1051,45 +1065,58 @@ export class CNodeView3D extends CNodeViewCanvas {
             } else {
                 this.controls.justRotate = false;
             }
-
-
         }
+        if (globalProfiler) globalProfiler.pop();
+
+        // Profile: Pre-render Camera Update
+        if (globalProfiler) globalProfiler.push('#d62728', 'preRenderCameraUpdate');
         this.preRenderCameraUpdate()
+        if (globalProfiler) globalProfiler.pop();
 
-//      this.renderer.setClearColor(this.background);
-
+        // Profile: Background Color Setup
+        if (globalProfiler) globalProfiler.push('#9467bd', 'bgColorSetup');
         // Reuse color objects to avoid GC pressure in the render loop
         if (!this._bgColor) this._bgColor = new Color(this.background);
         else this._bgColor.set(this.background);
         
         if (!this._srgbColor) this._srgbColor = linearToSrgb(this._bgColor);
         else this._srgbColor.copy(linearToSrgb(this._bgColor));
-//        console.log("this.background = "+this.background);
-//        console.log("Background = "+rgb.r+","+rgb.g+","+rgb.b+" sRGB = "+srgb.r+","+srgb.g+","+srgb.b)
-
-//        this.renderer.setClearColor(linearToSrgb(new Color(this.background)));
-//         this.renderer.setClearColor(rgb);
 
         // Clear manually, otherwise the second render will clear the background.
         // note: old code used pixelratio to handle retina displays, no longer needed.
         this.renderer.autoClear = false;
-        //this.renderer.clear();
+        if (globalProfiler) globalProfiler.pop();
 
-
+        // Profile: Pre-render Callbacks
+        if (globalProfiler) globalProfiler.push('#8c564b', 'preRenderCallbacks');
         this.preRenderFunction();
         CustomManager.preRenderUpdate(this)
+        if (globalProfiler) globalProfiler.pop();
 
+        // Profile: Arrow Scaling
+        if (globalProfiler) globalProfiler.push('#e377c2', 'arrowScaling');
         // patch in arrow head scaling, probably a better place for this
         // but we want to down AFTER the camera is updated
         // mainly though it's because the camera control call updateMeasureArrow(), which was before
         scaleArrows(this);
+        if (globalProfiler) globalProfiler.pop();
 
+        // Profile: Track Position Indicator
+        if (globalProfiler) globalProfiler.push('#17becf', 'trackIndicator');
         // Update the position indicator cone for the currently editing track
         updateTrackPositionIndicator(this);
+        if (globalProfiler) globalProfiler.pop();
 
+        // Profile: Render Target and Effects (typically the most expensive)
+        if (globalProfiler) globalProfiler.push('#ff0000', 'renderTargetEffects');
         this.renderTargetAndEffects()
+        if (globalProfiler) globalProfiler.pop();
+
+        // Profile: Post-render Callbacks
+        if (globalProfiler) globalProfiler.push('#7f7f7f', 'postRenderCallbacks');
         CustomManager.postRenderUpdate(this)
         this.postRenderFunction();
+        if (globalProfiler) globalProfiler.pop();
 
     }
 
