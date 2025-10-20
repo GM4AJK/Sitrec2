@@ -125,6 +125,96 @@ let fpsInterval, rafInterval, startTime, now, then, thenRender, elapsed;
 let animationFrameId;
 let isTransitioning = false;
 
+// Adaptive frame rate control
+const frameRateController = {
+    fps: 60,
+    fpsTiers: [15, 20, 30, 60], // Available FPS tiers
+    frameTimings: [], // Track last N frame times in ms
+    maxFrameHistory: 30,
+    checkInterval: 30, // Check for adjustment every N frames
+    frameCount: 0,
+    lastAdjustTime: 0,
+    minTimeBetweenAdjustments: 2000, // Min 2 seconds between adjustments
+    
+    recordFrameTime(frameTimeMs) {
+        this.frameTimings.push(frameTimeMs);
+        if (this.frameTimings.length > this.maxFrameHistory) {
+            this.frameTimings.shift();
+        }
+    },
+    
+    shouldAdjustFPS() {
+        this.frameCount++;
+        if (this.frameCount < this.checkInterval) return false;
+        
+        const now = Date.now();
+        if (now - this.lastAdjustTime < this.minTimeBetweenAdjustments) return false;
+        
+        this.frameCount = 0;
+        return true;
+    },
+    
+    analyzeFrameTimes(targetFps = null) {
+        if (this.frameTimings.length < 5) return null; // Need at least 5 samples
+        
+        // Use provided target FPS or current FPS
+        const fps = targetFps !== null ? targetFps : this.fps;
+        const targetFrameTime = 1000 / fps; // Expected time per frame
+        const maxAllowedTime = targetFrameTime * 1.1; // Allow 10% overage
+        
+        const slowFrames = this.frameTimings.filter(t => t > maxAllowedTime).length;
+        const slowFramePercentage = (slowFrames / this.frameTimings.length);
+        
+        return {
+            slowFramePercentage,
+            slowFramesCount: slowFrames,
+            totalFrames: this.frameTimings.length,
+            avgFrameTime: this.frameTimings.reduce((a, b) => a + b, 0) / this.frameTimings.length,
+            maxFrameTime: Math.max(...this.frameTimings),
+            targetFps: fps
+        };
+    },
+    
+    adjustFPS() {
+        if (!this.shouldAdjustFPS()) return;
+        
+        const currentTierIndex = this.fpsTiers.indexOf(this.fps);
+        
+        // Ch eck degradation: if a percentage of work frames exceed target time
+        const currentAnalysis = this.analyzeFrameTimes();
+        if (!currentAnalysis) return;
+        
+        const shouldDegrade = currentAnalysis.slowFramePercentage > 0.1; // >10% slow frames
+        
+        // Check improvement: next tier must have 0% slow frames (perfect performance)
+        let shouldImprove = false;
+        if (currentTierIndex < this.fpsTiers.length - 1) {
+            const nextAnalysis = this.analyzeFrameTimes(this.fpsTiers[currentTierIndex + 1]);
+            if (nextAnalysis && nextAnalysis.slowFramePercentage === 0.0) {
+                shouldImprove = true;
+            }
+        }
+        
+        if (shouldDegrade && currentTierIndex > 0) {
+            // Drop to next lower tier
+            const newFps = this.fpsTiers[currentTierIndex - 1];
+            console.log(`⬇️ Degrading FPS: ${this.fps}fps → ${newFps}fps (${(currentAnalysis.slowFramePercentage * 100).toFixed(1)}% slow frames at ${this.fps}fps)`);
+            this.fps = newFps;
+            this.lastAdjustTime = Date.now();
+        } else if (shouldImprove) {
+            // Upgrade only if next tier shows perfect performance
+            const newFps = this.fpsTiers[currentTierIndex + 1];
+            console.log(`⬆️ Improving FPS: ${this.fps}fps → ${newFps}fps (0% slow at ${newFps}fps)`);
+            this.fps = newFps;
+            this.lastAdjustTime = Date.now();
+        }
+    },
+    
+    getCurrentFPS() {
+        return this.fps;
+    }
+};
+
 checkUserAgent();
 
 // we set Globals.wasPending to 5 so if we get to the render loop with no pending async actions
@@ -1522,9 +1612,10 @@ function animate(newtime) {
     // uses the sub-ms resolution timer window.performance.now() (a double)
     // and does nothing if the time has not elapsed
 
+    const animateStartTime = window.performance.now();
+    let logicRan = false;
+
     now = newtime;
-
-
 
     // Update rafInterval based on current fpsLimit setting
     let rafFps = 60;
@@ -1541,16 +1632,23 @@ function animate(newtime) {
         return;
     }
 
-    // Update render timer since we're doing work now
-    thenRender = now;
+
 
     Globals.stats.begin();
    // infoDiv.innerHTML = "";
 
     // Update fpsInterval based on current video fps and fpsLimit setting
+    // Also incorporate adaptive frame rate control
     let targetFps = Sit.fps;
+    
+    // Apply adaptive frame rate adjustment
+    frameRateController.adjustFPS();
+    const adaptiveFps = frameRateController.getCurrentFPS();
+    
     if (Globals.settings && Globals.settings.fpsLimit) {
-        targetFps = Math.min(targetFps, Globals.settings.fpsLimit);
+        targetFps = Math.min(Math.min(targetFps, adaptiveFps), Globals.settings.fpsLimit);
+    } else {
+        targetFps = Math.min(targetFps, adaptiveFps);
     }
     fpsInterval = 1000 / targetFps;
 
@@ -1559,9 +1657,14 @@ function animate(newtime) {
    // animationFrameId = requestAnimationFrame( animate );
 
     if (smoothFrameRate) {
-        elapsed = now - then;
-        renderMain(elapsed);
-        then = now;
+        // elapsed = now - then;
+        // renderMain(elapsed);
+        // then = now;
+        // // Record frame time (all frames have logic in smooth mode)
+        // if (thenRender > 0) {
+        //     const frameTime = now - thenRender;
+        //     frameRateController.recordFrameTime(frameTime, true);
+        // }
     } else {
         // Check time since last logic update
         elapsed = now - then;
@@ -1578,7 +1681,8 @@ function animate(newtime) {
             // and reset the "then" time to the current time minus the remainder
             then = now - remainder;
             // and execute logic for a whole number of frames (usually 1)
-            renderMain(elapsed - remainder)
+            renderMain(elapsed - remainder);
+            logicRan = true;
         } else {
             // It is not yet time for a new frame
             // so just render - which will allow smooth motion between logic updates
@@ -1588,15 +1692,32 @@ function animate(newtime) {
             renderMain(0); // 0 so we don't advance anything between frames
             par.noLogic = false;
             //par.paused = oldPaused;
+            logicRan = false;
         }
+
     }
     Globals.stats.end();
     
     // GPU queue backlog prevention: flush GPU command buffers and check for saturation
     flushGPUAndCheckBacklog();
+
+    // Update render timer
+    thenRender = now;
     
     // Schedule next RAF call (runs frequently, but does nothing until rafInterval elapses)
     animationFrameId = setTimeout(() => animate(performance.now()), 0);
+
+
+    // finally we check the time taken to run the frame
+    // which we use to adapt the frame rat
+    if (logicRan) {
+        // Record frame time for adaptive FPS control (only if logic ran)
+        if (thenRender > 0) {
+            const frameTime = window.performance.now() - animateStartTime;
+            frameRateController.recordFrameTime(frameTime);
+        }
+    }
+
 
 }
 
