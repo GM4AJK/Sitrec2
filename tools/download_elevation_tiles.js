@@ -12,7 +12,7 @@ const { getTotalTiles, ensureDir, tileExists } = require('./tile-download-utils'
 
 const BASE_URL = 'https://s3.amazonaws.com/elevation-tiles-prod/terrarium';
 const OUTPUT_DIR = path.join(__dirname, '..', '..', 'sitrec-terrain', 'elevation');
-const MAX_ZOOM = 5;
+const MAX_ZOOM = 6;
 
 const TOTAL_TILES = getTotalTiles(MAX_ZOOM);
 let downloadedCount = 0;
