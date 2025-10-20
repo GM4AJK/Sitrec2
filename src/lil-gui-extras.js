@@ -624,15 +624,15 @@ export class CGuiMenuBar {
             if (gui) {
                 const div = this.divs[i];
 
-
-
-                if (gui.children.length === 0) {
+                if (gui.children.length === 0 && !gui._closed) {
                     gui.close();
                     div.style.display = "none";
                 } else {
-                    div.style.display = "block";
-                    if (!gui.lockOpenClose) {
-                        div.style.left = x + "px";
+                    if (gui._closed) {
+                        div.style.display = "block";
+                        if (!gui.lockOpenClose) {
+                            div.style.left = x + "px";
+                        }
                     }
                     x += getTextWidth(gui.$title.innerText) + 16;
                 }
