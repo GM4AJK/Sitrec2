@@ -2,8 +2,7 @@
 // base on an input camera node
 
 import {CNodeViewUI} from "./CNodeViewUI";
-import {getCompassHeading, getLocalNorthVector, getLocalUpVector} from "../SphericalMath";
-import {Vector3} from "three";
+import {getCompassHeading} from "../SphericalMath";
 import {MV3} from "../threeUtils";
 import {NodeMan} from "../Globals";
 
@@ -19,6 +18,11 @@ export class   CNodeCompassUI extends CNodeViewUI {
         this.cx = 50;
         this.cy = 60;
         this.doubleClickFullScreen = false;
+
+        // State tracking for optimization
+        this.lastHeading = null;
+        this.lastTargetWindFrom = null;
+        this.lastLocalWindFrom = null;
     }
 
 
@@ -63,11 +67,32 @@ export class   CNodeCompassUI extends CNodeViewUI {
         // round to the nearest 0.1 degree
         const headingRound = Math.round(headingPos * 10) / 10;
 
+
+
+
+
+        // Get current wind states for change detection
+        const targetWind = NodeMan.get("targetWind", false);
+        const localWind = NodeMan.get("localWind", false);
+        const currentTargetWindFrom = targetWind?.from;
+        const currentLocalWindFrom = localWind?.from;
+
+        // Check if anything has changed
+        if (this.lastHeading === headingRound &&
+            this.lastTargetWindFrom === currentTargetWindFrom &&
+            this.lastLocalWindFrom === currentLocalWindFrom) {
+            return; // Nothing changed, early out
+        }
+
         // set the text to the rounded heading
         this.text.text = headingRound + "°";
-
         // after updating the text, render the text
-        super.renderCanvas(frame)
+        super.renderCanvas(frame);
+
+        // Update state
+        this.lastHeading = headingRound;
+        this.lastTargetWindFrom = currentTargetWindFrom;
+        this.lastLocalWindFrom = currentLocalWindFrom;
 
         // now draw a centered arrow rotated by the heading
 
@@ -90,7 +115,6 @@ export class   CNodeCompassUI extends CNodeViewUI {
 
         let arrowScale = 0.25;
 
-        const targetWind = NodeMan.get("targetWind", false);
         if (targetWind) {
             const fromDegrees = targetWind.from;
             const fromRadians = heading + 2*Math.PI - fromDegrees * Math.PI / 180;
@@ -110,7 +134,6 @@ export class   CNodeCompassUI extends CNodeViewUI {
 
         }
 
-        const localWind = NodeMan.get("localWind", false);
         if (localWind) {
             const fromDegrees = localWind.from;
             const fromRadians = heading + 2*Math.PI - fromDegrees * Math.PI / 180;
