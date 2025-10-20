@@ -1736,7 +1736,8 @@ function windowChanged() {
 function hasPendingTiles() {
     let hasPending = false;
     
-    NodeMan.iterate((key, node) => {
+    for (const entry of Object.values(NodeMan.list)) {
+        const node = entry.data;
         // Check for terrain nodes with elevation and texture maps
         if (node.elevationMap !== undefined && node.elevationMap.getTileCount !== undefined) {
             // Check elevation map for pending tiles
@@ -1759,7 +1760,7 @@ function hasPendingTiles() {
                 }
             }
         }
-    });
+    }
     
     return hasPending;
 }
@@ -1858,7 +1859,8 @@ function flushGPUAndCheckBacklog() {
     let flushCount = 0;
     
     // Iterate through all nodes and flush any WebGL renderers
-    NodeMan.iterate((key, node) => {
+    for (const entry of Object.values(NodeMan.list)) {
+        const node = entry.data;
         if (node.renderer !== undefined && node.renderer.getContext !== undefined) {
             try {
                 const gl = node.renderer.getContext();
@@ -1870,7 +1872,7 @@ function flushGPUAndCheckBacklog() {
                 // Silently ignore errors - context might be lost or invalid
             }
         }
-    });
+    }
     
     if (flushCount > 0 && Globals.debugGPUBacklog) {
         console.log(`[GPU Flush] Flushed ${flushCount} renderer(s)`);
@@ -1936,11 +1938,12 @@ function renderMain(elapsed) {
     // early out if paused, but first check if any nodes are flagged to run their update function
     // even when paused. Example CNodeTerrainUI, which needs to keep subdividing tiles to load them
     if (par.paused && !par.renderOne) {
-        NodeMan.iterate((key, node) => {
+        for (const entry of Object.values(NodeMan.list)) {
+            const node = entry.data;
             if (node.update !== undefined && node.updateWhilePaused) {
                 node.update(par.frame)
             }
-        })
+        }
 
         return;
     }
@@ -2061,11 +2064,12 @@ function renderMain(elapsed) {
                 // Label3DMan.updateScale(view.camera)
                 // some nodes need code running on a per-viewport basis - like textSprites
 
-                NodeMan.iterate((id, node) => {
+                for (const entry of Object.values(NodeMan.list)) {
+                    const node = entry.data;
                     if (node.preRender !== undefined) {
                         node.preRender(view)
                     }
-                })
+                }
 
                 // // patch in arrow head scaling
                 // scaleArrows(view);
@@ -2077,11 +2081,12 @@ function renderMain(elapsed) {
             view.renderCanvas(par.frame)
             if (globalProfiler) globalProfiler.pop();
 
-            NodeMan.iterate((id, node) => {
+            for (const entry of Object.values(NodeMan.list)) {
+                const node = entry.data;
                 if (node.postRender !== undefined) {
                     node.postRender(view)
                 }
-            })
+            }
             
             if (globalProfiler) globalProfiler.pop();
         }

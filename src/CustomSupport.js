@@ -2322,7 +2322,8 @@ export class CCustomManager {
         // iterate over the NodeMan objects
         // if the object has a displayTargetSphere, then check if it's following the same track
         // as the camera track, and if so, turn it off
-        NodeMan.iterate((id, node) => {
+        for (const entry of Object.values(NodeMan.list)) {
+            const node = entry.data;
             // is it derived from CNode3D?
             if (node instanceof CNode3DObject) {
                 const ob = node._object;
@@ -2347,17 +2348,17 @@ export class CCustomManager {
                     }
                 }
             }
-
-        })
+        }
     }
 
     postRenderUpdate(view) {
         if (!Sit.isCustom) return;
-        NodeMan.iterate((id, node) => {
+        for (const entry of Object.values(NodeMan.list)) {
+            const node = entry.data;
             if (node instanceof CNode3DObject) {
                 restoreIfDisabled(node._object, view.camera)
             }
-        })
+        }
     }
 
 
