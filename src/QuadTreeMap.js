@@ -136,6 +136,22 @@ export class QuadTreeMap {
         }
     }
 
+    // // iterate over the tile by traversing the tree starting at 0,0,0
+    // forEachTile(callback) {
+    //     const root = this.tileCache[0]?.[0]?.[0]; // Start at the root tile (0,0,0)
+    //     this.forEachTileRecurse(root, callback);
+    // }
+    //
+    // forEachTileRecurse(node, callback) {
+    //     callback(node); // Call the callback for the current node
+    //     if (node.children) {
+    //         for (let i = 0; i < 4; i++) {
+    //             this.forEachTileRecurse(node.children[i], callback);
+    //         }
+    //     }
+    // }
+
+
     /**
      * Get the effective maximum zoom level considering both maxZoom and maxDetails settings
      * @returns {number} The effective max zoom level
