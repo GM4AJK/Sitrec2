@@ -2801,121 +2801,101 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             this.toSun.copy(eusDir.clone().normalize())
             this.fromSun.copy(this.toSun.clone().negate())
 
-            const camera = NodeMan.get("lookCamera").camera;
+            if (this.showFlareRegion) {
 
-            const cameraPos = camera.position;
-            const cameraEcef = EUSToECEF(cameraPos)
-            const LLA = ECEFToLLAVD_Sphere(cameraEcef)
+                const camera = NodeMan.get("lookCamera").camera;
 
-            const {az: az1, el: el1} = raDecToAzElRADIANS(ra, dec, radians(LLA.x), radians(LLA.y), getLST(date, radians(LLA.y)))
-            const {az, el} = raDecToAltAz(ra, dec, radians(LLA.x), radians(LLA.y), getJulianDate(date))
-            //console.log(`RA version ${planet}, ${degrees(az1)}, ${degrees(el1)}`)
-            //console.log(`raDecToAltAz  ${planet}, ${degrees(az)}, ${degrees(el)}`)
-            this.sunAz = az;
-            this.sunEl = el;
+                const cameraPos = camera.position;
+                const cameraEcef = EUSToECEF(cameraPos)
+                const LLA = ECEFToLLAVD_Sphere(cameraEcef)
 
-            ///////////////////////////////////////////////////////////////////////
-            // attempt to find the glint position for radius r
-            // i.e. the position on the earth centered sphere, of radius r where
-            // a line from the camera to that point will reflect in the direction of
-            // the sun
-            // This is a non-trivial problem, related to Alhazen's problem, and does not
-            // easily submit to analytical approaches
-            // So here I use an iterative geometric approach
-            // first we simplify the search to two dimensions, as we know the point must lay in
-            // the plane specified by the origin O, the camera position P, and the sun vector v
-            // we could do it all in 2D, or just rotate about the axis perpendicular to this.
-            // 2D seems like it would be fastest, but just rotating maybe simpler
-            // So first calculate the axis perpendicular to OP and v
-            const P = this.camera.position;
-            const O = this.globe.center;
-            const OP = P.clone().sub(O)             // from origin to camera
-            const OPn = OP.clone().normalize();       // normalized for cross product
-            const v = this.toSun                    // toSun is already normalized
-            const axis = V3().crossVectors(v,OPn).normalize()   // axis to rotate the point on
-            const r = wgs84.RADIUS + 550000         // 550 km is approximate starlink altitude
+                const {az: az1, el: el1} = raDecToAzElRADIANS(ra, dec, radians(LLA.x), radians(LLA.y), getLST(date, radians(LLA.y)))
+                const {az, el} = raDecToAltAz(ra, dec, radians(LLA.x), radians(LLA.y), getJulianDate(date))
+                //console.log(`RA version ${planet}, ${degrees(az1)}, ${degrees(el1)}`)
+                //console.log(`raDecToAltAz  ${planet}, ${degrees(az)}, ${degrees(el)}`)
 
-            // We are looking for a point X, at radisu R. Let's just start directly above P
-            // as that's nice and simple
-            const X0 = OPn.clone().multiplyScalar(r).add(O)
+                ///////////////////////////////////////////////////////////////////////
+                // attempt to find the glint position for radius r
+                // i.e. the position on the earth centered sphere, of radius r where
+                // a line from the camera to that point will reflect in the direction of
+                // the sun
+                // This is a non-trivial problem, related to Alhazen's problem, and does not
+                // easily submit to analytical approaches
+                // So here I use an iterative geometric approach
+                // first we simplify the search to two dimensions, as we know the point must lay in
+                // the plane specified by the origin O, the camera position P, and the sun vector v
+                // we could do it all in 2D, or just rotate about the axis perpendicular to this.
+                // 2D seems like it would be fastest, but just rotating maybe simpler
+                // So first calculate the axis perpendicular to OP and v
+                const P = this.camera.position;
+                const O = this.globe.center;
+                const OP = P.clone().sub(O)             // from origin to camera
+                const OPn = OP.clone().normalize();       // normalized for cross product
+                const v = this.toSun                    // toSun is already normalized
+                const axis = V3().crossVectors(v, OPn).normalize()   // axis to rotate the point on
+                const r = wgs84.RADIUS + 550000         // 550 km is approximate starlink altitude
 
-            var bestX = X0
-            var bestGlintAngle = 100000; // large value so the first one primes it
-            var bestAngle = 0;
+                // We are looking for a point X, at radisu R. Let's just start directly above P
+                // as that's nice and simple
+                const X0 = OPn.clone().multiplyScalar(r).add(O)
 
-            var start = 0
-            var end = 360
-            var step = 1
-            var attempts = 0
-            const maxAttempts = 6
+                var bestX = X0
+                var bestGlintAngle = 100000; // large value so the first one primes it
+                var bestAngle = 0;
 
-            do {
-              //  console.log(`Trying Start = ${start}, end=${end}, step=${step},  bestAngle=${bestAngle}, bestGlintAngle=${bestGlintAngle}`)
-                // try a simple iteration for now
-                for (var angle = start; angle <= end; angle += step) {
-                    // the point needs rotating about the globe origin
-                    // (which is not 0,0,0, as we are in EUS)
-                    // so sub O, rotate about the axis, then add O back
-                    const X = X0.clone().sub(O).applyAxisAngle(axis, radians(angle)).add(O)
+                var start = 0
+                var end = 360
+                var step = 1
+                var attempts = 0
+                const maxAttempts = 6
 
-                    // we now have a potential new position, so calculate the glint angle
+                do {
+                    //  console.log(`Trying Start = ${start}, end=${end}, step=${step},  bestAngle=${bestAngle}, bestGlintAngle=${bestGlintAngle}`)
+                    // try a simple iteration for now
+                    for (var angle = start; angle <= end; angle += step) {
+                        // the point needs rotating about the globe origin
+                        // (which is not 0,0,0, as we are in EUS)
+                        // so sub O, rotate about the axis, then add O back
+                        const X = X0.clone().sub(O).applyAxisAngle(axis, radians(angle)).add(O)
 
-                    // only want to do vectors that point tawards the sun
-                    const camToSat = X.clone().sub(P)
+                        // we now have a potential new position, so calculate the glint angle
 
-                    if (camToSat.dot(v) > 0) {
+                        // only want to do vectors that point tawards the sun
+                        const camToSat = X.clone().sub(P)
 
-                        const globeToSat = X.clone().sub(O).normalize()
-                        const reflected = camToSat.clone().reflect(globeToSat).normalize()
-                        const dot = reflected.dot(v)
-                        const glintAngle = (degrees(Math.acos(dot)))
-                        if ((glintAngle >= 0) && (glintAngle < bestGlintAngle)) {
-                            // check if it's obscured by the globe
-                            // this check is more expensive, so only do it
-                            // for potential "best" angles.
-                            const ray = new Ray(X, this.toSun)
-                            if (!intersectSphere2(ray, this.globe)) {
-                                bestAngle = angle;
-                                bestGlintAngle = glintAngle;
-                                bestX = X.clone();
+                        if (camToSat.dot(v) > 0) {
 
-                              //  console.log(bestX.y)
-
-              //                  DebugArrowAB("Best",P,bestX,"#FF00FF")
+                            const globeToSat = X.clone().sub(O).normalize()
+                            const reflected = camToSat.clone().reflect(globeToSat).normalize()
+                            const dot = reflected.dot(v)
+                            const glintAngle = (degrees(Math.acos(dot)))
+                            if ((glintAngle >= 0) && (glintAngle < bestGlintAngle)) {
+                                // check if it's obscured by the globe
+                                // this check is more expensive, so only do it
+                                // for potential "best" angles.
+                                const ray = new Ray(X, this.toSun)
+                                if (!intersectSphere2(ray, this.globe)) {
+                                    bestAngle = angle;
+                                    bestGlintAngle = glintAngle;
+                                    bestX = X.clone();
+                                }
                             }
                         }
                     }
-                   // DebugArrowAB("ToGlint"+angle,P,X,"#008000")
-                   // DebugArrowAB("ToGlintO"+angle,O,X,"#8080FF")
-                }
 
 
-                start = bestAngle-step;
-                end = bestAngle+step;
-                step/=10
-                attempts++;
+                    start = bestAngle - step;
+                    end = bestAngle + step;
+                    step /= 10
+                    attempts++;
 
-            } while (bestGlintAngle > 0.0001 && attempts<maxAttempts)
+                } while (bestGlintAngle > 0.0001 && attempts < maxAttempts)
 
-         //   DebugArrowAB(sat.name, this.camera.position, sat.sprite.position, "#FF0000", true, this.sunArrowGroup,0.025)
+                DebugArrowAB("ToGlint", this.camera.position, bestX, "#FF0000", true, this.flareRegionGroup, 20, LAYER.MASK_HELPERS)
+                DebugArrow("ToSunFromGlint", this.toSun, bestX, 5000000, "#FF0000", true, this.flareRegionGroup, 20, LAYER.MASK_HELPERS)
+                DebugWireframeSphere("ToGlint", bestX, 500000, "#FF0000", 4, this.flareRegionGroup)
 
-          //  DebugArrowAB("BestGlint",P,bestX,"#FF00FF", true, this.flareRegionGroup, 0.1)
-
-            DebugArrowAB("ToGlint",this.camera.position,bestX,"#FF0000", true, this.flareRegionGroup, 20, LAYER.MASK_HELPERS)
-            DebugArrow("ToSunFromGlint",this.toSun,bestX,5000000,"#FF0000", true, this.flareRegionGroup, 20, LAYER.MASK_HELPERS)
-            DebugWireframeSphere("ToGlint",bestX,500000,"#FF0000",4, this.flareRegionGroup)
-
-
-
-            // const camToSat = sat.sprite.position.clone().sub(this.camera.position)
-            // const globeToSat = sat.sprite.position.clone().sub(this.globe.center).normalize()
-            // const reflected = camToSat.clone().reflect(globeToSat).normalize()
-            // const dot = reflected.dot(toSun)
-            // const glintAngle = Math.abs(degrees(Math.acos(dot)))
-
-
-
-
+            }
 
         }
         // add or update planetSprites - only create if it doesn't exist, otherwise just update
