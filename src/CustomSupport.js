@@ -147,6 +147,26 @@ export class CCustomManager {
                 this.saveSettings();
             })
             .listen();
+        
+        // Add Tile Segments dropdown
+        settingsFolder.add(Globals.settings, "tileSegments", [8, 16, 32, 64, 128])
+            .name("Tile Segments")
+            .tooltip("Mesh resolution for terrain tiles. Higher values = more detail but slower")
+            .onChange(() => {
+                // Save settings when changed
+                this.saveSettings();
+            })
+            .onFinishChange(() => {
+                // When selection is finalized, force immediate save and refresh terrain
+                this.saveSettings(true);
+                
+                // Refresh terrain with new mesh resolution
+                const terrainUI = NodeMan.get("terrainUI", false);
+                if (terrainUI) {
+                    terrainUI.doRefresh();
+                }
+            })
+            .listen();
     }
 
     /**
@@ -1844,7 +1864,7 @@ export class CCustomManager {
                     lon: terrainModel.lon,
                     zoom: terrainModel.zoom,
                     nTiles: terrainModel.nTiles,
-                    tileSegments: terrainModel.tileSegments,
+                    tileSegments: Globals.settings.tileSegments,  // Now always from global settings
                     mapType: terrainModel.mapType,
                     elevationType: terrainModel.elevationType,
                     elevationScale: terrainModel.elevationScale,

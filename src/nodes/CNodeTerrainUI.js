@@ -294,6 +294,9 @@ export class CNodeTerrainUI extends CNode {
         }).elastic(10, 100)
             .tooltip("Scale factor for the elevation data. 1 is normal, 0.5 is half height, 2 is double height")
 
+        // Note: Tile Segments is controlled via the global settings menu in CustomSupport.js
+        // No local UI controller needed here
+
         this.disableDynamicSubdivision = false;
         if (isLocal) {
 
@@ -705,7 +708,6 @@ export class CNodeTerrainUI extends CNode {
             id: terrainID,
             deferLoad: true,
             UINode: this,
-
             }
         )
     }
@@ -715,5 +717,6 @@ export class CNodeTerrainUI extends CNode {
         this.recalculate();
         this.gui.remove(this.addTerrain)
     }
+
 
 }

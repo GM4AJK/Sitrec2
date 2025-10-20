@@ -1006,6 +1006,11 @@ async function initializeOnce() {
 
     await checkLogin();
 
+    // Initialize settings early, before any nodes are created
+    // This ensures Globals.settings is available for terrain, UI, and other components
+    console.log('Initializing global settings from storage');
+    await CustomManager.initializeSettings();
+
     console.log('About to initialize NodeMan and DragDropHandler');
     setNodeMan(new CNodeManager())
     setNodeFactory(new CNodeFactory(NodeMan))

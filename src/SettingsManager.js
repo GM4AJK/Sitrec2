@@ -42,6 +42,12 @@ export function sanitizeSettings(settings) {
         }
     }
     
+    if (settings.tileSegments !== undefined) {
+        const tileSegments = Number(settings.tileSegments);
+        // Clamp to valid range (must be power of 2 or common value between 16 and 256)
+        sanitized.tileSegments = Math.max(16, Math.min(256, Math.round(tileSegments)));
+    }
+    
     return sanitized;
 }
 
@@ -194,6 +200,7 @@ export async function initializeSettings() {
         Globals.settings = {
             maxDetails: 15, // Default value
             fpsLimit: 30, // Frame rate limit (60, 30, 20, or 15)
+            tileSegments: 32, // Tile mesh resolution (16-256)
         };
     }
     

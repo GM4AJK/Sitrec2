@@ -2,6 +2,7 @@ import {assert} from "./assert";
 import {boxMark, DebugArrowAB, removeDebugArrow} from "./threeExt";
 import {LLAToEUS, wgs84} from "./LLA-ECEF-ENU";
 import {GlobalScene} from "./LocalFrame";
+import {Globals} from "./Globals";
 import {getLocalDownVector, getLocalNorthVector, getLocalUpVector, pointOnSphereBelow} from "./SphericalMath";
 import {loadTextureWithRetries} from "./js/map33/material/QuadTextureMaterial";
 import {convertTIFFToElevationArray} from "./TIFFUtils";
@@ -174,11 +175,13 @@ export class QuadTreeTile {
 
 
     buildGeometry() {
+        // Use Globals.settings.tileSegments directly
+        const segments = Globals.settings.tileSegments ?? 64;
         const geometry = new PlaneGeometry(
             this.size,
             this.size,
-            this.map.options.tileSegments,
-            this.map.options.tileSegments
+            segments,
+            segments
         )
 
         this.geometry = geometry
@@ -186,7 +189,8 @@ export class QuadTreeTile {
 
     // Create skirt geometry that extends downward around the tile edges
     buildSkirtGeometry() {
-        const segments = this.map.options.tileSegments;
+        // Use Globals.settings.tileSegments directly
+        const segments = Globals.settings.tileSegments ?? 64;
         const halfSize = this.size / 2;
         const skirtDepth = this.size * 0.1; // 1/10 the width of the tile
 

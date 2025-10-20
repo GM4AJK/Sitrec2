@@ -63,10 +63,7 @@ export class CNodeTerrain extends CNode {
         // ref: https://docs.mapbox.com/help/glossary/zoom-level/
         // Tiles in Mapbox GL are 512x512
 
-        // tileSegments is the number of polygons per edge of each tile
-        // Originally 100, but 64 is a better fit for performance and simpler interpolation
-        // 32 isn't actully that bad, as most of the detail is in in the textures
-        this.tileSegments = v.tileSegments ?? 64;
+        // tileSegments is now always taken from Globals.settings (no local storage)
 
 
         if (Globals.quickTerrain) {
@@ -393,7 +390,7 @@ export class CNodeTerrain extends CNode {
                 nTiles: elevationNTiles,  // +2 to ensure we cover the image map areas when using different projections
                 zoom: this.UI.zoom,
                 tileSize: this.tileSize,
-                tileSegments: this.tileSegments,
+                tileSegments: Globals.settings.tileSegments,
                 zScale: this.UI.elevationScale,
                 radius: this.radius,
                 maxZoom: elevationDef.maxZoom ?? 14, // default to 14 if not set
@@ -476,7 +473,7 @@ export class CNodeTerrain extends CNode {
                 nTiles: this.UI.nTiles,
                 zoom: this.UI.zoom,
                 tileSize: this.tileSize,
-                tileSegments: this.tileSegments,   // this can go up to 256, with no NETWORK bandwidth.
+                tileSegments: Globals.settings.tileSegments,   // this can go up to 256, with no NETWORK bandwidth.
                 zScale: 1,
                 radius: this.radius,
                 mapProjection: this.mapProjectionTextures,
