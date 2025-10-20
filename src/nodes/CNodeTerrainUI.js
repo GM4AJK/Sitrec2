@@ -33,7 +33,7 @@ export class CNodeTerrainUI extends CNode {
         this.elevationDetail = v.elevationDetail ?? 1;
         
         // Default subdivision sizes (can be overridden by mapTypes)
-        this.elevationSubSize = 2000 * 1.414;
+        this.elevationSubSize = 4000; // 2000 * 1.414;
         this.textureSubSize = 2000;
 
         this.adjustable = v.adjustable ?? true;
