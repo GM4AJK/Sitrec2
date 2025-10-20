@@ -886,12 +886,16 @@ export class CNodeFrameSlider extends CNode {
 
     // Function to update the play/pause button based on the state of par.paused
     updatePlayPauseButton() {
-        const spriteSize = 40;
-        const scaleFactor = 28 / spriteSize; // 0.7
-        if (par.paused) {
-            this.playPauseButton.style.backgroundPosition = `-${spriteLocations.play.col * spriteSize * scaleFactor}px -${spriteLocations.play.row * spriteSize * scaleFactor}px`;
-        } else {
-            this.playPauseButton.style.backgroundPosition = `-${spriteLocations.pause.col * spriteSize * scaleFactor}px -${spriteLocations.pause.row * spriteSize * scaleFactor}px`;
+        // only do it if state changes, as it's surprisingly expensive
+        if (par.paused !== this.lastParPaused) {
+            this.lastParPaused = par.paused;
+            const spriteSize = 40;
+            const scaleFactor = 28 / spriteSize; // 0.7
+            if (par.paused) {
+                this.playPauseButton.style.backgroundPosition = `-${spriteLocations.play.col * spriteSize * scaleFactor}px -${spriteLocations.play.row * spriteSize * scaleFactor}px`;
+            } else {
+                this.playPauseButton.style.backgroundPosition = `-${spriteLocations.pause.col * spriteSize * scaleFactor}px -${spriteLocations.pause.row * spriteSize * scaleFactor}px`;
+            }
         }
     }
 
