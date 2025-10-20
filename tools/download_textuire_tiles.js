@@ -1,17 +1,32 @@
 #!/usr/bin/env node
 
 /**
- * Script to download ESRI World Imagery satellite tiles
- * Tiles are saved to sitrec-terrain/imagery/esri/z/y/x.jpg
+ * Script to download satellite tiles
+ * Tiles are saved to sitrec-terrain/imagery/${SET_NAME}/z/y/x.jpg
  * 
- * Note: ESRI uses z/y/x format (not z/x/y like some other services)
- * 
- * Storage estimates:
- * - Zoom 0-3: ~10 MB (85 tiles)
- * - Zoom 0-4: ~40 MB (341 tiles)
- * - Zoom 0-5: ~160 MB (1,365 tiles)
- * - Zoom 0-6: ~640 MB (5,461 tiles)
- * - Zoom 0-7: ~2.5 GB (21,845 tiles)
+ * NOTE: ESRI uses z/y/x format (not z/x/y like some other services)
+ * and this means the folder structure seems backwards from most other services.
+ *
+ * JPEG tiles are relatively compact, averaging 6.2KB per tile.
+ * (2K for ocean to 20K for noisy land areas)
+ *
+ * Estimated storage usage for jpg tiles:
+ * Level 0 zoom has 1 tile, about 6.2K
+ * Level 1 zoom has 4 tiles, about 25K
+ * Level 2 zoom has 16 tiles, about 99K
+ * Level 3 zoom has 64 tiles, about 397K
+ * Level 4 zoom has 256 tiles, about 1.5MB
+ * Level 5 zoom has 1024 tiles, about 6.2MB
+ * Level 6 zoom has 4096 tiles, about 25MB
+ * Level 7 zoom has 16384 tiles, about 99MB
+ * Level 8 zoom has 65536 tiles, about 397MB
+ *
+ * This script can take a while to complete depending on your internet speed
+ * and machine resources.
+ *
+ * Usage:
+ *   node download_tiles.js
+
  */
 
 const https = require('https');
@@ -20,8 +35,19 @@ const path = require('path');
 const { getTotalTiles, ensureDir, tileExists, calculateDirSize } = require('./tile-download-utils');
 
 const BASE_URL = 'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile';
-const OUTPUT_DIR = path.join(__dirname, '..', '..', 'sitrec-terrain', 'imagery', 'esri');
-const MAX_ZOOM = 7; // Start conservative - adjust as needed
+const SET_NAME = "esri";
+
+
+const OUTPUT_DIR = path.join(__dirname, '..', '..', 'sitrec-terrain', 'imagery', SET_NAME);
+const MAX_ZOOM = 4; // Start conservative - adjust as needed, but at least 3 for the basic globe
+const BATCH_SIZE = 50; // Adjust based on available memory and network speed
+
+// To avoid hammering the servers, we wait this long before downloading another batch
+// with a large number (e.g. 1000mx, 1 second) this will determine the run length
+// of the script  = 4^zoom * delay / 1000 / BATCH_SIZE
+// For example at zoom 8, it would take approx 4^8 * 1000ms / 1000 / 50 = 256 seconds or about 4 minutes
+const delayBetweenBatches = 1000;
+
 
 const TOTAL_TILES = getTotalTiles(MAX_ZOOM);
 let downloadedCount = 0;
@@ -94,7 +120,7 @@ async function downloadZoomLevel(z) {
             promises.push(downloadTile(z, x, y));
             
             // Process in batches of 50 for better performance
-            if (promises.length >= 50) {
+            if (promises.length >= BATCH_SIZE) {
                 const results = await Promise.all(promises);
                 promises.length = 0;
                 
@@ -102,7 +128,7 @@ async function downloadZoomLevel(z) {
                 const downloadedInBatch = results.filter(r => r && !r.skipped).length;
                 if (downloadedInBatch > 0) {
                     // Small delay between download batches to be respectful to ESRI servers
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
                 }
             }
         }
@@ -113,21 +139,21 @@ async function downloadZoomLevel(z) {
         const results = await Promise.all(promises);
         const downloadedInBatch = results.filter(r => r && !r.skipped).length;
         if (downloadedInBatch > 0) {
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            await new Promise(resolve => setTimeout(resolve, delayBetweenBatches));
         }
     }
 }
 
 // Main function
 async function main() {
-    console.log('ESRI World Imagery Tile Downloader');
+    console.log('Tile Downloader');
     console.log('========================================');
     console.log(`Output directory: ${OUTPUT_DIR}`);
     console.log(`Max zoom level: ${MAX_ZOOM}`);
     console.log(`Total tiles to download: ${TOTAL_TILES}`);
     
     // Estimate storage
-    const avgTileSize = 120; // KB (ESRI tiles are typically larger than elevation tiles)
+    const avgTileSize = 7;
     const estimatedSize = (TOTAL_TILES * avgTileSize / 1024).toFixed(1);
     console.log(`Estimated storage: ~${estimatedSize} MB`);
     console.log('========================================\n');

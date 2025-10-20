@@ -1,6 +1,6 @@
 /**
  * Shared utilities for tile download scripts
- * Used by download_esri_imagery.js and download_elevation_tiles.js
+ * Used by download_textuire_tiles.js and download_elevation_tiles.js
  */
 
 const fs = require('fs');

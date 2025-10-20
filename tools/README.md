@@ -6,12 +6,12 @@ This directory contains standalone tools for working with Sitrec data.
 
 ### ESRI World Imagery Downloader
 
-**File:** `download_esri_imagery.js`
+**File:** `download_textuire_tiles.js`
 
 Downloads ESRI World Imagery satellite tiles for offline/local caching.
 
 ```bash
-./download_esri_imagery.js
+./download_textuire_tiles.js
 ```
 
 ### Elevation Tile Downloader
