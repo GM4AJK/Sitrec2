@@ -378,8 +378,11 @@ export class QuadTreeMap {
         camera.viewFrustum = frustum;
 
         // PASS 1: Debug logging (view-specific)
-        if (isLocal) {
-            this.logDebugStats(tileLayers, view.id);
+        if (Globals.showTileStats) {
+           this.logDebugStats(tileLayers, view.id);
+        } else {
+            // Clear stats when flag is disabled
+            this.currentStats.clear();
         }
 
         // PASS 2: Deactivate parent tiles whose children are fully loaded (texture maps only, view-specific)

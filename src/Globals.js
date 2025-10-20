@@ -8,6 +8,7 @@ export var Globals = {
     editingTrack: null,  // Reference to the CMetaTrack currently being edited
     GPUMemoryMonitor: null,  // GPU Memory Monitor instance
     debugGPUBacklog: false,  // Enable logging of GPU buffer flushes
+    showTileStats: false,  // Enable tile statistics logging
     
     // Granular render debug flags - shared across ALL views
     renderDebugFlags: {

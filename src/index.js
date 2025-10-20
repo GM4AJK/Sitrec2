@@ -468,6 +468,10 @@ if (isLocal) {
         .onChange(() => profilerControl.update())
         .tooltip('Toggle the visual profiler display. Shows timing of code segments with a flame-graph-like visualization. Canvas is removed when disabled.');
     
+    guiMenus.debug.add(Globals, 'showTileStats')
+        .name('Tile Stats')
+        .tooltip('Show tile statistics for subdivision and loading');
+    
     console.log("Visual Profiler controls added to Debug menu (local mode only)");
 } else {
     console.log("Visual Profiler disabled (not running locally)");
