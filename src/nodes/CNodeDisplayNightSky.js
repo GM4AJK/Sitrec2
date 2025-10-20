@@ -1541,7 +1541,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         //const fromSun = this.fromSun
 
-        if (NodeMan.exists("globeCircle1")) {
+        if (this.showFlareBand && NodeMan.exists("globeCircle1")) {
             const globeCircle1 = NodeMan.get("globeCircle1")
             globeCircle1.normal = this.fromSun.clone().normalize();
             globeCircle1.rebuild();
