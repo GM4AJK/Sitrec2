@@ -6,8 +6,7 @@ export const SitSWR = {
     // Terrain Lat/Lon is the center of the map
     // zoom is the zoom level of the map (1-15 for Mapbox)
     // nTiles is the size of the square region to load (in tiles, so here 4x4)
-    // tileSegments is optional in the range 1..256 and is the resolution of the height map
-    terrain: {lat: 40.2572028, lon: -109.893759, zoom: 14, nTiles: 4, tileSegments: 256},
+    terrain: {lat: 40.2572028, lon: -109.893759, zoom: 14, nTiles: 4},
 
     // a single camera, with the position and heading define by two LLA points
     mainCamera: {

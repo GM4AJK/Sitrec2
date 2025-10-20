@@ -62,7 +62,11 @@ export class CNodeTerrain extends CNode {
         // Tile resolution = length of line of latitude / (2^zoom)
         // ref: https://docs.mapbox.com/help/glossary/zoom-level/
         // Tiles in Mapbox GL are 512x512
-        this.tileSegments = v.tileSegments ?? 100;
+
+        // tileSegments is the number of polygons per edge of each tile
+        // Originally 100, but 64 is a better fit for performance and simpler interpolation
+        // 32 isn't actully that bad, as most of the detail is in in the textures
+        this.tileSegments = v.tileSegments ?? 64;
 
 
         if (Globals.quickTerrain) {

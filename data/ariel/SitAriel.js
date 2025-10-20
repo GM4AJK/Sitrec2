@@ -7,7 +7,7 @@ export const SitAriel = {
     timeZone: "EET",
 
 
-    terrain: {lat: -17.863574, lon: 31.290858, zoom: 15, nTiles: 3, tileSegments: 256},
+    terrain: {lat: -17.863574, lon: 31.290858, zoom: 15, nTiles: 3},
 
     mainCamera: {
         startCameraPosition: [-350.3905323693817, 1759.7688109547591, 1046.7086472689589],

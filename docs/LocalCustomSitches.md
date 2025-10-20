@@ -62,8 +62,7 @@ export const SitSWR = {
     // Terrain Lat/Lon is the center of the map
     // zoom is the zoom level of the map (1-15 for Mapbox)
     // nTiles is the size of the square region to load (in tiles, so here 4x4)
-    // tileSegments is optional in the range 1..256 and is the resolution of the height map
-    terrain: {lat: 40.2572028, lon: -109.893759, zoom: 14, nTiles: 4, tileSegments: 256},
+    terrain: {lat: 40.2572028, lon: -109.893759, zoom: 14, nTiles: 4},
 
     // a single camera, with the position and heading define by two LLA points
     mainCamera: {
@@ -102,7 +101,7 @@ name: "customtest",                    // the name of the sitch, which we can us
 menuName: "Custom Test",   // Name displayed in the menu
 isTextable: true,               // true if we can export and edit this sitch as a custom sitch
 
-    terrain: {lat: 37.2339, lon: -115.80446, zoom: 14, nTiles: 4, tileSegments: 256},
+    terrain: {lat: 37.2339, lon: -115.80446, zoom: 14, nTiles: 4},
     mainCamera: {},
     mainView: {left:0.0, top:0, width:1,height:1, background: [0.53, 0.81, 0.92],},
 }

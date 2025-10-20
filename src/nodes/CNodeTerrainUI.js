@@ -131,7 +131,7 @@ export class CNodeTerrainUI extends CNode {
                         return `${SITREC_TERRAIN}imagery/esri/${z}/${y}/${x}.jpg`
                     },
 
-                    maxZoom: 7,
+                    maxZoom: 8,
                     minZoom: 0,
                     tileSize: 256,
                     attribution: "",
@@ -188,7 +188,7 @@ export class CNodeTerrainUI extends CNode {
                     return `${SITREC_TERRAIN}elevation/${z}/${x}/${y}.png`
                 },
 
-                maxZoom: 5,
+                maxZoom: 6,
                 minZoom: 0,
                 tileSize: 256,
                 attribution: "",

@@ -445,7 +445,6 @@ export async function SetupFromKeyAndData(key, _data, depth=0) {
         //         zoom: data.zoom,
         //         nTiles: data.nTiles,
         //         flattening: Sit.flattening ? "flattening" : undefined,
-        //         tileSegments: data.tileSegments ?? 100,
         //     })
         //     break;
 
