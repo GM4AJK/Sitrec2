@@ -62,6 +62,7 @@ export class CNodeFrameSlider extends CNode {
         this.sliderContainer.style.zIndex = '1001'; // Needed to get mouse events when over other windows
         this.sliderContainer.style.display = 'flex';
         this.sliderContainer.style.alignItems = 'center';
+        this.sliderContainer.style.touchAction = 'none'; // Prevent browser default touch behaviors
 
         // Prevent double click behavior on the slider container
         this.sliderContainer.addEventListener('dblclick', (event) => {
@@ -74,7 +75,10 @@ export class CNodeFrameSlider extends CNode {
         this.controlContainer.style.display = 'flex';
         this.controlContainer.style.marginRight = '5px';
         this.controlContainer.style.marginTop = '2px'; // Move buttons down 2px
-        this.controlContainer.style.width = '280px'; // Reduced from 400px (30% reduction for button sizes)
+        // Responsive width: larger on mobile for bigger buttons
+        const isMobile = window.innerWidth <= 768 || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+        const containerWidth = isMobile ? '352px' : '280px'; // 8 buttons * 44px + gaps for mobile, 280px for desktop
+        this.controlContainer.style.width = containerWidth;
 
         // Create Buttons
         this.pinButton = this.createButton(
@@ -189,6 +193,7 @@ export class CNodeFrameSlider extends CNode {
         this.sliderInput.style.width = '100%';
         this.sliderInput.style.height = '100%';
         this.sliderInput.style.outline = 'none'; // Remove focus outline
+        this.sliderInput.style.touchAction = 'none'; // Critical for proper touch dragging
         this.sliderInput.tabIndex = -1; // Prevent keyboard focus
         this.sliderInput.min = "0";
         this.sliderInput.max = "100"; // Initial max, can be updated later
@@ -197,6 +202,7 @@ export class CNodeFrameSlider extends CNode {
         let sliderDragging = false;
         let sliderFade = false;
         let lastMouseX = 0;
+        let isTouchDragging = false; // Track touch dragging separately
 
         const newFrame = (frame) => {
             par.frame = frame;
@@ -377,26 +383,50 @@ export class CNodeFrameSlider extends CNode {
             this.hideFrameDisplay();
         });
 
-        // Touch event support for mobile devices
+        // Touch event support for mobile devices (improved for better responsiveness)
         this.sliderInput.addEventListener('touchstart', (event) => {
-            const frame = parseInt(this.sliderInput.value, 10);
+            isTouchDragging = true;
             const touch = event.touches[0];
             lastMouseX = touch.clientX;
+            
+            // Calculate frame from touch position
+            const rect = this.sliderInput.getBoundingClientRect();
+            const x = touch.clientX - rect.left;
+            const frame = Math.max(0, Math.min(Sit.frames, Math.round((x / rect.width) * this.sliderInput.max)));
+            
+            this.sliderInput.value = frame;
+            newFrame(frame);
+            sliderDragging = true;
+            par.paused = true;
             this.showFrameDisplay(frame, touch.clientX);
-        });
+            
+            event.preventDefault();
+        }, {passive: false});
 
         this.sliderInput.addEventListener('touchmove', (event) => {
-            const touch = event.touches[0];
-            lastMouseX = touch.clientX;
-            if (sliderDragging) {
-                const frame = parseInt(this.sliderInput.value, 10);
+            if (isTouchDragging) {
+                const touch = event.touches[0];
+                lastMouseX = touch.clientX;
+                
+                // Calculate frame from touch position
+                const rect = this.sliderInput.getBoundingClientRect();
+                const x = touch.clientX - rect.left;
+                const frame = Math.max(0, Math.min(Sit.frames, Math.round((x / rect.width) * this.sliderInput.max)));
+                
+                this.sliderInput.value = frame;
+                newFrame(frame);
                 this.updateFrameDisplay(frame, touch.clientX);
+                
+                event.preventDefault();
             }
-        });
+        }, {passive: false});
 
-        this.sliderInput.addEventListener('touchend', () => {
+        this.sliderInput.addEventListener('touchend', (event) => {
+            isTouchDragging = false;
+            sliderDragging = false;
             this.hideFrameDisplay();
-        });
+            event.preventDefault();
+        }, {passive: false});
 
         // Track mouse movement for frame display positioning
         this.sliderInput.addEventListener('mousemove', (event) => {
@@ -451,12 +481,15 @@ export class CNodeFrameSlider extends CNode {
         let isDragging = false;
         let dragStartX = 0;
 
-        // Helper function to get mouse position relative to canvas
+        // Helper function to get mouse/touch position relative to canvas
         const getMousePos = (event) => {
             const rect = this.canvas.getBoundingClientRect();
+            // Support both mouse and touch events
+            const clientX = event.clientX !== undefined ? event.clientX : (event.touches && event.touches[0] ? event.touches[0].clientX : 0);
+            const clientY = event.clientY !== undefined ? event.clientY : (event.touches && event.touches[0] ? event.touches[0].clientY : 0);
             return {
-                x: event.clientX - rect.left,
-                y: event.clientY - rect.top
+                x: clientX - rect.left,
+                y: clientY - rect.top
             };
         };
 
@@ -630,6 +663,96 @@ export class CNodeFrameSlider extends CNode {
             this.hoveringBLimit = false;
             // Don't stop dragging on mouse leave - let global mouse up handle it
         });
+
+        // Touch event support for A/B limit dragging (mobile)
+        this.canvas.addEventListener('touchstart', (event) => {
+            const touch = event.touches[0];
+            const touchEvent = {
+                clientX: touch.clientX,
+                clientY: touch.clientY,
+                touches: event.touches
+            };
+            const mousePos = getMousePos(touchEvent);
+            const nearLimit = getNearLimit(mousePos.x, mousePos.y);
+            
+            if (nearLimit === 'A') {
+                this.draggingALimit = true;
+                isDragging = true;
+                dragStartX = mousePos.x;
+                this.canvas.style.cursor = 'ew-resize';
+                
+                // Show frame display for A limit
+                this.showFrameDisplay(Sit.aFrame, touch.clientX);
+                
+                // Add global touch event listeners for dragging
+                document.addEventListener('touchmove', globalTouchMove, {passive: false});
+                document.addEventListener('touchend', globalTouchUp, {passive: false});
+                
+                event.preventDefault();
+                event.stopPropagation();
+            } else if (nearLimit === 'B') {
+                this.draggingBLimit = true;
+                isDragging = true;
+                dragStartX = mousePos.x;
+                this.canvas.style.cursor = 'ew-resize';
+                
+                // Show frame display for B limit
+                this.showFrameDisplay(Sit.bFrame, touch.clientX);
+                
+                // Add global touch event listeners for dragging
+                document.addEventListener('touchmove', globalTouchMove, {passive: false});
+                document.addEventListener('touchend', globalTouchUp, {passive: false});
+                
+                event.preventDefault();
+                event.stopPropagation();
+            }
+        }, {passive: false});
+
+        // Global touch move event for dragging
+        const globalTouchMove = (event) => {
+            if (isDragging && event.touches.length > 0) {
+                const touch = event.touches[0];
+                const touchEvent = {
+                    clientX: touch.clientX,
+                    clientY: touch.clientY,
+                    touches: event.touches
+                };
+                const mousePos = getMousePos(touchEvent);
+                const newFrame = Math.max(0, Math.min(Sit.frames, pixelToFrame(mousePos.x)));
+                
+                if (this.draggingALimit) {
+                    Sit.aFrame = newFrame;
+                    this.needsCanvasRedraw = true;
+                    setRenderOne(true);
+                    this.updateFrameDisplay(newFrame, touch.clientX);
+                } else if (this.draggingBLimit) {
+                    Sit.bFrame = newFrame;
+                    this.needsCanvasRedraw = true;
+                    setRenderOne(true);
+                    this.updateFrameDisplay(newFrame, touch.clientX);
+                }
+                
+                event.preventDefault();
+            }
+        };
+
+        // Global touch up event for dragging
+        const globalTouchUp = (event) => {
+            if (isDragging) {
+                this.draggingALimit = false;
+                this.draggingBLimit = false;
+                isDragging = false;
+                this.canvas.style.cursor = 'default';
+                this.canvas.style.pointerEvents = 'none';
+                
+                this.hideFrameDisplay();
+                
+                // Remove global touch event listeners
+                document.removeEventListener('touchmove', globalTouchMove);
+                document.removeEventListener('touchend', globalTouchUp);
+            }
+            event.preventDefault();
+        };
     }
 
     dispose() {
@@ -680,10 +803,36 @@ export class CNodeFrameSlider extends CNode {
 
         if (mouseDownHandler) {
             button.addEventListener('mousedown', mouseDownHandler);
+            // Also add touch start handler for mobile
+            button.addEventListener('touchstart', (event) => {
+                event.preventDefault();
+                mouseDownHandler(event);
+                // Visual feedback
+                button.style.opacity = '0.7';
+            }, {passive: false});
         }
         if (mouseUpHandler) {
             button.addEventListener('mouseup', mouseUpHandler);
+            // Also add touch end handler for mobile
+            button.addEventListener('touchend', (event) => {
+                event.preventDefault();
+                mouseUpHandler(event);
+                // Remove visual feedback
+                button.style.opacity = '1';
+            }, {passive: false});
         }
+        
+        // Add touch event handlers for click-style buttons
+        button.addEventListener('touchstart', (event) => {
+            event.preventDefault();
+            button.style.opacity = '0.7';
+        }, {passive: false});
+        
+        button.addEventListener('touchend', (event) => {
+            event.preventDefault();
+            button.style.opacity = '1';
+            clickHandler(event);
+        }, {passive: false});
 
         return button;
     }
@@ -857,9 +1006,11 @@ export class CNodeFrameSlider extends CNode {
     // Utility function to create a div using a sprite from a sprite sheet
     createSpriteDiv(row, column, onClickHandler) {
         const div = document.createElement('div');
-        const buttonSize = 28; // Reduced from 40px (30% reduction)
+        // Responsive sprite size
+        const isMobile = window.innerWidth <= 768 || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+        const buttonSize = isMobile ? 44 : 28; // 44px for mobile, 28px for desktop
         const spriteSize = 40; // Original sprite size
-        const scaleFactor = buttonSize / spriteSize; // 0.7
+        const scaleFactor = buttonSize / spriteSize;
         
         div.style.width = buttonSize + 'px';
         div.style.height = buttonSize + 'px';
@@ -868,6 +1019,8 @@ export class CNodeFrameSlider extends CNode {
         div.style.backgroundPosition = `-${column * spriteSize * scaleFactor}px -${row * spriteSize * scaleFactor}px`;
         div.style.backgroundRepeat = 'no-repeat';
         div.style.cursor = 'pointer';
+        div.style.userSelect = 'none'; // Prevent text selection on long press
+        div.style.WebkitUserSelect = 'none'; // iOS compatibility
         div.addEventListener('click', onClickHandler);
         return div;
     }
@@ -875,12 +1028,15 @@ export class CNodeFrameSlider extends CNode {
     // Utility function to create a button container
     createButtonContainer() {
         const container = document.createElement('div');
-        const buttonSize = 28; // Reduced from 40px (30% reduction)
+        // Responsive button size: larger on mobile, smaller on desktop
+        const isMobile = window.innerWidth <= 768 || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+        const buttonSize = isMobile ? 44 : 28; // 44px for mobile touch targets, 28px for desktop
         container.style.width = buttonSize + 'px';
         container.style.height = buttonSize + 'px';
         container.style.display = 'flex';
         container.style.alignItems = 'center';
         container.style.justifyContent = 'center';
+        container.style.padding = isMobile ? '4px' : '0px'; // Add padding for easier touch
         return container;
     }
 
