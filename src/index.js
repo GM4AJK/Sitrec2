@@ -2025,12 +2025,12 @@ function renderMain(elapsed) {
     ViewMan.iterate((key, view) => {
 
         // if this is an overlay view, then inherit the "visible" flag from the parent view (this this view overlays)
-        if (view.overlayView && !view.seperateVisibilty) {
+        if (view.overlayView && !view.seperateVisibility) {
             view.setVisible(view.overlayView.visible);
         }
 
         let visible = view.visible;
-        if (view.overlayView && !view.seperateVisibilty)
+        if (view.overlayView && !view.seperateVisibility)
             visible = view.overlayView.visible;
         if (view.relativeTo)
             visible = view.relativeTo.visible;

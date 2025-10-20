@@ -1,13 +1,8 @@
 // CNodeDisplaySkyOverlay takes a CNodeCanvas derived node, CNodeDisplayNightSky and a camera
 // and displays star names on an overlay
 import {CNodeViewUI} from "./CNodeViewUI";
-import {GlobalDateTimeNode, guiShowHide, setRenderOne, Sit} from "../Globals";
+import {GlobalDateTimeNode, guiShowHide, setRenderOne} from "../Globals";
 import {raDec2Celestial} from "../CelestialMath";
-import {bestSat} from "../TLEUtils";
-import {V3} from "../threeUtils";
-import {ECEF2ENU, wgs84} from "../LLA-ECEF-ENU";
-import {radians} from "../utils";
-import * as satellite from 'satellite.js';
 
 export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
@@ -27,8 +22,13 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             this.syncVideoZoom = true;
         }
 
+        // this.seperateVisibility = true;
+
         //    guiShowHide.add(this,"showSatelliteNames" ).onChange(()=>{setRenderOne(true);}).name(this.overlayView.id+" Sat names")
         gui.add(this, "showStarNames").onChange(() => {
+
+            //this.show(!this.showStarNames)
+
             setRenderOne(true);
         }).name(this.overlayView.id + " Star names").listen();
         this.addSimpleSerial("showStarNames");
@@ -38,7 +38,13 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
     //
     renderCanvas(frame) {
+
+
+
         super.renderCanvas(frame);
+
+        if (!this.showStarNames) return
+
 
         const camera = this.camera.clone();
         camera.position.set(0, 0, 0)
@@ -132,48 +138,5 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
             }
         }
 
-
-        // draw satellite names
-        if (this.showSatelliteNames && this.nightSky.TLEData) {
-            const date = this.nightSky.in.startTime.dateNow;
-
-            this.ctx.strokeStyle = "#8080FF";
-            this.ctx.fillStyle = "#8080FF";
-
-            for (const [index, satData] of Object.entries(this.nightSky.TLEData.satData)) {
-                const best = bestSat(satData, date);
-
-                const positionAndVelocity = satellite.propagate(best, date);
-
-                if (positionAndVelocity && positionAndVelocity.position) {
-                    const positionEci = positionAndVelocity.position;
-
-                    var gmst = satellite.gstime(date);
-                    var ecefK = satellite.eciToEcf(positionEci, gmst)
-                    const ecef = V3(ecefK.x * 1000, ecefK.y * 1000, ecefK.z * 1000)
-                    const enu = ECEF2ENU(ecef, radians(Sit.lat), radians(Sit.lon), wgs84.RADIUS)
-                    const eus = V3(enu.x, enu.z, -enu.y)
-                    //    pos.applyMatrix4(this.nightSky.celestialSphere.matrix)
-
-                    const pos = eus
-
-                    // we use the actual camera for satellites, as they are just in EUS
-                    pos.project(this.camera)
-
-
-                    if (pos.z > -1 && pos.z < 1 && pos.x >= -1 && pos.x <= 1 && pos.y >= -1 && pos.y <= 1) {
-                        // Apply videoZoom to the projected coordinates
-                        var zoomedX = pos.x * this.zoom;
-                        var zoomedY = pos.y * this.zoom;
-                        
-                        var x = (zoomedX + 1) * this.widthPx / 2
-                        var y = (-zoomedY + 1) * this.heightPx / 2
-                        x += 5
-                        y -= 5
-                        this.ctx.fillText(satData.name, x, y)
-                    }
-                }
-            }
-        }
     }
 }

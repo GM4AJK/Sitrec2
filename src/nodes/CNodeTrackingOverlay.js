@@ -283,7 +283,7 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
 
 
-        this.seperateVisibilty = true; // don't propagate visibility to the overlaid view
+        this.seperateVisibility = true; // don't propagate visibility to the overlaid view
 
         document.addEventListener('contextmenu', function (event) {
             if (event.ctrlKey) {
