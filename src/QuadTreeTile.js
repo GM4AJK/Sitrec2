@@ -2434,6 +2434,21 @@ export class QuadTreeTile {
         // Handle wireframe material
         if (sourceDef.name === "Wireframe") {
             this.updateWireframeMaterial();
+            
+            // Remove skirt mesh for wireframe mode - wireframes don't need skirts
+            if (this.skirtMesh) {
+                if (this.skirtMesh.parent) {
+                    this.skirtMesh.parent.remove(this.skirtMesh);
+                }
+                if (this.skirtMesh.geometry) {
+                    this.skirtMesh.geometry.dispose();
+                }
+                if (this.skirtMesh.material && this.skirtMesh.material !== tileMaterial) {
+                    this.skirtMesh.material.dispose();
+                }
+                this.skirtMesh = undefined;
+            }
+            
             this.addAfterLoaded();
 
             // Return early for wireframe materials
