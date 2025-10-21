@@ -37,6 +37,7 @@ const STATE = {
 	TOUCH_DOLLY_PAN: 5,
 	TOUCH_DOLLY_ROTATE: 6,
 	DRAG: 7,                     // LEFT button - drag the world around
+	TOUCH_PINCH_ZOOM: 8,         // Two-finger pinch zoom gesture
 };
 
 
@@ -173,6 +174,7 @@ class CameraMapControls {
 		// Only handle pinch zoom with 2 fingers
 		if (event.touches.length === 2) {
 			event.preventDefault();
+			this.state = STATE.TOUCH_PINCH_ZOOM;
 			this.lastPinchDistance = this.calculatePinchDistance(event.touches);
 			this.pinchDistance = this.lastPinchDistance;
 		}
@@ -201,6 +203,7 @@ class CameraMapControls {
 
 	handleTouchEnd(event) {
 		if (event.touches.length < 2) {
+			this.state = STATE.NONE;
 			this.lastPinchDistance = 0;
 			this.pinchDistance = 0;
 		}
@@ -402,6 +405,12 @@ class CameraMapControls {
 	handleMouseMove(event) {
 		if (!this.enabled) {
 			this.state = STATE.NONE
+			return;
+		}
+
+		// Skip mouse move handling if we're in a touch pinch zoom gesture
+		// Touch events trigger pointer events which we need to ignore during pinch
+		if (this.state === STATE.TOUCH_PINCH_ZOOM) {
 			return;
 		}
 
