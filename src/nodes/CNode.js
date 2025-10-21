@@ -19,7 +19,7 @@ import {par} from "../par";
 import {FileManager, Globals, guiMenus, NodeMan, setRenderOne, Sit} from "../Globals";
 import {assert} from "../assert.js";
 import {V3} from "../threeUtils";
-import {isConsole} from "../configUtils";
+import {isConsole, isLocal} from "../configUtils";
 
 
 var debugNodeNumber = 0;
@@ -766,7 +766,7 @@ class CNode {
         if (Globals.debugRecalculate)
             console.log("|---".repeat(depth) + " Root Recalculating:  " + this.constructor.name +": " +  this.id + " frame " + f)
 
-        if (!this.visible) {
+        if (!this.visible && isLocal) {
             console.warn("Trying to recalculateCascade invisible node. ("+ this.constructor.name +": " + this.id +  ") This will fail as recalculateNodesBreadthFirst " +
                 "calls markMaximumVisibleDepth, which will mark it's depth as -1")
         }

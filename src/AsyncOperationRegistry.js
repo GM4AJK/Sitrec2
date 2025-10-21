@@ -37,7 +37,7 @@ class AsyncOperationRegistry {
             cancelled: false
         });
 
-        console.log(`[AsyncOps] Registered: ${type} - ${description} (id: ${id}, total: ${this.operations.size})`);
+        // console.log(`[AsyncOps] Registered: ${type} - ${description} (id: ${id}, total: ${this.operations.size})`);
         return id;
     }
 
@@ -62,7 +62,7 @@ class AsyncOperationRegistry {
             cancelled: false
         });
 
-        console.log(`[AsyncOps] Registered Promise: ${type} - ${description} (id: ${id}, total: ${this.operations.size})`);
+        // console.log(`[AsyncOps] Registered Promise: ${type} - ${description} (id: ${id}, total: ${this.operations.size})`);
 
         // Auto-cleanup on completion
         Promise.resolve(promise)
@@ -80,7 +80,7 @@ class AsyncOperationRegistry {
         if (this.operations.has(id)) {
             const op = this.operations.get(id);
             this.operations.delete(id);
-            console.log(`[AsyncOps] Unregistered: ${op.type} - ${op.description} (remaining: ${this.operations.size})`);
+            // console.log(`[AsyncOps] Unregistered: ${op.type} - ${op.description} (remaining: ${this.operations.size})`);
         }
     }
 

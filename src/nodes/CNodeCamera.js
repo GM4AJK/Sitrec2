@@ -93,7 +93,7 @@ export class CNodeCamera extends CNode3D {
         this.startPosLLA = v.startPosLLA;
         this.lookAtLLA = v.lookAtLLA;
         this.camera.fov = v.fov;
-        console.log("🎥🎥🎥 "+this.id+" modDeserialize camera startLLA = " + this.startPosLLA);
+        // console.log("🎥🎥🎥 "+this.id+" modDeserialize camera startLLA = " + this.startPosLLA);
 
         this.resetCamera()
     }
@@ -111,12 +111,12 @@ export class CNodeCamera extends CNode3D {
 
         if (this.startPos !== undefined) {
             this._object.position.copy(MV3(this.startPos));  // MV3 converts from array to a Vector3
-            console.log("🎥🎥🎥 " + this.id + " resetCamera by startPos to " + vdump(this.camera.position));
+            // console.log("🎥🎥🎥 " + this.id + " resetCamera by startPos to " + vdump(this.camera.position));
         }
 
         if (this.startPosLLA !== undefined) {
             this._object.position.copy(LLAVToEUS(MV3(this.startPosLLA)));  // MV3 converts from array to a Vector3
-            console.log("🎥🎥🎥 " + this.id + " resetCamera by startPosLLA to " + vdump(this.camera.position));
+            // console.log("🎥🎥🎥 " + this.id + " resetCamera by startPosLLA to " + vdump(this.camera.position));
         }
 
         // set the up vector to be the local up vector at the camera position
@@ -126,13 +126,13 @@ export class CNodeCamera extends CNode3D {
 
         if (this.lookAt !== undefined) {
             this._object.lookAt(MV3(this.lookAt));
-            console.log("🎥🎥🎥 " + this.id + " resetCamera lookAt to " + vdump(this.lookAt));
+            // console.log("🎥🎥🎥 " + this.id + " resetCamera lookAt to " + vdump(this.lookAt));
         }
 
 
         if (this.lookAtLLA !== undefined) {
             this._object.lookAt(LLAVToEUS(MV3(this.lookAtLLA)));
-            console.log("🎥🎥🎥 " + this.id + " resetCamera lookAtLLA to " + vdump(this.lookAtLLA));
+            // console.log("🎥🎥🎥 " + this.id + " resetCamera lookAtLLA to " + vdump(this.lookAtLLA));
 
         }
 
@@ -142,7 +142,7 @@ export class CNodeCamera extends CNode3D {
 
         const v = new Vector3();
         v.setFromMatrixColumn(this.camera.matrixWorld,2);
-        console.log("🎥-> " + this.id + " resetCamera fwd vector is now " + vdump(v))
+        // console.log("🎥-> " + this.id + " resetCamera fwd vector is now " + vdump(v))
 
 
     }

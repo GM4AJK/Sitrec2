@@ -189,7 +189,7 @@ export class CVideoMp4Data extends CVideoWebCodecBase {
 
             this.loadedCallback();
 
-            console.log("🍿🍿🍿Dispatching videoLoaded event")
+            // console.log("🍿🍿🍿Dispatching videoLoaded event")
             EventManager.dispatchEvent("videoLoaded", {videoData: this, width: config.codedWidth, height: config.codedHeight});
 
         });

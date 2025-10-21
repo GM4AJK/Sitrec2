@@ -304,7 +304,7 @@ export class CNodeDisplayTrack extends CNode3DGroup {
             if (this.guiPolyColor !== undefined) {
                 this.guiPolyColor.updateDisplay();
             }
-            console.log("Loaded colors:" + this.lineColor + ", " + this.polyColor)
+            // console.log("Loaded colors:" + this.lineColor + ", " + this.polyColor)
         }
 
 

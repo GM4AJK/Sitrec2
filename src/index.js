@@ -198,13 +198,13 @@ const frameRateController = {
         if (shouldDegrade && currentTierIndex > 0) {
             // Drop to next lower tier
             const newFps = this.fpsTiers[currentTierIndex - 1];
-            console.log(`⬇️ Degrading FPS: ${this.fps}fps → ${newFps}fps (${(currentAnalysis.slowFramePercentage * 100).toFixed(1)}% slow frames at ${this.fps}fps)`);
+            // console.log(`⬇️ Degrading FPS: ${this.fps}fps → ${newFps}fps (${(currentAnalysis.slowFramePercentage * 100).toFixed(1)}% slow frames at ${this.fps}fps)`);
             this.fps = newFps;
             this.lastAdjustTime = Date.now();
         } else if (shouldImprove) {
             // Upgrade only if next tier shows perfect performance
             const newFps = this.fpsTiers[currentTierIndex + 1];
-            console.log(`⬆️ Improving FPS: ${this.fps}fps → ${newFps}fps (0% slow at ${newFps}fps)`);
+            // console.log(`⬆️ Improving FPS: ${this.fps}fps → ${newFps}fps (0% slow at ${newFps}fps)`);
             this.fps = newFps;
             this.lastAdjustTime = Date.now();
         }

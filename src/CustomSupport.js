@@ -2175,7 +2175,7 @@ export class CCustomManager {
             }
 
             // now we've either got
-            console.log("Promised files loaded in Custom Manager deserialize")
+            // console.log("Promised files loaded in Custom Manager deserialize")
             if (sitchData.mods) {
                 // apply the mods
                 this.deserializeMods(sitchData.mods).then(() => {

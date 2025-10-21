@@ -239,7 +239,7 @@ export class CTLEData {
                 }
             }
         } else {
-            console.log("CTLEData: TLE file has three lines per satellite. Num of lines: " + lines.length);
+            // console.log("CTLEData: TLE file has three lines per satellite. Num of lines: " + lines.length);
 
 
             for (let i = 0; i < lines.length; i += 3) {
