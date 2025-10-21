@@ -1045,8 +1045,10 @@ export class CNodeFrameSlider extends CNode {
         // only do it if state changes, as it's surprisingly expensive
         if (par.paused !== this.lastParPaused) {
             this.lastParPaused = par.paused;
+            const isMobile = window.innerWidth <= 768 || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+            const buttonSize = isMobile ? 44 : 28; // 44px for mobile, 28px for desktop
             const spriteSize = 40;
-            const scaleFactor = 28 / spriteSize; // 0.7
+            const scaleFactor = buttonSize / spriteSize;
             if (par.paused) {
                 this.playPauseButton.style.backgroundPosition = `-${spriteLocations.play.col * spriteSize * scaleFactor}px -${spriteLocations.play.row * spriteSize * scaleFactor}px`;
             } else {
@@ -1064,8 +1066,10 @@ export class CNodeFrameSlider extends CNode {
     // Pin/Unpin toggle function
     togglePin() {
         this.pinned = !this.pinned;
+        const isMobile = window.innerWidth <= 768 || window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+        const buttonSize = isMobile ? 44 : 28; // 44px for mobile, 28px for desktop
         const spriteSize = 40;
-        const scaleFactor = 28 / spriteSize; // 0.7
+        const scaleFactor = buttonSize / spriteSize;
         this.pinButton.style.backgroundPosition = this.pinned ? 
             `-${spriteLocations.unpin.col * spriteSize * scaleFactor}px -${spriteLocations.unpin.row * spriteSize * scaleFactor}px` : 
             `-${spriteLocations.pin.col * spriteSize * scaleFactor}px -${spriteLocations.pin.row * spriteSize * scaleFactor}px`;
