@@ -57,6 +57,9 @@ class CameraMapControls {
 		this.canvas.addEventListener( 'pointerup', e => this.handleMouseUp(e) );
 		this.canvas.addEventListener( 'pointermove', e => this.handleMouseMove(e) );
 		this.canvas.addEventListener( 'wheel', e => this.handleMouseWheel(e) );
+		this.canvas.addEventListener( 'touchstart', e => this.handleTouchStart(e), { passive: false } );
+		this.canvas.addEventListener( 'touchmove', e => this.handleTouchMove(e), { passive: false } );
+		this.canvas.addEventListener( 'touchend', e => this.handleTouchEnd(e), { passive: false } );
 
 		this.mouseStart = new Vector2();
 		this.mouseEnd = new Vector2();
@@ -70,6 +73,10 @@ class CameraMapControls {
 		// Track mouse position for context menu drag detection
 		this.contextMenuDownPos = null;
 		this.contextMenuDragThreshold = 2; // pixels
+
+		// Track pinch zoom gesture
+		this.pinchDistance = 0;
+		this.lastPinchDistance = 0;
 
 		const id = this.view.id;
 		this.measureStartPoint = V3()
@@ -151,6 +158,52 @@ class CameraMapControls {
 
 
 		setRenderOne(true);
+	}
+
+	calculatePinchDistance(touches) {
+		if (touches.length < 2) return 0;
+		const dx = touches[0].clientX - touches[1].clientX;
+		const dy = touches[0].clientY - touches[1].clientY;
+		return Math.sqrt(dx * dx + dy * dy);
+	}
+
+	handleTouchStart(event) {
+		if (!this.enabled || this.enableZoom === false) return;
+
+		// Only handle pinch zoom with 2 fingers
+		if (event.touches.length === 2) {
+			event.preventDefault();
+			this.lastPinchDistance = this.calculatePinchDistance(event.touches);
+			this.pinchDistance = this.lastPinchDistance;
+		}
+	}
+
+	handleTouchMove(event) {
+		if (!this.enabled || this.enableZoom === false || event.touches.length !== 2) return;
+		if (this.lastPinchDistance === 0) return;
+
+		event.preventDefault();
+
+		this.pinchDistance = this.calculatePinchDistance(event.touches);
+		const deltaDistance = this.pinchDistance - this.lastPinchDistance;
+
+		// Convert distance delta to zoom signal
+		// Positive deltaDistance = pinch in (zoom in) = negative delta for zoomBy
+		// Negative deltaDistance = pinch out (zoom out) = positive delta for zoomBy
+		// Sensitivity: ~1 pixel = ~0.02 zoom units
+		const zoomDelta = -deltaDistance * 0.02;
+		
+		this.zoomBy(zoomDelta);
+		this.lastPinchDistance = this.pinchDistance;
+
+		setRenderOne(true);
+	}
+
+	handleTouchEnd(event) {
+		if (event.touches.length < 2) {
+			this.lastPinchDistance = 0;
+			this.pinchDistance = 0;
+		}
 	}
 
 
