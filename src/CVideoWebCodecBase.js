@@ -59,7 +59,11 @@ export class CVideoWebCodecBase extends CVideoData {
         this.lastTimeStamp = -1;
         this.lastDecodeInfo = "";
         this.blankFrame = null; // Will be created once we know video dimensions
+        this.blankFrameCanvas = null; // Temporary canvas for blank frame creation
+        this.blankFramePending = false; // Flag indicating blank frame creation is in progress
         this.decodeFrameIndex = 0; // Simple counter for decode order
+        this.c_tmp = null; // Temporary canvas (if used)
+        this.ctx_tmp = null; // Temporary canvas context (if used)
     }
 
     /**
@@ -103,9 +107,29 @@ export class CVideoWebCodecBase extends CVideoData {
      * Process a decoded video frame and convert it to ImageBitmap
      */
     processDecodedFrame(frameNumber, videoFrame, group) {
+        // Check if imageCache is still valid (video might have been disposed)
+        if (!this.imageCache) {
+            videoFrame.close();
+            return;
+        }
+
+        // Close any existing frame at this position to avoid memory leaks
+        const existingFrame = this.imageCache[frameNumber];
+        if (existingFrame && typeof existingFrame.close === 'function') {
+            try {
+                existingFrame.close();
+            } catch (e) {
+                // Ignore errors when closing already-closed frames
+            }
+        }
+
         createImageBitmap(videoFrame).then(image => {
+            // Double-check imageCache still exists (video might have been disposed during async operation)
             if (!this.imageCache) {
-                this.imageCache = [];
+                if (typeof image.close === 'function') {
+                    image.close();
+                }
+                return;
             }
 
             this.imageCache[frameNumber] = image;
@@ -145,6 +169,12 @@ export class CVideoWebCodecBase extends CVideoData {
             }
         }).catch(error => {
             showError("Error creating ImageBitmap:", error);
+            // Ensure we still close the videoFrame on error
+            try {
+                videoFrame.close();
+            } catch (e) {
+                // Ignore errors
+            }
         });
 
         videoFrame.close();
@@ -308,19 +338,33 @@ export class CVideoWebCodecBase extends CVideoData {
     purgeGroupsExcept(keep) {
         for (let g in this.groups) {
             const group = this.groups[g];
-            if (keep.find(keeper => keeper === group) === undefined && group.loaded) {
+            if (!keep.has(group) && group.loaded) {
                 assert(this.imageCache, "imageCache is undefined when purging groups but groups.length = " + this.groups.length);
 
                 for (let i = group.frame; i < group.frame + group.length; i++) {
                     // release all the frames in this group
-                    if (this.imageCache[i] && typeof this.imageCache[i].close === 'function') {
-                        this.imageCache[i].close(); // Close ImageBitmap to free memory
+                    // Close imageCache (ImageBitmap for WebCodec videos)
+                    if (this.imageCache[i]) {
+                        if (typeof this.imageCache[i].close === 'function') {
+                            try {
+                                this.imageCache[i].close(); // Close ImageBitmap to free GPU memory
+                            } catch (e) {
+                                console.warn("Error closing ImageBitmap:", e);
+                            }
+                        }
+                        this.imageCache[i] = null; // Use null instead of undefined for better garbage collection
                     }
-                    this.imageCache[i] = undefined;
-                    this.imageDataCache[i] = undefined;
-                    this.frameCache[i] = undefined;
+                    
+                    // Clean up data caches
+                    if (this.imageDataCache && this.imageDataCache[i]) {
+                        this.imageDataCache[i] = null;
+                    }
+                    if (this.frameCache && this.frameCache[i]) {
+                        this.frameCache[i] = null;
+                    }
                 }
                 group.loaded = false;
+                group.decodeOrder = []; // Clear decode order to free memory
             }
         }
     }
@@ -351,7 +395,7 @@ export class CVideoWebCodecBase extends CVideoData {
             // PATCH - if we are local, or Mick, then we can afford to cache even more
             // TODO - allow the user to select this window size in some per-user setting
             if (isLocal || Globals.userID === 1) {
-                cacheWindow = 300;
+         //       cacheWindow = 300;
             }
         }
 
@@ -359,14 +403,14 @@ export class CVideoWebCodecBase extends CVideoData {
         this.lastGetImageFrame = frame;
 
         // we purge everything except the proximate groups and any groups that are being decoded
-        const groupsToKeep = [];
+        const groupsToKeep = new Set(); // Use Set to avoid duplicates
 
         // iterate through the groups and keep the ones that overlap the range
         // frame to frame + cacheWindow (So we get the next group if we are going forward)
         for (let g in this.groups) {
             const group = this.groups[g];
             if (group.frame + group.length > frame && group.frame < frame + cacheWindow) {
-                groupsToKeep.push(group);
+                groupsToKeep.add(group);
             }
         }
 
@@ -374,13 +418,13 @@ export class CVideoWebCodecBase extends CVideoData {
         for (let g = this.groups.length - 1; g >= 0; g--) {
             const group = this.groups[g];
             if (group.frame + group.length > frame - cacheWindow && group.frame < frame) {
-                groupsToKeep.push(group);
+                groupsToKeep.add(group);
             }
         }
 
         // request them all, will ignore if already loaded or pending
-        for (let g in groupsToKeep) {
-            this.requestGroup(groupsToKeep[g]);
+        for (const group of groupsToKeep) {
+            this.requestGroup(group);
         }
 
         // purge all the other groups
@@ -392,31 +436,40 @@ export class CVideoWebCodecBase extends CVideoData {
         let A = frame;
         let B = frame;
         let bestFrame = frame;
+        let foundFrame = false;
+        
         while (A >= 0 && B < this.chunks.length) {
-            if (A >= 0) {
-                if (this.imageCache[A] !== undefined && this.imageCache[A].width !== 0) {
+            if (A >= 0 && A < this.imageCache.length) {
+                const frameA = this.imageCache[A];
+                if (frameA && frameA.width && frameA.width > 0) {
                     bestFrame = A;
+                    foundFrame = true;
                     break;
                 }
-                A--;
             }
-            if (B < this.chunks.length) {
-                if (this.imageCache[B] !== undefined && this.imageCache[B].width !== 0) {
+            A--;
+            
+            if (B < this.chunks.length && B < this.imageCache.length) {
+                const frameB = this.imageCache[B];
+                if (frameB && frameB.width && frameB.width > 0) {
                     bestFrame = B;
+                    foundFrame = true;
                     break;
                 }
-                B++;
             }
+            B++;
         }
 
-        let image = this.imageCache[bestFrame];
+        // Check if bestFrame is valid and accessible
+        if (foundFrame && bestFrame >= 0 && bestFrame < this.imageCache.length) {
+            const image = this.imageCache[bestFrame];
+            if (image && image.width && image.width > 0) {
+                return image;
+            }
+        }
 
         // If no valid frame found, return blank frame
-        if (!image || (image.width === 0)) {
-            return this.createBlankFrame();
-        }
-
-        return image;
+        return this.createBlankFrame();
     }
 
     createBlankFrame() {
@@ -432,46 +485,68 @@ export class CVideoWebCodecBase extends CVideoData {
 
         // if the desired dimensions of the blank frame haven't changed, just return it
         // but if they have, dispose of it, so it gets recreated
-         if (this.blankFrame &&
+        if (this.blankFrame &&
              (this.blankFrame.width !== this.videoWidth ||
             this.blankFrame.height !== this.videoHeight)) {
-            // // Dispose of old blank frame, which is a canvas attached to the DOM (WHY?)
-            // // or a an image bitmap created from a canvas (surely this)
-            if (this.blankFrame instanceof HTMLCanvasElement) {
-                this.blankFrame.remove();
-            } else if (this.blankFrame instanceof ImageBitmap) {
-                this.blankFrame.close();
+            // Dispose of old blank frame
+            if (typeof this.blankFrame.close === 'function') {
+                try {
+                    this.blankFrame.close();
+                } catch (e) {
+                    console.warn("Error closing old blank frame:", e);
+                }
             }
-           this.blankFrame = null;
-
-         }
-
-
-        if (!this.blankFrame) {
-            // Create a blank canvas with video dimensions
-            const canvas = document.createElement('canvas');
-            canvas.width = this.videoWidth;
-            canvas.height = this.videoHeight;
-            const ctx = canvas.getContext('2d');
-
-            // Fill with black
-            ctx.fillStyle = 'black';
-            ctx.fillRect(0, 0, this.videoWidth, this.videoHeight);
-
-            // Convert to ImageBitmap for consistency with decoded frames
-            createImageBitmap(canvas).then(bitmap => {
-                this.blankFrame = bitmap;
-            }).catch(error => {
-                console.warn("Error creating blank frame ImageBitmap:", error);
-                // Fallback to canvas
-                this.blankFrame = canvas;
-            });
-
-            // Return canvas immediately while ImageBitmap is being created (HUH?)
-            return canvas;
+            this.blankFrame = null;
+            this.blankFramePending = false;
         }
 
-        return this.blankFrame;
+        // If we already have a blank frame or it's pending creation, return it
+        if (this.blankFrame) {
+            return this.blankFrame;
+        }
+        
+        // If blank frame creation is already pending, return a temporary canvas
+        if (this.blankFramePending) {
+            if (!this.blankFrameCanvas) {
+                this.blankFrameCanvas = document.createElement('canvas');
+                this.blankFrameCanvas.width = this.videoWidth;
+                this.blankFrameCanvas.height = this.videoHeight;
+                const ctx = this.blankFrameCanvas.getContext('2d');
+                ctx.fillStyle = 'black';
+                ctx.fillRect(0, 0, this.videoWidth, this.videoHeight);
+            }
+            return this.blankFrameCanvas;
+        }
+
+        // Create a blank canvas with video dimensions
+        const canvas = document.createElement('canvas');
+        canvas.width = this.videoWidth;
+        canvas.height = this.videoHeight;
+        const ctx = canvas.getContext('2d');
+
+        // Fill with black
+        ctx.fillStyle = 'black';
+        ctx.fillRect(0, 0, this.videoWidth, this.videoHeight);
+
+        // Store canvas for return while ImageBitmap is being created
+        this.blankFrameCanvas = canvas;
+        this.blankFramePending = true;
+
+        // Convert to ImageBitmap for consistency with decoded frames
+        createImageBitmap(canvas).then(bitmap => {
+            this.blankFrame = bitmap;
+            this.blankFramePending = false;
+            // Clean up temporary canvas once we have the bitmap
+            this.blankFrameCanvas = null;
+        }).catch(error => {
+            console.warn("Error creating blank frame ImageBitmap:", error);
+            // Fallback to canvas - keep using the canvas
+            this.blankFrame = canvas;
+            this.blankFramePending = false;
+        });
+
+        // Return canvas immediately while ImageBitmap is being created
+        return canvas;
     }
 
     update() {
@@ -574,17 +649,38 @@ export class CVideoWebCodecBase extends CVideoData {
         if (this.imageCache) {
             // Close all ImageBitmap objects to free memory
             for (let i = 0; i < this.imageCache.length; i++) {
-                if (this.imageCache[i] && typeof this.imageCache[i].close === 'function') {
-                    this.imageCache[i].close();
+                if (this.imageCache[i]) {
+                    if (typeof this.imageCache[i].close === 'function') {
+                        try {
+                            this.imageCache[i].close();
+                        } catch (e) {
+                            console.warn("Error closing ImageBitmap during flush:", e);
+                        }
+                    }
+                    this.imageCache[i] = null;
                 }
             }
         }
 
         // Close blank frame if it's an ImageBitmap
-        if (this.blankFrame && typeof this.blankFrame.close === 'function') {
-            this.blankFrame.close();
+        if (this.blankFrame) {
+            if (typeof this.blankFrame.close === 'function') {
+                try {
+                    this.blankFrame.close();
+                } catch (e) {
+                    console.warn("Error closing blank frame:", e);
+                }
+            }
+            this.blankFrame = null;
         }
-        this.blankFrame = null;
+
+        // Clean up temporary canvas and context
+        if (this.c_tmp) {
+            this.c_tmp = null;
+        }
+        if (this.ctx_tmp) {
+            this.ctx_tmp = null;
+        }
 
         // Reset cache arrays
         this.imageCache = [];
@@ -596,6 +692,7 @@ export class CVideoWebCodecBase extends CVideoData {
             for (let group of this.groups) {
                 group.loaded = false;
                 group.pending = 0;
+                group.decodeOrder = [];
             }
         }
 
@@ -631,14 +728,32 @@ export class CVideoWebCodecBase extends CVideoData {
     }
 
     dispose() {
+        // Stop any pending operations
+        this.groupsPending = 0;
+        this.nextRequest = null;
+        this.requestQueue = [];
+        
+        // Flush and close decoder
         if (this.decoder) {
             // flush is asynchronous, so we need to wait for it to finish
             // before we close the decoder
             const decoder = this.decoder;
             decoder.flush()
                 .catch(() => {})   // swallow any flush errors we don't care about
-                .finally(() => decoder.close());
+                .finally(() => {
+                    try {
+                        decoder.close();
+                        console.log("VideoDecoder closed successfully");
+                    } catch (e) {
+                        console.warn("Error closing decoder:", e);
+                    }
+                });
+            this.decoder = null;
         }
+        
+        // Flush all caches before calling parent dispose
+        this.flushEntireCache();
+        
         super.dispose();
 
         delete Sit.videoFile;
