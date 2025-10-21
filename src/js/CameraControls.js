@@ -28,7 +28,7 @@ import {GlobalScene} from "../LocalFrame";
 import * as LAYER from "../LayerMasks";
 
 const STATE = {
-	NONE: - 1,
+	NONE: -1,
 	ROTATE: 0,				     // MIDDLE button - rotate the camera around the target
 	DOLLY: 1,
 	PAN: 2,						 // RIGHT button - pan the world around (also CMD + LEFT button)
@@ -38,6 +38,10 @@ const STATE = {
 	TOUCH_DOLLY_ROTATE: 6,
 	DRAG: 7,                     // LEFT button - drag the world around
 	TOUCH_PINCH_ZOOM: 8,         // Two-finger pinch zoom gesture
+	TOUCH_TWO_FINGER_ROTATE: 9,  // Two-finger rotation (one fixed, one moving)
+	TOUCH_TILT: 10,              // Two-finger vertical drag for tilt/pitch
+	SINGLE_TAP: 11,              // Single-finger tap (potential double-tap)
+	DOUBLE_TAP_DRAG_ZOOM: 12,    // Double-tap-and-drag one-hand zoom
 };
 
 
@@ -53,6 +57,48 @@ class CameraMapControls {
 		this.target = new Vector3()
 		this.targetIsTerrain = false;
 
+		// ===== GESTURE FEATURE FLAGS (Maps/Earth API compatibility) =====
+		this.scrollGestures = true;       // Single-finger pan/drag
+		this.zoomGestures = true;         // Pinch zoom, double-tap, two-finger tap, double-tap-drag
+		this.rotateGestures = true;       // Two-finger rotation
+		this.tiltGestures = true;         // Two-finger vertical drag for pitch/tilt
+
+		// ===== ZOOM LIMITS =====
+		this.minZoom = 0.01;
+		this.maxZoom = 120;
+
+		// ===== TILT LIMITS =====
+		this.minTilt = 0;   // Nadir (looking straight down)
+		this.maxTilt = 60;  // Maximum tilt angle in degrees
+
+		// ===== DOUBLE-TAP TRACKING =====
+		this.lastTapTime = 0;
+		this.lastTapPos = new Vector2();
+		this.tapThreshold = 300; // milliseconds for double-tap
+		this.tapDistanceThreshold = 15; // pixels: max distance for second tap to count as double-tap
+
+		// ===== TWO-FINGER GESTURE TRACKING =====
+		this.touch1Start = new Vector2();
+		this.touch2Start = new Vector2();
+		this.touch1Prev = new Vector2();
+		this.touch2Prev = new Vector2();
+		this.gestureStartDistance = 0;    // distance between fingers at gesture start
+		this.gestureStartAngle = 0;       // angle between fingers at gesture start
+		this.gestureStartCentroid = new Vector2(); // center point between fingers
+		
+		// Active gesture flags (multiple can be true simultaneously)
+		this.pinchActive = false;
+		this.rotateActive = false;
+		this.tiltActive = false;
+
+		// Gesture discrimination thresholds
+		this.scaleChangeThreshold = 10;   // pixels: if pinch motion > this, activate pinch
+		this.rotationThreshold = 5;       // degrees: if rotation motion > this, activate rotation
+		this.tiltThreshold = 15;          // pixels: if tilt motion > this, activate tilt
+
+		this.pinchDistance = 0;
+		this.lastPinchDistance = 0;
+
 		this.canvas.addEventListener( 'contextmenu', e => this.onContextMenu(e) );
 		this.canvas.addEventListener( 'pointerdown', e => this.handleMouseDown(e) );
 		this.canvas.addEventListener( 'pointerup', e => this.handleMouseUp(e) );
@@ -61,6 +107,10 @@ class CameraMapControls {
 		this.canvas.addEventListener( 'touchstart', e => this.handleTouchStart(e), { passive: false } );
 		this.canvas.addEventListener( 'touchmove', e => this.handleTouchMove(e), { passive: false } );
 		this.canvas.addEventListener( 'touchend', e => this.handleTouchEnd(e), { passive: false } );
+		
+		// Prevent iOS long-press selection menu
+		this.canvas.addEventListener( 'selectstart', e => e.preventDefault(), { passive: false } );
+		this.canvas.addEventListener( 'gesturestart', e => e.preventDefault(), { passive: false } );
 
 		this.mouseStart = new Vector2();
 		this.mouseEnd = new Vector2();
@@ -74,10 +124,6 @@ class CameraMapControls {
 		// Track mouse position for context menu drag detection
 		this.contextMenuDownPos = null;
 		this.contextMenuDragThreshold = 2; // pixels
-
-		// Track pinch zoom gesture
-		this.pinchDistance = 0;
-		this.lastPinchDistance = 0;
 
 		const id = this.view.id;
 		this.measureStartPoint = V3()
@@ -161,52 +207,232 @@ class CameraMapControls {
 		setRenderOne(true);
 	}
 
-	calculatePinchDistance(touches) {
-		if (touches.length < 2) return 0;
-		const dx = touches[0].clientX - touches[1].clientX;
-		const dy = touches[0].clientY - touches[1].clientY;
+	// ===== HELPER METHODS FOR GESTURE CALCULATION =====
+
+	calculateDistance(p1, p2) {
+		const dx = p1.x - p2.x;
+		const dy = p1.y - p2.y;
 		return Math.sqrt(dx * dx + dy * dy);
 	}
 
-	handleTouchStart(event) {
-		if (!this.enabled || this.enableZoom === false) return;
+	calculateAngle(p1, p2) {
+		const dx = p2.x - p1.x;
+		const dy = p2.y - p1.y;
+		return Math.atan2(dy, dx) * 180 / Math.PI;
+	}
 
-		// Only handle pinch zoom with 2 fingers
+	calculateCentroid(p1, p2) {
+		return new Vector2().addVectors(p1, p2).multiplyScalar(0.5);
+	}
+
+	calculateAngleDelta(angle1, angle2) {
+		let delta = angle2 - angle1;
+		// Normalize to [-180, 180]
+		while (delta > 180) delta -= 360;
+		while (delta < -180) delta += 360;
+		return delta;
+	}
+
+	// ===== DIRECTIONAL MOTION ANALYSIS =====
+	
+	/**
+	 * Analyzes two-finger motions along and perpendicular to the line between them.
+	 * Returns an object with:
+	 *   - pinchDelta: relative motion along the line (positive = fingers apart, negative = together)
+	 *   - rotateDelta: opposing motions perpendicular to line (positive = CCW rotation)
+	 *   - tiltDelta: matching motions perpendicular to line (positive = upward tilt)
+	 */
+	analyzeDirectionalMotion(touch1Curr, touch2Curr, touch1Prev, touch2Prev) {
+		// Get line between fingers (from touch1 to touch2)
+		const lineVector = touch2Curr.clone().sub(touch1Curr);
+		const lineDir = lineVector.clone().normalize();
+		
+		// Perpendicular direction (rotated 90° counterclockwise)
+		const perpDir = new Vector2(-lineDir.y, lineDir.x);
+		
+		// Current motions of each finger
+		const motion1 = touch1Curr.clone().sub(touch1Prev);
+		const motion2 = touch2Curr.clone().sub(touch2Prev);
+		
+		// Project motions onto line and perpendicular directions
+		const motion1_parallel = lineDir.dot(motion1);  // Positive = moving away from touch2
+		const motion2_parallel = lineDir.dot(motion2);  // Positive = moving toward touch1
+		const motion1_perp = perpDir.dot(motion1);      // Perpendicular component
+		const motion2_perp = perpDir.dot(motion2);      // Perpendicular component
+		
+		// PINCH ZOOM: relative motion along the line
+		// Positive when fingers move apart, negative when moving together
+		const pinchDelta = (motion1_parallel - motion2_parallel) * 0.5;
+		
+		// ROTATION: opposing motions perpendicular to the line
+		// Positive for CCW rotation (touch1 moving CCW, touch2 moving CW relative to line)
+		const rotateDelta = (motion1_perp - motion2_perp) * 0.5;
+		
+		// TILT: matching motions perpendicular to the line
+		// Positive when both fingers move in the same perpendicular direction
+		const tiltDelta = (motion1_perp + motion2_perp) * 0.5;
+		
+		return { pinchDelta, rotateDelta, tiltDelta };
+	}
+
+	// ===== SINGLE-FINGER TAP DETECTION =====
+
+	handleSingleTap(event) {
+		const currentTime = Date.now();
+		const [x, y] = mouseToView(this.view, event.clientX, event.clientY);
+		const currentPos = new Vector2(x, y);
+
+		// Check if this could be a double-tap
+		if (currentTime - this.lastTapTime < this.tapThreshold &&
+		    this.calculateDistance(currentPos, this.lastTapPos) < this.tapDistanceThreshold) {
+			// It's a DOUBLE-TAP → zoom in
+			if (this.zoomGestures && this.enableZoom) {
+				this.zoomInAtPoint(event.clientX, event.clientY);
+			}
+		} else {
+			// It's the first tap of a potential double-tap
+			this.lastTapTime = currentTime;
+			this.lastTapPos.copy(currentPos);
+		}
+	}
+
+	zoomInAtPoint(clientX, clientY) {
+		// Zoom in one level at the tap location (like Maps)
+		const zoomFactor = 1.2;
+		this.zoomBy(-0.4); // More conservative zoom in
+		setRenderOne(true);
+	}
+
+	// ===== TWO-FINGER GESTURE HANDLING =====
+
+	handleTouchStart(event) {
+		if (!this.enabled) return;
+
+		// Single finger - check for tap
+		if (event.touches.length === 1) {
+			const [x, y] = mouseToView(this.view, event.clientX, event.clientY);
+			this.lastTapPos.set(x, y);
+			return;
+		}
+
+		// Two-finger gesture start
 		if (event.touches.length === 2) {
 			event.preventDefault();
-			this.state = STATE.TOUCH_PINCH_ZOOM;
-			this.lastPinchDistance = this.calculatePinchDistance(event.touches);
-			this.pinchDistance = this.lastPinchDistance;
+			
+			const touch1 = new Vector2(event.touches[0].clientX, event.touches[0].clientY);
+			const touch2 = new Vector2(event.touches[1].clientX, event.touches[1].clientY);
+
+			this.touch1Start.copy(touch1);
+			this.touch2Start.copy(touch2);
+			this.touch1Prev.copy(touch1);
+			this.touch2Prev.copy(touch2);
+
+			// Store initial gesture parameters
+			this.gestureStartDistance = this.calculateDistance(touch1, touch2);
+			this.gestureStartAngle = this.calculateAngle(touch1, touch2);
+			this.gestureStartCentroid = this.calculateCentroid(touch1, touch2);
+			
+			// Reset all gesture flags - will be set as thresholds are crossed in handleTouchMove
+			this.pinchActive = false;
+			this.rotateActive = false;
+			this.tiltActive = false;
+			this.state = STATE.NONE;
+
+			setRenderOne(true);
 		}
 	}
 
 	handleTouchMove(event) {
-		if (!this.enabled || this.enableZoom === false || event.touches.length !== 2) return;
-		if (this.lastPinchDistance === 0) return;
+		if (!this.enabled || event.touches.length !== 2) return;
 
 		event.preventDefault();
 
-		this.pinchDistance = this.calculatePinchDistance(event.touches);
-		const deltaDistance = this.pinchDistance - this.lastPinchDistance;
+		const touch1Curr = new Vector2(event.touches[0].clientX, event.touches[0].clientY);
+		const touch2Curr = new Vector2(event.touches[1].clientX, event.touches[1].clientY);
 
-		// Convert distance delta to zoom signal
-		// Positive deltaDistance = pinch in (zoom in) = negative delta for zoomBy
-		// Negative deltaDistance = pinch out (zoom out) = positive delta for zoomBy
-		// Sensitivity: ~1 pixel = ~0.02 zoom units
-		const zoomDelta = -deltaDistance * 0.02;
-		
-		this.zoomBy(zoomDelta);
-		this.lastPinchDistance = this.pinchDistance;
+		// Analyze incremental motions from previous frame
+		const incrementalMotion = this.analyzeDirectionalMotion(
+			touch1Curr, touch2Curr, this.touch1Prev, this.touch2Prev
+		);
+
+		// DISCRIMINATE gestures using cumulative motion from START (one-time activation)
+		// Once a gesture component exceeds its threshold, that gesture becomes active
+		const totalMotion = this.analyzeDirectionalMotion(
+			touch1Curr, touch2Curr, this.touch1Start, this.touch2Start
+		);
+
+		// Activate gestures as their thresholds are crossed
+		if (!this.pinchActive && Math.abs(totalMotion.pinchDelta) > this.scaleChangeThreshold && this.zoomGestures) {
+			this.pinchActive = true;
+			this.state = STATE.TOUCH_PINCH_ZOOM;
+		}
+		if (!this.rotateActive && Math.abs(totalMotion.rotateDelta) > this.rotationThreshold && this.rotateGestures) {
+			this.rotateActive = true;
+			this.state = STATE.TOUCH_TWO_FINGER_ROTATE;
+		}
+		if (!this.tiltActive && Math.abs(totalMotion.tiltDelta) > this.tiltThreshold && this.tiltGestures) {
+			this.tiltActive = true;
+			this.state = STATE.TOUCH_TILT;
+		}
+
+		// APPLY all active gestures using incremental directional deltas from PREVIOUS frame
+		if (this.pinchActive) {
+			// PINCH ZOOM - relative motion along the finger line
+			// Positive pinchDelta = fingers apart (zoom out), negative = together (zoom in)
+			const zoomDelta = incrementalMotion.pinchDelta * 0.02;
+			this.zoomBy(zoomDelta);
+		}
+
+		if (this.rotateActive) {
+			// TWO-FINGER ROTATION - opposing perpendicular motions
+			// Positive = CCW rotation of fingers
+			const rotateAmount = incrementalMotion.rotateDelta * 0.5;
+			this.rotateAroundPoint(this.gestureStartCentroid, rotateAmount);
+		}
+
+		if (this.tiltActive) {
+			// TWO-FINGER VERTICAL DRAG for TILT/PITCH - matching perpendicular motions
+			// Positive = both fingers moving upward (or same direction perpendicular to line)
+			const tiltDelta = incrementalMotion.tiltDelta * 0.5;
+			this.adjustTilt(tiltDelta);
+		}
+
+		// Update previous touch positions for next frame
+		this.touch1Prev.copy(touch1Curr);
+		this.touch2Prev.copy(touch2Curr);
 
 		setRenderOne(true);
 	}
 
 	handleTouchEnd(event) {
 		if (event.touches.length < 2) {
+			// Reset all gesture flags
+			this.pinchActive = false;
+			this.rotateActive = false;
+			this.tiltActive = false;
 			this.state = STATE.NONE;
-			this.lastPinchDistance = 0;
-			this.pinchDistance = 0;
+			this.gestureStartDistance = 0;
+			this.gestureStartAngle = 0;
 		}
+	}
+
+	// ===== GESTURE OPERATIONS =====
+
+	rotateAroundPoint(screenPoint, angle) {
+		if (!this.rotateGestures) return;
+		
+		// For now, use the existing rotateLeft which rotates around the target
+		// In a full implementation, would rotate around the focal point (ray from camera through screenPoint)
+		this.rotateLeft(angle * Math.PI / 180);
+	}
+
+	adjustTilt(delta) {
+		if (!this.tiltGestures) return;
+
+		// This would adjust camera pitch/tilt
+		// For now, simulate with rotateUp
+		const tiltAmount = delta * 0.01;
+		this.rotateUp(tiltAmount);
 	}
 
 
@@ -221,6 +447,8 @@ class CameraMapControls {
 	}
 
 	zoomBy(delta) {
+		if (!this.zoomGestures || !this.enableZoom) return;
+
 		const ptzControls = getPTZController(this.view.cameraNode);
 
 		if (ptzControls !== undefined) {
@@ -229,10 +457,9 @@ class CameraMapControls {
 
 			ptzControls.fov = this.zoomScale(fov, delta, 1.5, 0.95)
 
-			const minZoom = 0.01;
-
-			if (ptzControls.fov < minZoom) ptzControls.fov = minZoom;
-			if (ptzControls.fov > 120) ptzControls.fov = 120;
+			// Apply zoom limits
+			if (ptzControls.fov < this.minZoom) ptzControls.fov = this.minZoom;
+			if (ptzControls.fov > this.maxZoom) ptzControls.fov = this.maxZoom;
 
 			// the FOV UI node is also updated, It's a hidden UI element that remains for backwards compatibility.
 			const fovUINode = NodeMan.get("fovUI", false)
@@ -360,6 +587,12 @@ class CameraMapControls {
 			NodeMan.disposeRemove("cursorLLA");
 		}
 		this.view.cursorSprite.visible = false;
+
+		// Check for tap gesture (left button, minimal movement) before handling context menu
+		if (event.button === 0 && this.state === STATE.NONE) {
+			// It was a tap gesture - check for double-tap zoom
+			this.handleSingleTap(event);
+		}
 		
 		// Check if this was a right-click release without dragging
 		if (event.button === 2 && this.contextMenuDownPos) {
@@ -408,9 +641,11 @@ class CameraMapControls {
 			return;
 		}
 
-		// Skip mouse move handling if we're in a touch pinch zoom gesture
-		// Touch events trigger pointer events which we need to ignore during pinch
-		if (this.state === STATE.TOUCH_PINCH_ZOOM) {
+		// Skip mouse move handling if we're in a touch gesture
+		// Touch events trigger pointer events which we need to ignore during touch gestures
+		if (this.state === STATE.TOUCH_PINCH_ZOOM || 
+		    this.state === STATE.TOUCH_TWO_FINGER_ROTATE ||
+		    this.state === STATE.TOUCH_TILT) {
 			return;
 		}
 

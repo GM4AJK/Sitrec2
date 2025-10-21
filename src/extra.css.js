@@ -183,6 +183,10 @@ html, body {
     margin: 0;
     padding: 0;
     height: 100%;
+    /* Disable iOS callout menu and text selection on long press */
+    -webkit-touch-callout: none;
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 /* Menu title bar styling - make titles appear as tabs instead of full-width bars */
