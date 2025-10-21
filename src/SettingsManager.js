@@ -48,6 +48,15 @@ export function sanitizeSettings(settings) {
         sanitized.tileSegments = Math.max(16, Math.min(256, Math.round(tileSegments)));
     }
     
+    if (settings.videoMaxSize !== undefined) {
+        const videoMaxSize = String(settings.videoMaxSize);
+        // Only allow specific allowed values
+        const allowedValues = ["None", "1080P", "720P", "480P", "360P"];
+        if (allowedValues.includes(videoMaxSize)) {
+            sanitized.videoMaxSize = videoMaxSize;
+        }
+    }
+    
     return sanitized;
 }
 
@@ -201,6 +210,7 @@ export async function initializeSettings() {
             maxDetails: 15, // Default value
             fpsLimit: 30, // Frame rate limit (60, 30, 20, or 15)
             tileSegments: 32, // Tile mesh resolution (16-256)
+            videoMaxSize: "720P", // Video frame max size (None, 1080P, 720P, 480P, 360P)
         };
     }
     

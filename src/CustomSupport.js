@@ -167,6 +167,20 @@ export class CCustomManager {
                 }
             })
             .listen();
+        
+        // Add Max Resolution dropdown
+        settingsFolder.add(Globals.settings, "videoMaxSize", ["None", "1080P", "720P", "480P", "360P"])
+            .name("Max Resolution")
+            .tooltip("Maximum video frame resolution (longer side). Reduces GPU memory usage. Applies to newly loaded frames.")
+            .onChange(() => {
+                // Save settings when changed
+                this.saveSettings();
+            })
+            .onFinishChange(() => {
+                // When selection is finalized, force immediate save
+                this.saveSettings(true);
+            })
+            .listen();
     }
 
     /**

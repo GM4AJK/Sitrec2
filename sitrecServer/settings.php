@@ -69,6 +69,15 @@ function sanitizeSettings($settings) {
         }
     }
     
+    if (isset($settings['videoMaxSize'])) {
+        $videoMaxSize = strval($settings['videoMaxSize']);
+        // Only allow specific allowed values
+        $allowedValues = ['None', '1080P', '720P', '480P', '360P'];
+        if (in_array($videoMaxSize, $allowedValues)) {
+            $sanitized['videoMaxSize'] = $videoMaxSize;
+        }
+    }
+    
     // Add more settings here as needed
     // Remember to also update SettingsManager.js!
     

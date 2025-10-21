@@ -104,6 +104,67 @@ export class CVideoWebCodecBase extends CVideoData {
     }
 
     /**
+     * Resize a video frame based on videoMaxSize setting
+     * Returns the original frame if no resizing needed
+     */
+    resizeFrameIfNeeded(image) {
+        // Check if videoMaxSize is set
+        const videoMaxSize = Globals.settings?.videoMaxSize;
+        if (!videoMaxSize || videoMaxSize === "None") {
+            return image;
+        }
+        
+        // Map resolution names to longest edge dimensions
+        const resolutionMap = {
+            "1080P": 1920,  // 1920x1080
+            "720P": 1280,   // 1280x720
+            "480P": 854,    // 854x480
+            "360P": 640     // 640x360
+        };
+        
+        const maxSize = resolutionMap[videoMaxSize];
+        if (!maxSize || isNaN(maxSize)) {
+            return image;
+        }
+        
+        // Check if resizing is needed
+        const maxDimension = Math.max(image.width, image.height);
+        if (maxDimension <= maxSize) {
+            return image; // No resizing needed
+        }
+        
+        // Calculate new dimensions maintaining aspect ratio
+        const scaleFactor = maxSize / maxDimension;
+        const newWidth = Math.round(image.width * scaleFactor);
+        const newHeight = Math.round(image.height * scaleFactor);
+        
+        try {
+            // Create a canvas for resizing
+            const canvas = document.createElement("canvas");
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+            const ctx = canvas.getContext("2d");
+            
+            // Draw the image scaled down
+            ctx.drawImage(image, 0, 0, newWidth, newHeight);
+            
+            // Create ImageBitmap from the resized canvas
+            return createImageBitmap(canvas).then(resizedImage => {
+                // Close the original image to free GPU memory
+                try {
+                    image.close();
+                } catch (e) {
+                    console.warn("Error closing original frame:", e);
+                }
+                return resizedImage;
+            });
+        } catch (error) {
+            showError("Error resizing video frame:", error);
+            return image; // Return original on error
+        }
+    }
+
+    /**
      * Process a decoded video frame and convert it to ImageBitmap
      */
     processDecodedFrame(frameNumber, videoFrame, group) {
@@ -132,41 +193,57 @@ export class CVideoWebCodecBase extends CVideoData {
                 return;
             }
 
-            this.imageCache[frameNumber] = image;
-            if (this.videoWidth !== image.width || this.videoHeight !== image.height) {
-                console.log("New per-frame video dimensions detected: width=" + image.width + ", height=" + image.height);
-                this.videoWidth = image.width;
-                this.videoHeight = image.height;
-            }
+            // Resize frame if needed based on videoMaxSize setting
+            const resizePromise = this.resizeFrameIfNeeded(image);
+            
+            // Handle both sync (image returned as-is) and async (Promise from resizing)
+            Promise.resolve(resizePromise).then(processedImage => {
+                // Double-check imageCache still exists after async operations
+                if (!this.imageCache) {
+                    if (typeof processedImage.close === 'function') {
+                        processedImage.close();
+                    }
+                    return;
+                }
 
-            if (this.c_tmp === undefined) {
-                this.c_tmp = document.createElement("canvas");
-                this.c_tmp.setAttribute("width", this.videoWidth);
-                this.c_tmp.setAttribute("height", this.videoHeight);
-                this.ctx_tmp = this.c_tmp.getContext("2d");
-            }
+                this.imageCache[frameNumber] = processedImage;
+                if (this.videoWidth !== processedImage.width || this.videoHeight !== processedImage.height) {
+                    console.log("New per-frame video dimensions detected: width=" + processedImage.width + ", height=" + processedImage.height);
+                    this.videoWidth = processedImage.width;
+                    this.videoHeight = processedImage.height;
+                }
 
-            // if it's the last one we wanted, then tell the system to render a frame
-            if (frameNumber === this.lastGetImageFrame) {
-                setRenderOne(true);
-            }
+                if (this.c_tmp === undefined) {
+                    this.c_tmp = document.createElement("canvas");
+                    this.c_tmp.setAttribute("width", this.videoWidth);
+                    this.c_tmp.setAttribute("height", this.videoHeight);
+                    this.ctx_tmp = this.c_tmp.getContext("2d");
+                }
 
-            if (!group.decodeOrder) {
-                group.decodeOrder = [];
-            }
-            group.decodeOrder.push(frameNumber);
+                // if it's the last one we wanted, then tell the system to render a frame
+                if (frameNumber === this.lastGetImageFrame) {
+                    setRenderOne(true);
+                }
 
-            if (group.pending <= 0) {
-                console.warn("Decoding more frames than were listed as pending at frame " + frameNumber);
-                return;
-            }
+                if (!group.decodeOrder) {
+                    group.decodeOrder = [];
+                }
+                group.decodeOrder.push(frameNumber);
 
-            group.pending--;
-            if (group.pending == 0) {
-                group.loaded = true;
-                this.groupsPending--;
-                this.handleGroupComplete();
-            }
+                if (group.pending <= 0) {
+                    console.warn("Decoding more frames than were listed as pending at frame " + frameNumber);
+                    return;
+                }
+
+                group.pending--;
+                if (group.pending == 0) {
+                    group.loaded = true;
+                    this.groupsPending--;
+                    this.handleGroupComplete();
+                }
+            }).catch(error => {
+                showError("Error during frame processing/resizing:", error);
+            });
         }).catch(error => {
             showError("Error creating ImageBitmap:", error);
             // Ensure we still close the videoFrame on error
