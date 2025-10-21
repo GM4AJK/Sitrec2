@@ -21,6 +21,11 @@ COPY webpackCopyPatterns.js .
 COPY config ./config
 COPY docker/docker-config-install.js ./config/config-install.js
 COPY .git .git
+COPY apple-touch-icon.png .
+COPY favicon-512.png .
+COPY favicon-32x32.png .
+COPY favicon-16x16.png .
+COPY site.webmanifest .
 
 
 # We don't want Puppeteer to try to download anything, as it can give errors on some systems

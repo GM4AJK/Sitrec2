@@ -77,6 +77,13 @@ services:
       - ./webpack.prod.js:/app/webpack.prod.js:cached
       - ./webpackCopyPatterns.js:/app/webpackCopyPatterns.js:cached
       
+      # Favicon and manifest files
+      - ./apple-touch-icon.png:/app/apple-touch-icon.png:cached
+      - ./favicon-512.png:/app/favicon-512.png:cached
+      - ./favicon-32x32.png:/app/favicon-32x32.png:cached
+      - ./favicon-16x16.png:/app/favicon-16x16.png:cached
+      - ./site.webmanifest:/app/site.webmanifest:cached
+      
       # Docker-specific configuration override
       # This replaces config-install.js with Docker-appropriate paths
       - ./config/config-install.docker.js:/app/config/config-install.js
