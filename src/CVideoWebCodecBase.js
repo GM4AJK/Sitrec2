@@ -138,15 +138,19 @@ export class CVideoWebCodecBase extends CVideoData {
         const newWidth = Math.round(image.width * scaleFactor);
         const newHeight = Math.round(image.height * scaleFactor);
         
+        let canvas = null;
         try {
             // Create a canvas for resizing
-            const canvas = document.createElement("canvas");
+            canvas = document.createElement("canvas");
             canvas.width = newWidth;
             canvas.height = newHeight;
             const ctx = canvas.getContext("2d");
             
             // Draw the image scaled down
             ctx.drawImage(image, 0, 0, newWidth, newHeight);
+            
+            // Store reference for cleanup in the Promise chain
+            const tempCanvas = canvas;
             
             // Create ImageBitmap from the resized canvas
             return createImageBitmap(canvas).then(resizedImage => {
@@ -156,10 +160,31 @@ export class CVideoWebCodecBase extends CVideoData {
                 } catch (e) {
                     console.warn("Error closing original frame:", e);
                 }
+                
+                // Clean up temporary canvas - remove from DOM if attached and dereferenced
+                if (tempCanvas && tempCanvas.parentNode) {
+                    tempCanvas.parentNode.removeChild(tempCanvas);
+                }
+                
                 return resizedImage;
+            }).catch(error => {
+                // Clean up on error
+                try {
+                    image.close();
+                } catch (e) {
+                    console.warn("Error closing original frame on resize error:", e);
+                }
+                if (tempCanvas && tempCanvas.parentNode) {
+                    tempCanvas.parentNode.removeChild(tempCanvas);
+                }
+                throw error;
             });
         } catch (error) {
             showError("Error resizing video frame:", error);
+            // Ensure canvas cleanup on synchronous errors
+            if (canvas && canvas.parentNode) {
+                canvas.parentNode.removeChild(canvas);
+            }
             return image; // Return original on error
         }
     }
@@ -188,7 +213,11 @@ export class CVideoWebCodecBase extends CVideoData {
             // Double-check imageCache still exists (video might have been disposed during async operation)
             if (!this.imageCache) {
                 if (typeof image.close === 'function') {
-                    image.close();
+                    try {
+                        image.close();
+                    } catch (e) {
+                        console.warn("Error closing image on cache invalidation:", e);
+                    }
                 }
                 return;
             }
@@ -201,7 +230,11 @@ export class CVideoWebCodecBase extends CVideoData {
                 // Double-check imageCache still exists after async operations
                 if (!this.imageCache) {
                     if (typeof processedImage.close === 'function') {
-                        processedImage.close();
+                        try {
+                            processedImage.close();
+                        } catch (e) {
+                            console.warn("Error closing processed image on cache invalidation:", e);
+                        }
                     }
                     return;
                 }
@@ -243,6 +276,23 @@ export class CVideoWebCodecBase extends CVideoData {
                 }
             }).catch(error => {
                 showError("Error during frame processing/resizing:", error);
+                // Ensure proper cleanup on error
+                if (this.imageCache && this.imageCache[frameNumber] instanceof ImageBitmap) {
+                    try {
+                        this.imageCache[frameNumber].close();
+                    } catch (e) {
+                        console.warn("Error closing frame on processing error:", e);
+                    }
+                    this.imageCache[frameNumber] = null;
+                }
+                // Decrement pending count even on error
+                if (group && group.pending > 0) {
+                    group.pending--;
+                    if (group.pending == 0) {
+                        group.loaded = false;
+                        this.groupsPending--;
+                    }
+                }
             });
         }).catch(error => {
             showError("Error creating ImageBitmap:", error);
@@ -250,7 +300,15 @@ export class CVideoWebCodecBase extends CVideoData {
             try {
                 videoFrame.close();
             } catch (e) {
-                // Ignore errors
+                console.warn("Error closing videoFrame on ImageBitmap creation error:", e);
+            }
+            // Decrement pending count on error
+            if (group && group.pending > 0) {
+                group.pending--;
+                if (group.pending == 0) {
+                    group.loaded = false;
+                    this.groupsPending--;
+                }
             }
         });
 
@@ -322,7 +380,7 @@ export class CVideoWebCodecBase extends CVideoData {
         }
         const last = this.groups[this.groups.length - 1];
         if (last) {
-            console.warn("Last frame = " + last.frame + ", length = " + last.length + ", i.e. up to " + (last.frame + last.length - 1));
+            console.warn("(frame = "+frame+" Last frame = " + last.frame + ", length = " + last.length + ", i.e. up to " + (last.frame + last.length - 1));
         }
         return null;
     }
@@ -422,11 +480,12 @@ export class CVideoWebCodecBase extends CVideoData {
                     // release all the frames in this group
                     // Close imageCache (ImageBitmap for WebCodec videos)
                     if (this.imageCache[i]) {
-                        if (typeof this.imageCache[i].close === 'function') {
+                        // Only close ImageBitmap objects, not regular images
+                        if (this.imageCache[i] instanceof ImageBitmap) {
                             try {
                                 this.imageCache[i].close(); // Close ImageBitmap to free GPU memory
                             } catch (e) {
-                                console.warn("Error closing ImageBitmap:", e);
+                                console.warn("Error closing ImageBitmap during purge:", e);
                             }
                         }
                         this.imageCache[i] = null; // Use null instead of undefined for better garbage collection
@@ -441,6 +500,7 @@ export class CVideoWebCodecBase extends CVideoData {
                     }
                 }
                 group.loaded = false;
+                group.pending = 0; // Reset pending count to prevent stale data
                 group.decodeOrder = []; // Clear decode order to free memory
             }
         }
@@ -642,6 +702,29 @@ export class CVideoWebCodecBase extends CVideoData {
         }
     }
 
+    /**
+     * Get GPU memory usage estimate for debugging
+     * Note: This is an estimate based on cached frames
+     */
+    getGPUMemoryEstimate() {
+        let cachedCount = 0;
+        let cachedBytes = 0;
+        
+        if (this.imageCache) {
+            for (let i = 0; i < this.imageCache.length; i++) {
+                const frame = this.imageCache[i];
+                if (frame && frame.width && frame.height) {
+                    cachedCount++;
+                    // Estimate: 4 bytes per pixel (RGBA)
+                    cachedBytes += frame.width * frame.height * 4;
+                }
+            }
+        }
+        
+        const estimatedMB = (cachedBytes / (1024 * 1024)).toFixed(2);
+        return { count: cachedCount, estimatedMB: estimatedMB };
+    }
+
     debugVideo() {
         let d = "";
 
@@ -652,6 +735,10 @@ export class CVideoWebCodecBase extends CVideoData {
             // Get config info - allow subclasses to override
             const configInfo = this.getDebugConfigInfo();
             d += configInfo + "<br>";
+            
+            // Add GPU memory estimate
+            const gpuMem = this.getGPUMemoryEstimate();
+            d += "GPU Memory (est): " + gpuMem.count + " frames = " + gpuMem.estimatedMB + " MB<br>";
             
             d += "CVideoView: " + this.videoWidth + "x" + this.videoHeight + "<br>";
             d += "par.frame = " + par.frame + ", Sit.frames = " + Sit.frames + ", chunks = " + this.chunks.length + "<br>";
@@ -751,8 +838,21 @@ export class CVideoWebCodecBase extends CVideoData {
             this.blankFrame = null;
         }
 
+        // Clean up blank frame canvas
+        if (this.blankFrameCanvas) {
+            // Remove from DOM if attached
+            if (this.blankFrameCanvas.parentNode) {
+                this.blankFrameCanvas.parentNode.removeChild(this.blankFrameCanvas);
+            }
+            this.blankFrameCanvas = null;
+        }
+
         // Clean up temporary canvas and context
         if (this.c_tmp) {
+            // Remove from DOM if attached
+            if (this.c_tmp.parentNode) {
+                this.c_tmp.parentNode.removeChild(this.c_tmp);
+            }
             this.c_tmp = null;
         }
         if (this.ctx_tmp) {
@@ -815,16 +915,21 @@ export class CVideoWebCodecBase extends CVideoData {
             // flush is asynchronous, so we need to wait for it to finish
             // before we close the decoder
             const decoder = this.decoder;
-            decoder.flush()
-                .catch(() => {})   // swallow any flush errors we don't care about
-                .finally(() => {
-                    try {
-                        decoder.close();
-                        console.log("VideoDecoder closed successfully");
-                    } catch (e) {
-                        console.warn("Error closing decoder:", e);
-                    }
-                });
+            // Check decoder state before flushing
+            if (decoder.state !== 'closed') {
+                decoder.flush()
+                    .catch(() => {})   // swallow any flush errors we don't care about
+                    .finally(() => {
+                        try {
+                            if (decoder.state !== 'closed') {
+                                decoder.close();
+                                console.log("VideoDecoder closed successfully");
+                            }
+                        } catch (e) {
+                            console.warn("Error closing decoder:", e);
+                        }
+                    });
+            }
             this.decoder = null;
         }
         

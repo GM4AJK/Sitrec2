@@ -680,9 +680,21 @@ export class CVideoWebCodecData extends CVideoData {
             // before we close the decoder
             // we create a local variable to avoid the "this" context changing
             const decoder = this.decoder;
-            decoder.flush()
-                .catch(() => {})   // swallow any flush errors we don't care about
-                .finally(() => decoder.close());
+            // Check decoder state before attempting operations
+            if (decoder.state !== 'closed') {
+                decoder.flush()
+                    .catch(() => {})   // swallow any flush errors we don't care about
+                    .finally(() => {
+                        try {
+                            if (decoder.state !== 'closed') {
+                                decoder.close();
+                            }
+                        } catch (e) {
+                            console.warn("Error closing decoder:", e);
+                        }
+                    });
+            }
+            this.decoder = null;
         }
         this.killWorkers();
         super.dispose();
