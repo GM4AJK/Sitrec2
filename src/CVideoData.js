@@ -34,13 +34,11 @@ export class CVideoData {
 
     flushEntireCache() {
 
-        this.imageCacheTiny = [] // optional small versions
         this.imageCache = [] // full sized images
         this.imageDataCache = []
         this.frameCache = []
 
         for (let i = 0; i < this.frames; i++) {
-            this.imageCacheTiny.push(new Image())
             this.imageCache.push(new Image())
             this.imageDataCache.push(null)
         }
@@ -56,6 +54,7 @@ export class CVideoData {
         this.imageCache = null
         this.imageDataCache = null
         this.frameCache = null
+        this.imageCacheTiny = null
     }
 
 }
