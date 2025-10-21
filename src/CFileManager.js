@@ -644,15 +644,30 @@ export class CFileManager extends CManager {
 
         // Set its type to 'file'
         inputElement.type = 'file';
+        
+        // Allow multiple file types including videos and images for better mobile support
+        inputElement.accept = 'video/*,image/*,.kml,.kmz,.csv,.json,.geojson,.sitch,.txt,.xml,.srt,.ts,.m2ts,.mts,.zip';
+        
+        // Allow multiple files
+        inputElement.multiple = true;
 
         // Listen for changes on the input element
         inputElement.addEventListener('change', (event) => {
-            processFile(event.target.files[0]);
+            const files = event.target.files;
+            if (files && files.length > 0) {
+                // Process each selected file
+                for (let i = 0; i < files.length; i++) {
+                    processFile(files[i]);
+                }
+            }
 
             // Remove the input element after use
             inputElement.remove();
 
         });
+        
+        // Add to body to ensure proper interaction on iOS
+        document.body.appendChild(inputElement);
 
         // Trigger a click event on the input element
         inputElement.click();
@@ -892,7 +907,7 @@ export class CFileManager extends CManager {
             }
 
             Globals.parsing++;
-            console.log(`>>> loadAsset() Loading Started: ${filename} (id: ${id})`);
+            // console.log(`>>> loadAsset() Loading Started: ${filename} (id: ${id})`);
 
             var bufferPromise = null;
             let fetchOperationId = null; // Track for cleanup
@@ -972,7 +987,7 @@ export class CFileManager extends CManager {
                     }
 
                     Globals.parsing--;
-                    console.log(`<<< loadAsset() parsing Finished: ${filename} (id: ${id})`);
+                    // console.log(`<<< loadAsset() parsing Finished: ${filename} (id: ${id})`);
                     Globals.pendingActions--;
                     
                     // Add the ID to the parsed asset for reference in the loading promise map
@@ -1078,7 +1093,7 @@ export class CFileManager extends CManager {
                                     // (typically for doc.kml insize a .kmz file)
                                     zipFilename = filename+"_"+zipFilename; // Prefix the zip filename with the original filename
 
-                                    console.log("Unzipped file: " + zipFilename + " for id: " + id);
+                                    // console.log("Unzipped file: " + zipFilename + " for id: " + id);
                                     return this.parseAsset(zipFilename, id, unzippedBuffer);
                                 });
                         }
