@@ -297,6 +297,10 @@ if (customSitch !== null) {
     await fetch(customSitch, {mode: 'cors'}).then(response => response.text()).then(data => {
         console.log("Custom sitch = " + customSitch)
 
+        // if we have a custom sitch, then we don't want any auto-setup for datetime or locatiosn from loading files
+        // otherwise we'll end up getting a time from the video that will conflict with the sitch time set by the user
+        Globals.sitchEstablished = true;
+
         let sitchObject = textSitchToObject(data);
 
         if (sitchObject.isCustom) {
