@@ -5,6 +5,13 @@
 import {Globals} from "./Globals";
 import {indexedDBManager} from "./IndexedDBManager";
 import {isServerless} from "./configUtils";
+import {parseBoolean} from "./utils";
+
+// Environment variable flags for storage methods (default to false if not specified)
+// Set to 'true', 'false', '1', '0', 'yes', or 'no'
+const SETTINGS_COOKIES_ENABLED = parseBoolean(process.env.SETTINGS_COOKIES_ENABLED ?? 'false');
+const SETTINGS_SERVER_ENABLED = parseBoolean(process.env.SETTINGS_SERVER_ENABLED ?? 'false');
+const SETTINGS_DB_ENABLED = parseBoolean(process.env.SETTINGS_DB_ENABLED ?? 'false');
 
 // Cookie helper functions for settings
 function setCookie(name, value, days) {
@@ -62,6 +69,11 @@ export function sanitizeSettings(settings) {
 
 // IndexedDB-based settings functions (for serverless mode)
 export async function loadSettingsFromIndexedDB() {
+    if (!SETTINGS_DB_ENABLED) {
+        console.log("IndexedDB settings disabled by SETTINGS_DB_ENABLED flag");
+        return null;
+    }
+    
     try {
         const settings = await indexedDBManager.getAllSettings();
         if (Object.keys(settings).length > 0) {
@@ -77,6 +89,11 @@ export async function loadSettingsFromIndexedDB() {
 }
 
 export async function saveSettingsToIndexedDB(settings) {
+    if (!SETTINGS_DB_ENABLED) {
+        console.log("IndexedDB settings disabled by SETTINGS_DB_ENABLED flag");
+        return false;
+    }
+    
     try {
         const sanitized = sanitizeSettings(settings);
         for (const [key, value] of Object.entries(sanitized)) {
@@ -92,6 +109,11 @@ export async function saveSettingsToIndexedDB(settings) {
 
 // Load settings from cookie
 export function loadSettingsFromCookie() {
+    if (!SETTINGS_COOKIES_ENABLED) {
+        console.log("Cookie settings disabled by SETTINGS_COOKIES_ENABLED flag");
+        return null;
+    }
+    
     const cookieValue = getCookie("sitrecSettings");
     if (cookieValue) {
         try {
@@ -108,6 +130,11 @@ export function loadSettingsFromCookie() {
 
 // Save settings to cookie
 export function saveSettingsToCookie(settings) {
+    if (!SETTINGS_COOKIES_ENABLED) {
+        console.log("Cookie settings disabled by SETTINGS_COOKIES_ENABLED flag");
+        return;
+    }
+    
     try {
         const sanitized = sanitizeSettings(settings);
         setCookie("sitrecSettings", JSON.stringify(sanitized), 365); // Save for 1 year
@@ -119,6 +146,11 @@ export function saveSettingsToCookie(settings) {
 
 // Load settings from server (S3)
 export async function loadSettingsFromServer() {
+    if (!SETTINGS_SERVER_ENABLED) {
+        console.log("Server settings disabled by SETTINGS_SERVER_ENABLED flag");
+        return null;
+    }
+    
     try {
         const response = await fetch('./sitrecServer/settings.php', {
             method: 'GET',
@@ -152,6 +184,11 @@ export async function loadSettingsFromServer() {
 
 // Save settings to server (S3)
 export async function saveSettingsToServer(settings) {
+    if (!SETTINGS_SERVER_ENABLED) {
+        console.log("Server settings disabled by SETTINGS_SERVER_ENABLED flag");
+        return false;
+    }
+    
     try {
         const sanitized = sanitizeSettings(settings);
         
@@ -191,9 +228,9 @@ export async function saveSettingsToServer(settings) {
 /**
  * Initialize settings by loading from appropriate source
  * Priority order:
- * 1. Server (if logged in and not serverless)
- * 2. IndexedDB (if serverless)
- * 3. Cookie (fallback)
+ * 1. Server (if logged in and not serverless, and SETTINGS_SERVER_ENABLED)
+ * 2. IndexedDB (if serverless and SETTINGS_DB_ENABLED)
+ * 3. Cookie (fallback, if SETTINGS_COOKIES_ENABLED)
  * 
  * NOTE: When adding new settings, remember to:
  *   1. Add default value here
@@ -201,6 +238,7 @@ export async function saveSettingsToServer(settings) {
  *   3. Update sanitizeSettings() in settings.php (if using PHP backend)
  *   4. Add UI control in CustomSupport.js setupSettingsMenu()
  *   5. Add tests in SettingsManager.test.js
+ *   6. Add environment variable flag check (SETTINGS_*_ENABLED) if needed
  * @returns {Promise<Object>} The loaded settings object
  */
 export async function initializeSettings() {
@@ -222,7 +260,7 @@ export async function initializeSettings() {
             console.log("Using IndexedDB settings (serverless mode)");
             return Globals.settings;
         }
-        // Fall back to cookie if IndexedDB is empty
+        // Fall back to cookie if IndexedDB is empty or disabled
         const savedSettings = loadSettingsFromCookie();
         if (savedSettings) {
             Object.assign(Globals.settings, savedSettings);
