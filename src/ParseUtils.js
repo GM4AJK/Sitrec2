@@ -150,6 +150,8 @@ export function addMillisecondsToDate(date, ms) {
 export function stripDuplicateTimes(data) {
     // Create an empty array to store unique timestamps
     const uniqueData = [];
+    let numDuplicates = 0;
+    let lastDuplicate;
 
     // data is an array of arrays, each containing a timestamp at index MISB.UnixTimeStamp
     // eg. data[0][MISB.UnixTimeStamp] is the timestamp of the first data point
@@ -163,8 +165,14 @@ export function stripDuplicateTimes(data) {
             // Update the lastTime variable
             lastTime = point[MISB.UnixTimeStamp]
         } else {
-            console.log("Duplicate time found: ", point[MISB.UnixTimeStamp]);
+            numDuplicates++;
+            lastDuplicate = lastTime
+           //  console.log("Duplicate time found: ", point[MISB.UnixTimeStamp]);
         }
+    }
+
+    if (numDuplicates) {
+        console.log(`Removed ${numDuplicates} duplicate times. Last duplicate time was ${lastDuplicate}`);
     }
 
     // Return the array of unique data points

@@ -296,7 +296,7 @@ export function parseMISB1CSV(csv) {
             for (let row = 1; row < rows; row++) {
                 // field is the name of the MISB field, and col is the column in the csv
                 // we use MISB[field] to get the index in the MISBArray
-                var value = csv[row][col];
+                let value = csv[row][col];
                 // handle missing values
                 if (value === "null" || value === null || value === "") {
                     // convert or leave it as the null object, so all missing fields are consistent
@@ -312,7 +312,31 @@ export function parseMISB1CSV(csv) {
                 MISBArray[row - 1][MISB[field]] = value;
             }
         } else {
-            console.warn("UNHANDLED MISB DATA: " + csv[0][col]);
+
+            if (header === "precisiontimestamp") {
+                // Special handling for PrecisionTimeStamp, which is an alternate timestamp format
+                // for example 25-Dec-2023 14:00:00.000
+
+                for (let row = 1; row < rows; row++) {
+                    let value = csv[row][col];
+                    // We will convert to a Unix timestamp using the Date constructor
+                    // need to add a Z to the end of the string to indicate UTC timezone
+                    // unless there already is one
+                    if (!value.endsWith("Z")) {
+                        value += "Z";
+                    }
+                    const date = new Date(value);
+                    // store as ms
+                    MISBArray[row - 1][MISB.UnixTimeStamp] = date.getTime();
+                    if (row < 10 ) {
+                        console.log(`Converted PrecisionTimeStamp to UnixTimestamp: ${date.toISOString()}`);
+                    }
+                }
+
+            } else {
+
+                console.warn("UNHANDLED MISB DATA: " + csv[0][col]);
+            }
         }
     }
 
