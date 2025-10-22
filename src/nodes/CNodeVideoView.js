@@ -300,16 +300,16 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
             if (quickToggle("Smooth", false, guiTweaks) === false)
                 ctx.imageSmoothingEnabled = false;
 
-                var filter = ''
-                if (this.in.contrast){
-                    filter += "contrast("+this.in.contrast.v0+") "
-                }
-                if (this.in.brightness){
-                    filter += "brightness("+this.in.brightness.v0+") "
-                }
-                if (this.in.blur && this.in.blur.v0 !== 0){
-                 filter += "blur("+this.in.blur.v0+"px) "
-                }
+            var filter = ''
+            if (this.in.contrast){
+                filter += "contrast("+this.in.contrast.v0+") "
+            }
+            if (this.in.brightness){
+                filter += "brightness("+this.in.brightness.v0+") "
+            }
+            if (this.in.blur && this.in.blur.v0 !== 0){
+             filter += "blur("+this.in.blur.v0+"px) "
+            }
 
             if (filter != "") ctx.filter = filter;
 
@@ -440,19 +440,31 @@ export class CNodeVideoView extends CNodeViewCanvas2D {
         this.sWidth = sourceW / zoom;
         this.sHeight = sourceH / zoom;
 
+        //  aspectSource = width/height ratio of the source image or video
+        //  aspectView = width/height ratio of the view
+        // so bigger numbers (>1) = wider, smaller numbers (<1) = taller
 
         if (aspectSource > aspectView) {
             // Source video is WIDER than the view, so we scale to fit width
-            // and adjust from top
+            // leaving black bars on top and bottom
+            // (Typical in the Narrow Video view preset)
+
+            // fov coverage is how much of the vertical field of view is covered by the video
+            // perhaps easier to visalize as dHeight / heightPx
             this.fovCoverage = (this.widthPx / aspectSource) / this.heightPx;
+
+            // dx,dy is and offset of the top left corner of the video in the view
             this.dx = 0;
             this.dy = (this.heightPx - this.widthPx / aspectSource) / 2;
+
+            // dWidth,dHeight is the size of the video in the view
             this.dWidth = this.widthPx;
             this.dHeight = this.widthPx / aspectSource;
         } else {
             // Source is TALLER than the view, so we scale to fit height
             // and adjust from left
 
+            // entire vertical FOV is covered by the video
             this.fovCoverage = 1;
 
             this.dx  = (this.widthPx - this.heightPx * aspectSource) / 2;

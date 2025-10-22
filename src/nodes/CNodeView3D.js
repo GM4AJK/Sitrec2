@@ -429,13 +429,22 @@ export class CNodeView3D extends CNodeViewCanvas {
                         videoView = NodeMan.get("video");
                     }
 
-                    // fov override is set by the video view, it's the vertical fraction
-                    // of the video view that is covered by the video
+                    // fovCoverage is the vertical fraction
+                    // of the video view windowthat is covered by the video
+                    // so we assume the fov
                     if (videoView !== null && videoView.fovCoverage !== undefined) {
                         this.fovOverride = 180 / Math.PI * 2 * Math.atan(Math.tan(this.camera.fov * Math.PI / 360) / videoView.fovCoverage);
                     }
                 }
 
+                // fovOverride is used to override the camera FOV
+                // to maintaim a consisten vertical FOV for the portion of the viewport
+                // that matches the vertical extent of the caerma
+                const oldFOV = this.camera.fov;
+                if (this.fovOverride !== undefined) {
+                    this.camera.fov = this.fovOverride;
+                    this.camera.updateProjectionMatrix();
+                }
 
                 // popogate the view-specific camera setting to the current camera
                 // (currently this does not change, but it might in the future)
@@ -550,27 +559,27 @@ export class CNodeView3D extends CNodeViewCanvas {
                 if (GlobalDaySkyScene !== undefined) {
 
                     // [DBG] Render day sky
-                if (Globals.renderDebugFlags.dbg_renderDaySky) {
-                    var tempPos = this.camera.position.clone();
-                    this.camera.position.set(0, 0, 0)
-                    this.camera.updateMatrix();
-                    this.camera.updateMatrixWorld();
-                    const oldTME = this.renderer.toneMappingExposure;
-                    const oldTM = this.renderer.toneMapping;
-
-                    // this.renderer.toneMapping = ACESFilmicToneMapping;
-                    // this.renderer.toneMappingExposure = NodeMan.get("theSky").effectController.exposure;
-                    this.renderer.render(GlobalDaySkyScene, this.camera);
-                    // this.renderer.toneMappingExposure = oldTME;
-                    // this.renderer.toneMapping = oldTM;
-
-                    this.renderer.clearDepth()
-                    this.camera.position.copy(tempPos)
-                    if (Globals.renderDebugFlags.dbg_updateCameraMatrices) {
+                    if (Globals.renderDebugFlags.dbg_renderDaySky) {
+                        var tempPos = this.camera.position.clone();
+                        this.camera.position.set(0, 0, 0)
                         this.camera.updateMatrix();
                         this.camera.updateMatrixWorld();
+                        const oldTME = this.renderer.toneMappingExposure;
+                        const oldTM = this.renderer.toneMapping;
+
+                        // this.renderer.toneMapping = ACESFilmicToneMapping;
+                        // this.renderer.toneMappingExposure = NodeMan.get("theSky").effectController.exposure;
+                        this.renderer.render(GlobalDaySkyScene, this.camera);
+                        // this.renderer.toneMappingExposure = oldTME;
+                        // this.renderer.toneMapping = oldTM;
+
+                        this.renderer.clearDepth()
+                        this.camera.position.copy(tempPos)
+                        if (Globals.renderDebugFlags.dbg_updateCameraMatrices) {
+                            this.camera.updateMatrix();
+                            this.camera.updateMatrixWorld();
+                        }
                     }
-                }
 
 
                     // if tone mapping the sky, insert the tone mapping shader here
@@ -601,11 +610,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                 // viewport setting for fov, layer mask, override camera settings
                 // but we want to preserve the camera settings
 
-                const oldFOV = this.camera.fov;
-                if (this.fovOverride !== undefined) {
-                    this.camera.fov = this.fovOverride;
-                    this.camera.updateProjectionMatrix();
-                }
+// fovOverride WAS (incorrectly) being applied here
 
                 const oldLayers = this.camera.layers.mask;
                 if (this.layers !== undefined) {
