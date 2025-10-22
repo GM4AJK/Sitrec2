@@ -1230,7 +1230,6 @@ export class CFileManager extends CManager {
                     dataType = "video";
                     parsed = buffer;
                     console.log("Parsed H.264 stream: " + filename + " (" + buffer.byteLength + " bytes)");
-                    console.warn("H.264 streams require MP4 container - raw H.264 playback not yet implemented");
                     break;
 
                 case "m2v":
