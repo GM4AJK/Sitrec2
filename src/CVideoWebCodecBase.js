@@ -378,10 +378,12 @@ export class CVideoWebCodecBase extends CVideoData {
                 return group;
             }
         }
-        const last = this.groups[this.groups.length - 1];
-        if (last) {
-            console.warn("(frame = "+frame+" Last frame = " + last.frame + ", length = " + last.length + ", i.e. up to " + (last.frame + last.length - 1));
-        }
+        // if not found, this might mean the first group has a missing keyframe
+        // which means we need to just skip the orphaned delta frames until we get to the next group (which will start with a keyframe)
+        // const last = this.groups[this.groups.length - 1];
+        // if (last) {
+        //     console.warn("(frame = "+frame+" Last frame = " + last.frame + ", length = " + last.length + ", i.e. up to " + (last.frame + last.length - 1));
+        // }
         return null;
     }
 

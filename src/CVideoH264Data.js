@@ -278,6 +278,9 @@ export class CVideoH264Data extends CVideoWebCodecBase {
             const encodedChunks = H264Decoder.createEncodedVideoChunks(nalUnits, fps);
             console.log(`Created ${encodedChunks.length} video chunks`);
 
+            // Diagnostic: Check for orphaned frames before first keyframe
+            this.diagnosticCheckFrameStructure(encodedChunks);
+
             // Process chunks to create groups (similar to MP4 demuxer)
             this.processChunksIntoGroups(encodedChunks);
 
@@ -431,14 +434,82 @@ export class CVideoH264Data extends CVideoWebCodecBase {
         }
     }
 
+    diagnosticCheckFrameStructure(encodedChunks) {
+        if (encodedChunks.length === 0) {
+            console.warn("⚠️ No encoded chunks found!");
+            return;
+        }
+
+        // Check if frame 0 is a keyframe
+        const frame0Type = encodedChunks[0].type;
+        if (frame0Type !== 'key') {
+            console.error(`❌ INVALID H.264 STREAM: Frame 0 is type '${frame0Type}', NOT a keyframe!`);
+            console.error("   H.264 streams MUST start with a keyframe (IDR/type='key')");
+            console.error("   This file was likely improperly extracted from a .TS container.");
+        } else {
+            console.log(`✓ Frame 0 is correctly a keyframe`);
+        }
+
+        // Find first keyframe
+        let firstKeyframeIndex = -1;
+        for (let i = 0; i < encodedChunks.length; i++) {
+            if (encodedChunks[i].type === 'key') {
+                firstKeyframeIndex = i;
+                break;
+            }
+        }
+
+        if (firstKeyframeIndex === -1) {
+            console.error("❌ CRITICAL: No keyframe found in entire stream!");
+            return;
+        }
+
+        if (firstKeyframeIndex > 0) {
+            console.error(`❌ ORPHANED FRAMES: Frames 0-${firstKeyframeIndex - 1} are delta frames before first keyframe`);
+            console.error(`   These ${firstKeyframeIndex} frames CANNOT be decoded and will be skipped`);
+            
+            // Show frame type sequence
+            let frameSequence = [];
+            for (let i = 0; i < Math.min(20, encodedChunks.length); i++) {
+                frameSequence.push(encodedChunks[i].type === 'key' ? 'K' : 'D');
+            }
+            console.error(`   Frame sequence (first 20): ${frameSequence.join('')}${encodedChunks.length > 20 ? '...' : ''}`);
+            
+            // Count total orphaned vs usable
+            let orphanedCount = firstKeyframeIndex;
+            let usableCount = encodedChunks.length - orphanedCount;
+            console.error(`   Total: ${orphanedCount} orphaned + ${usableCount} usable = ${encodedChunks.length} frames`);
+            console.error(`   Usable video duration: ~${(usableCount / 30).toFixed(2)}s (at 30fps)`);
+        }
+
+        // General frame breakdown
+        let keyframeCount = 0;
+        let deltaCount = 0;
+        for (const chunk of encodedChunks) {
+            if (chunk.type === 'key') keyframeCount++;
+            else deltaCount++;
+        }
+        console.log(`📊 Frame breakdown: ${keyframeCount} keyframes, ${deltaCount} delta frames (${((keyframeCount/encodedChunks.length)*100).toFixed(1)}% key)`);
+    }
+
     processChunksIntoGroups(encodedChunks) {
         // Process chunks similar to how MP4Demuxer does it
+        let orphanedDeltaFrames = 0;
+        
         for (let i = 0; i < encodedChunks.length; i++) {
             const chunk = encodedChunks[i];
             chunk.frameNumber = this.frames++;
             this.chunks.push(chunk);
 
             if (chunk.type === "key") {
+                // Log first keyframe for diagnostic purposes
+                if (this.groups.length === 0 && i > 0) {
+                    console.log(`📍 First keyframe found at chunk index ${i} (frame ${i} in input, group frame ${this.chunks.length - 1} in output)`);
+                    if (orphanedDeltaFrames > 0) {
+                        console.warn(`   → This created Group 0 starting at frame ${this.chunks.length - 1}, skipping ${orphanedDeltaFrames} delta frames`);
+                    }
+                }
+                
                 this.groups.push({
                     frame: this.chunks.length - 1,  // first frame of this group
                     length: 1,                      // for now, increase with each delta
@@ -451,8 +522,27 @@ export class CVideoH264Data extends CVideoWebCodecBase {
                 if (lastGroup) {
                     assert(chunk.timestamp >= lastGroup.timestamp, "out of group chunk timestamp");
                     lastGroup.length++;
+                } else {
+                    // Delta frame before any keyframe - this is orphaned
+                    orphanedDeltaFrames++;
+                    if (orphanedDeltaFrames <= 5) {
+                        console.debug(`   Skipping orphaned delta frame ${i}`);
+                    } else if (orphanedDeltaFrames === 6) {
+                        console.debug(`   ... (skipping more orphaned frames)`);
+                    }
                 }
             }
+        }
+        
+        // Log group structure for diagnostics
+        console.log(`📋 Created ${this.groups.length} groups from ${encodedChunks.length} chunks`);
+        for (let g = 0; g < this.groups.length; g++) {
+            const group = this.groups[g];
+            const endFrame = group.frame + group.length - 1;
+            if (g<5) console.log(`   Group ${g}: frames ${group.frame}-${endFrame} (${group.length} frames total)`);
+        }
+        if (orphanedDeltaFrames > 0) {
+            console.error(`   ⚠️ WARNING: ${orphanedDeltaFrames} frames were orphaned and not added to any group`);
         }
     }
 

@@ -109,6 +109,7 @@ export class TSParser {
                 const header3 = uint8Array[offset + 3];
 
                 const transportErrorIndicator = (header1 & 0x80) !== 0;
+                const payloadUnitStartIndicator = (header1 & 0x40) !== 0;
                 const pid = ((header1 & 0x1F) << 8) | header2;
                 const adaptationFieldControl = (header3 & 0x30) >> 4;
 
@@ -129,13 +130,43 @@ export class TSParser {
                 // Skip if no payload
                 if (adaptationFieldControl === 2 || payloadStart >= packetSize) continue;
 
-                // Extract payload data
-                const payloadData = uint8Array.slice(offset + payloadStart, offset + packetSize);
-                if (payloadData.length > 0) {
-                    if (!streamData.has(pid)) {
-                        streamData.set(pid, []);
+                // Handle PES packet boundaries
+                // When PAYLOAD_UNIT_START_INDICATOR is set, this packet starts a new PES packet
+                // We need to skip the PES header to get the actual elementary stream data
+                let pesHeaderSkip = 0;
+                if (payloadUnitStartIndicator) {
+                    // Check for PES start code: 0x00 0x00 0x01
+                    if (offset + payloadStart + 3 <= uint8Array.length &&
+                        uint8Array[offset + payloadStart] === 0x00 &&
+                        uint8Array[offset + payloadStart + 1] === 0x00 &&
+                        uint8Array[offset + payloadStart + 2] === 0x01) {
+                        
+                        const streamId = uint8Array[offset + payloadStart + 3];
+                        // Check if this is a video stream (0xE0-0xEF) or private stream
+                        if ((streamId >= 0xE0 && streamId <= 0xEF) || (streamId >= 0xBD && streamId <= 0xFF)) {
+                            // PES packet structure: start_code(3) + stream_id(1) + length(2) + header_data
+                            // Parse PES header length to know where ES data starts
+                            if (offset + payloadStart + 9 <= uint8Array.length) {
+                                const pesDataLength = uint8Array[offset + payloadStart + 8];
+                                // Standard PES header: 6 (start_code + stream_id + length) + 3 (mandatory fields) + pesDataLength (optional)
+                                pesHeaderSkip = 9 + pesDataLength;
+                            }
+                        }
                     }
-                    streamData.get(pid).push(payloadData);
+                }
+
+                // Extract payload data, skipping PES header if present
+                const dataStart = offset + payloadStart + pesHeaderSkip;
+                const dataEnd = offset + packetSize;
+                
+                if (dataStart < dataEnd) {
+                    const payloadData = uint8Array.slice(dataStart, dataEnd);
+                    if (payloadData.length > 0) {
+                        if (!streamData.has(pid)) {
+                            streamData.set(pid, []);
+                        }
+                        streamData.get(pid).push(payloadData);
+                    }
                 }
             }
 
@@ -156,16 +187,18 @@ export class TSParser {
                     offset += chunk.length;
                 }
 
-                // For KLV streams, extract elementary stream data from PES packets
-                // Video streams (H.264, MPEG2, etc.) are already in the correct format from TS payload extraction
+                // Extract elementary stream data from PES packets for video and other streams
+                // PES packets contain headers that must be removed to get the raw elementary stream
                 let finalData = concatenatedData;
                 console.log(`extractTSStreams: PID ${pid}, codec_type: ${streamInfo.codec_type}, codec_name: ${streamInfo.codec_name}, concatenated: ${concatenatedData.length} bytes`);
+                
+                // Apply PES extraction for KLV streams only
+                // This removes PES packet headers and gives us pure elementary stream data
                 if (streamInfo.codec_name === 'klv') {
-                    console.log(`extractTSStreams: Applying PES extraction for PID ${pid} (KLV stream)`);
+                    console.log(`extractTSStreams: Applying PES extraction for PID ${pid} (${streamInfo.codec_name} stream)`);
+                    const beforeSize = concatenatedData.length;
                     finalData = TSParser.extractElementaryStreamFromPES(concatenatedData);
- //                   console.log(`extractTSStreams: After PES extraction for PID ${pid}: ${finalData.length} bytes (was ${concatenatedData.length} bytes)`);
-                } else {
- //                   console.log(`extractTSStreams: Skipping PES extraction for PID ${pid} (not a KLV stream)`);
+                    console.log(`extractTSStreams: After PES extraction for PID ${pid}: ${finalData.length} bytes (was ${beforeSize} bytes)`);
                 }
 
                 // Determine file extension based on codec
