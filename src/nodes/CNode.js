@@ -543,6 +543,32 @@ class CNode {
         return getValue(frame)
     }
 
+    // Helper method to interpolate/extrapolate heading values
+    // Handles both numeric headings (angles) and Vector3 headings (direction vectors)
+    // t is the interpolation parameter (0 to 1 for interpolation, can be outside this range for extrapolation)
+    interpolateHeading(value0, value1, t) {
+        if (typeof value0 !== "number") {
+            // if it's not a number it must be a THREE.Vector3, so interpolate those
+            return value1.clone().sub(value0).multiplyScalar(t).add(value0).normalize();
+        } else {
+            // if the value has a NUMERIC heading, then interpolate that too
+            // this is used for tracks that have a heading
+            // Use shortest-path angular interpolation
+            let delta = value1 - value0;
+            
+            // Normalize delta to [-π, π] to find the shortest path
+            if (delta > Math.PI) delta -= 2 * Math.PI;
+            if (delta < -Math.PI) delta += 2 * Math.PI;
+            
+            let heading = value0 + delta * t;
+            
+            // Normalize result to [-π, π]
+            if (heading < -Math.PI) heading += 2 * Math.PI;
+            if (heading > Math.PI) heading -= 2 * Math.PI;
+            return heading;
+        }
+    }
+
     // frame is usually an integer, but if not then we interpolate
     // if outside of the range, then extrapolate using the two first or last values
     getValue(frameFloat) {
@@ -591,9 +617,14 @@ class CNode {
                         assert (value0.x !== undefined, "Extrapolating non-vector in "+this.id+ " frame " + frameFloat);
                         value = value1.clone().sub(value0).multiplyScalar(frameFloat).add(value0)         }
                 else {
-                    value = {...value0} // make a copy, so we can alter the position
+                    value = {...value0} // make a copy, so we can alter the position and heading
                   //  console.log("Extrapolating "+vdump(value0)+ "<-" +vdump(value1)+" by "+frameFloat)
                     value.position = value1.position.clone().sub(value0.position).multiplyScalar(frameFloat).add(value0.position)
+                    
+                    // Extrapolate heading if present
+                    if (value0.heading !== undefined) {
+                        value.heading = this.interpolateHeading(value0.heading, value1.heading, frameFloat)
+                    }
                 }
             } else if (frameFloat > numFrames - 1) {
                 // extrapolating forwards
@@ -610,8 +641,13 @@ class CNode {
                     }
 
                 } else {
-                    value = {...value1} // make a copy, so we can alter the position
+                    value = {...value1} // make a copy, so we can alter the position and heading
                     value.position = value1.position.clone().sub(value0.position).multiplyScalar(frameFloat-(numFrames-1)).add(value1.position)
+                    
+                    // Extrapolate heading if present
+                    if (value0.heading !== undefined) {
+                        value.heading = this.interpolateHeading(value0.heading, value1.heading, frameFloat-(numFrames-1))
+                    }
                     //console.warn("Extrapolated: "+vdump(value0)+" ... "+vdump(value1)+" by "+(frameFloat-(numFrames-1)) + " to "+vdump(value) + "STRIPPED ANY OTHER DATA");
                 }
             } else {
@@ -650,16 +686,7 @@ class CNode {
                         value.position = value1.position.clone().sub(value0.position).multiplyScalar(frameFloat - frameInt).add(value0.position)
 
                         if (value0.heading !== undefined) {
-//                            assert(typeof value0.heading === "number", "Interpolating non-number heading in " + this.id + " frame " + frameFloat);
-                            if (typeof value0.heading !== "number") {
-                                console.warn("Interpolating non-number heading in " + this.id + " frame " + frameFloat);
-                            } else {
-                                // if the value has a NUMERIC heading, then interpolate that too
-                                // this is used for tracks that have a heading
-                                value.heading = value0.heading + (value1.heading - value0.heading) * (frameFloat - frameInt);
-                                if (value.heading < -Math.PI) value.heading += 2 * Math.PI;
-                                if (value.heading > Math.PI) value.heading -= 2 * Math.PI;
-                            }
+                            value.heading = this.interpolateHeading(value0.heading, value1.heading, frameFloat - frameInt)
                         }
                     }
                 }
