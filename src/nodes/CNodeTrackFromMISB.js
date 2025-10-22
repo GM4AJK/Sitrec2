@@ -1,6 +1,6 @@
-import {cos, f2m, interpolate, sin} from "../utils";
+import {interpolate} from "../utils";
 import {GlobalDateTimeNode, NodeMan, Sit} from "../Globals";
-import {LLAToEUS, RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
+import {RLLAToECEFV_Sphere, wgs84} from "../LLA-ECEF-ENU";
 
 import {MISB} from "../MISBUtils";
 import {saveAs} from "../js/FileSaver";
@@ -9,9 +9,7 @@ import {assert} from "../assert.js";
 import {CGeoJSON} from "../geoJSONUtils";
 import {isLocal} from "../configUtils.js"
 import stringify from "json-stringify-pretty-compact";
-import {Vector3} from "three";
-import {Matrix3} from "three";
-import {Matrix4} from "three";
+import {Matrix3, Matrix4, Vector3} from "three";
 
 export class CNodeTrackFromMISB extends CNodeTrack {
     constructor(v) {
@@ -179,17 +177,17 @@ export class CNodeTrackFromMISB extends CNodeTrack {
             }
         }
 
-        // // now go over all the slots, if invalid, the patch with validValue
+        // // now go over all the slots, if invalid, then patch with validValue
         // // if valid, then update validValue
         for (let slot = 0; slot < points; slot++) {
             const value = misb.misb[slot][column]
             if (value !== undefined && value !== null) {
                 const valueNumber = Number(value)
-                // use only valid FOV values, so if this is valid, we'll use it for subsequent invald rows
-                if (!isNaN(valueNumber) && valueNumber > 0 && valueNumber < 180) {
+                // use only valid values, so if this is valid, we'll use it for subsequent invalid rows
+                if (test(valueNumber)) {
                     validValue = value
                 } else {
-                    console.log("Replacing invalid FOV value: " + value + " with validValue = " + validValue)
+                    console.log("Replacing invalid "+column + " value: " + value + " with validValue = " + validValue)
                     misb.misb[slot][column] = validValue;
                 }
             } else {
