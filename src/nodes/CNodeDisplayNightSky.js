@@ -2789,8 +2789,9 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         if (planet === "Moon") scale = 1.9;
         
         // Apply planet brightness scale to all planets except Sun and Moon
+        // Using logarithmic (magnitude-based) scaling for consistent brightness adjustment
         if (planet !== "Sun" && planet !== "Moon") {
-            scale *= Sit.planetScale;
+            scale *= Math.pow(10, 0.4 * Math.log10(Sit.planetScale));
         }
 
         sprite.scale.set(scale, scale, 1);
