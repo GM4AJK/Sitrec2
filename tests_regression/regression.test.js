@@ -1,7 +1,5 @@
-
-
-    import puppeteer from 'puppeteer';
-import { toMatchImageSnapshot } from 'jest-image-snapshot';
+import puppeteer from 'puppeteer';
+import {toMatchImageSnapshot} from 'jest-image-snapshot';
 import path from 'path';
 import fs from 'fs';
 
@@ -9,6 +7,7 @@ expect.extend({ toMatchImageSnapshot });
 
 // Array of test cases: each object contains a name and its corresponding URL.
 const testData = [
+    { name: 'default', url: 'https://local.metabunk.org/sitrec/?frame=10' },
     { name: 'agua', url: 'https://local.metabunk.org/sitrec/?sitch=agua&frame=10' },
     { name: 'gimbal', url: 'https://local.metabunk.org/sitrec/?sitch=gimbal&frame=10' },
     { name: 'starlink', url: 'https://local.metabunk.org/sitrec/?custom=https://sitrec.s3.us-west-2.amazonaws.com/99999999/Stalink%20Names/20250218_060544.js' },

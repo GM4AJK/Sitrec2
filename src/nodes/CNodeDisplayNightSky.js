@@ -360,7 +360,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             })
 
         // Add lock checkbox
-        guiMenus.view.add(Sit,"lockStarPlanetBrightness").listen().name("Lock Star Planet Brightness")
+        guiMenus.view.add(Sit,"lockStarPlanetBrightness").name("Lock Star Planet Brightness").listen()
             .tooltip("When checked, the Star Brightness and Planet Brightness sliders are locked together")
 
         satGUI.add(Sit,"satScale",0,6,0.01).name("Sat Brightness").listen()

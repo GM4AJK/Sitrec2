@@ -259,9 +259,6 @@ sitch = {
         useDayNight: true,
     },
 
-    // lock Star Brightness and Planet Brightness sliders together
-    lockStarPlanetBrightness: {kind: "GUIFlag", value: true, desc: "Lock Star Planet Brightness", gui: "view"},
-
 
     // target wind is the wind at the target location, which isn't always known
     targetWind: {
