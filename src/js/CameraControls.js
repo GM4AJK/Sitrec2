@@ -765,9 +765,6 @@ class CameraMapControls {
 				break;
 
 			case STATE.ROTATE: // Rotate the camera about a point on the ground,
-				// Here we want to rotate the camera
-				// about a point in the gorund
-
 
 				// use this.canvas.heightPx for both to keep it square
 				this.rotateLeft( 2 * Math.PI * this.mouseDelta.x / this.view.heightPx);
@@ -788,25 +785,10 @@ class CameraMapControls {
 				}
 
 
-				if (!Sit.useGlobe) {
-					this.camera.matrix.extractBasis(xAxis, yAxis, zAxis)
 
-					// reset the up direction - note this can cause problems when roving over the globe, so maybe use something
-					// more like a local up vector.
-					//const up = new Vector3(0,1,0) // ??
-					var pointInFront = this.camera.position.clone().sub(zAxis)
-					this.camera.lookAt(pointInFront, oldUp)
-				} else {
-// 				 	this.camera.matrix.extractBasis(xAxis, yAxis, zAxis)
-// 				 	const up = getLocalUpVector(this.target, wgs84.RADIUS)
-// 				 	DebugArrow("Up Vector",up, this.target, 1000000,"#FFFFFF")
-// 				 	var pointInFront = this.camera.position.clone().sub(zAxis)
-// //				 	//this.camera.up = up;
-//
-// 					this.camera.up.lerp(up, 0.01);
-//
-// 					this.camera.lookAt(pointInFront)
-				}
+				this.camera.matrix.extractBasis(xAxis, yAxis, zAxis)
+				var pointInFront = this.camera.position.clone().sub(zAxis)
+				this.camera.lookAt(pointInFront, oldUp)
 
 
 
