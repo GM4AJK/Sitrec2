@@ -100,6 +100,9 @@ export class CNode3DLight extends CNode3D {
         const billboard = new Mesh(geometry, material);
         billboard.name = "LightBillboard";
         billboard.position.copy(this.light.position);
+        
+        // Disable raycasting on the light billboard so it doesn't interfere with context menu picking
+        billboard.raycast = () => {};
 
 // Add to scene
         v.scene.add(billboard);
