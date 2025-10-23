@@ -1065,7 +1065,10 @@ export class CNodeView3D extends CNodeViewCanvas {
             if (this.focusTrackName !== "default") {
                 this.controls.justRotate = true;
                 var focusTrackNode = NodeMan.get(this.focusTrackName)
-                const target = focusTrackNode.p(par.frame)
+                const target = focusTrackNode.p(par.frame);
+
+                // set the target position as the point to rotate about in CameraControls
+                this.controls.target = target;
                 this.camera.lookAt(target);
             } else {
                 this.controls.justRotate = false;
@@ -1510,16 +1513,21 @@ export class CNodeView3D extends CNodeViewCanvas {
                 );
                 
                 if (distance < closestDistance) {
-                    closestDistance = distance;
-                    // Try to find the trackOb from TrackManager
-                    // For synthetic tracks, the trackID matches the track node ID
-                    const trackOb = TrackManager.get(trackNode.id);
-                    closestTrack = {
-                        trackID: nodeId,
-                        nodeId: nodeId,
-                        guiFolder: node.guiFolder,
-                        trackOb: trackOb
-                    };
+
+                    // for now we can only pick tracks in the track manager
+                    // so we will ignore the traverse track, camera track, and satellite tracks
+                    const trackOb = TrackManager.get(trackNode.id, false);
+                    if (trackOb) {
+                        closestDistance = distance;
+                        // Try to find the trackOb from TrackManager
+                        // For synthetic tracks, the trackID matches the track node ID
+                        closestTrack = {
+                            trackID: nodeId,
+                            nodeId: nodeId,
+                            guiFolder: node.guiFolder,
+                            trackOb: trackOb
+                        };
+                    }
                 }
             }
         });
@@ -1732,6 +1740,11 @@ export class CNodeView3D extends CNodeViewCanvas {
                 
                 // Find the closest intersected object that belongs to a CNode3DObject
                 for (const intersect of intersects) {
+
+                    // make a debug sphere at the intersection point
+                    // DebugSphere("DEBUGPick" + intersect.point.x +","+intersect.point.y, intersect.point, 1, 0xFF00FF);
+
+
                     const object = intersect.object;
                     const objectID = this.findObjectID(object);
                     
@@ -1764,7 +1777,7 @@ export class CNodeView3D extends CNodeViewCanvas {
                             
                             // Open the menu by default
                             standaloneMenu.open();
-                            console.log(`Created standalone menu for object: ${objectID}`);
+                            // console.log(`Created standalone menu for object: ${objectID}`);
                         } else {
                             console.log(`Node ${objectID} not found or has no GUI folder`);
                         }
