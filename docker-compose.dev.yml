@@ -117,6 +117,14 @@ services:
       # Using 'delegated' for write-heavy directories (webpack writes, host reads)
       - ./dist:/var/www/html:delegated
       
+      # Favicon and manifest files for Apache (since webpack dev server uses writeToDisk: false)
+      # These must be explicitly mounted so Apache can serve them
+      - ./apple-touch-icon.png:/var/www/html/apple-touch-icon.png:cached
+      - ./favicon-512.png:/var/www/html/favicon-512.png:cached
+      - ./favicon-32x32.png:/var/www/html/favicon-32x32.png:cached
+      - ./favicon-16x16.png:/var/www/html/favicon-16x16.png:cached
+      - ./site.webmanifest:/var/www/html/site.webmanifest:cached
+      
       # ========================================================================
       # CONTAINER-MANAGED VOLUMES
       # ========================================================================
