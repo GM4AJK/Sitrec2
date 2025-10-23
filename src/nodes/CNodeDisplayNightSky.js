@@ -319,8 +319,15 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         // they will get saves as all of Sit is saved
         // the addSimpleSerial calls were doing nothing
 
-        guiMenus.view.add(Sit,"starScale",0,3,0.01).name("Star Brightness").listen()
+        // Create star brightness slider and store reference
+        this.guiStarScale = guiMenus.view.add(Sit,"starScale",0,3,0.01).name("Star Brightness").listen()
             .tooltip("Scale factor for the brightness of the stars. 1 is normal, 0 is invisible, 2 is twice as bright, etc.")
+            .onChange(() => {
+                if (Sit.lockStarPlanetBrightness) {
+                    Sit.planetScale = Sit.starScale;
+                    this.guiPlanetScale.updateDisplay();
+                }
+            })
        // this.addSimpleSerial("starScale")
 
         if (Sit.starLimit === undefined)
@@ -339,8 +346,22 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         if (Sit.planetScale === undefined)
             Sit.planetScale = 1; // default to 1 if not set
 
-        guiMenus.view.add(Sit,"planetScale",0,3,0.01).name("Planet Brightness").listen()
+        if (Sit.lockStarPlanetBrightness === undefined)
+            Sit.lockStarPlanetBrightness = true; // default to true (locked) if not set
+
+        // Create planet brightness slider and store reference
+        this.guiPlanetScale = guiMenus.view.add(Sit,"planetScale",0,3,0.01).name("Planet Brightness").listen()
             .tooltip("Scale factor for the brightness of the planets (except Sun and Moon). 1 is normal, 0 is invisible, 2 is twice as bright, etc.")
+            .onChange(() => {
+                if (Sit.lockStarPlanetBrightness) {
+                    Sit.starScale = Sit.planetScale;
+                    this.guiStarScale.updateDisplay();
+                }
+            })
+
+        // Add lock checkbox
+        guiMenus.view.add(Sit,"lockStarPlanetBrightness").listen().name("Lock Star Planet Brightness")
+            .tooltip("When checked, the Star Brightness and Planet Brightness sliders are locked together")
 
         satGUI.add(Sit,"satScale",0,6,0.01).name("Sat Brightness").listen()
             .tooltip("Scale factor for the brightness of the satellites. 1 is normal, 0 is invisible, 2 is twice as bright, etc.")
