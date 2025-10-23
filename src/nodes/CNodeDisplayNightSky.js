@@ -1282,8 +1282,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
             // this is just a clean time to remove the debug arrows
             // they will get recreated of all visible satellites
-            removeDebugArrow(satData.name + "_t");
-            removeDebugArrow(satData.name + "_g");
+            this.removeSatelliteArrows(satData);
 
             satData.visible = false;
             satData.userFiltered = false;
@@ -2427,6 +2426,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                     this.satelliteTextGroup.remove(satData.spriteText)
                     satData.spriteText = null;
                 }
+
+                this.removeSatSunArrows(satData);
+                this.removeSatelliteArrows(satData);
+
+                // remove the debug arrows
+
             }
             this.satData = undefined;
         }
@@ -2705,12 +2710,16 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                         satData.spriteText.position.set(satData.eus.x, satData.eus.y, satData.eus.z);
                     }
 
+
+                    let arrowsDrawn = false;
                     if (satData.visible && satData.eusA.distanceTo(lookPos) < this.arrowRange*1000) {
                         // draw an arrow from the satellite in the direction of its velocity (yellow)
                         if (this.showSatelliteTracks) {
                             let A = satData.eusA.clone()
                             let dir = satData.eusB.clone().sub(satData.eusA).normalize()
                             DebugArrow(satData.name + "_t", dir, satData.eus, 500000, "#FFFF00", true, this.satelliteTrackGroup, 20, LAYER.MASK_LOOKRENDER)
+                            arrowsDrawn = true;
+                            satData.hasArrowsNeedingCleanup = true;
                         }
 
                         // Arrow from satellite to ground (red)
@@ -2718,7 +2727,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                             let A = satData.eusA.clone()
                             let B = getPointBelow(A)
                             DebugArrowAB(satData.name + "_g", A, B, "#00FF00", true, this.satelliteGroundGroup, 20, LAYER.MASK_LOOKRENDER)
+                            arrowsDrawn = true;
+                            satData.hasArrowsNeedingCleanup = true;
                         }
+                    }
+
+                    if (!arrowsDrawn) {
+                        this.removeSatelliteArrows(satData);
                     }
 
 
@@ -2749,6 +2764,14 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // Notify THREE.js that the positions have changed
         this.satelliteGeometry.attributes.position.needsUpdate = true;
+    }
+
+    removeSatelliteArrows(satData) {
+        if (satData.hasArrowsNeedingCleanup) {
+            removeDebugArrow(satData.name + "_t");
+            removeDebugArrow(satData.name + "_g");
+            satData.hasArrowsNeedingCleanup = false;
+        }
     }
 
     removeSatSunArrows(satData)   {
