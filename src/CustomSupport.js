@@ -620,7 +620,7 @@ export class CCustomManager {
      * @param {GUI} standaloneMenu - Target standalone menu
      */
     setupDynamicMirroring(sourceFolder, standaloneMenu) {
-        console.log('setupDynamicMirroring called for sourceFolder:', sourceFolder._title || 'root');
+        // console.log('setupDynamicMirroring called for sourceFolder:', sourceFolder._title || 'root');
         
         // Store reference to source for updates
         standaloneMenu._mirrorSource = sourceFolder;
@@ -630,12 +630,12 @@ export class CCustomManager {
         this.updateMirror(standaloneMenu);
         
         // Try event-based approach first, fall back to polling if needed
-        console.log('About to call setupEventBasedMirroring');
+        // console.log('About to call setupEventBasedMirroring');
         if (this.setupEventBasedMirroring(sourceFolder, standaloneMenu)) {
-            console.log('Using event-based mirroring for', standaloneMenu._title);
+            // console.log('Using event-based mirroring for', standaloneMenu._title);
         } else {
             // Fallback to periodic checking for changes
-            console.log('Using polling-based mirroring for', standaloneMenu._title);
+            // console.log('Using polling-based mirroring for', standaloneMenu._title);
             const checkInterval = 100; // Check every 100ms
             standaloneMenu._mirrorUpdateInterval = setInterval(() => {
                 this.updateMirror(standaloneMenu);
@@ -693,7 +693,7 @@ export class CCustomManager {
      * @param {Array} allHookedMethods - Array to store hooked methods for cleanup
      */
     hookFolderRecursively(folder, standaloneMenu, allHookedMethods) {
-        console.log('hookFolderRecursively called for folder:', folder._title || 'root', 'controllers:', folder.controllers.length);
+        // console.log('hookFolderRecursively called for folder:', folder._title || 'root', 'controllers:', folder.controllers.length);
         
         const methodsToHook = ['add', 'addColor', 'addFolder', 'remove'];
         
@@ -735,7 +735,7 @@ export class CCustomManager {
         });
         
         // Hook into controller destroy method for any existing controllers
-        console.log('About to call hookControllerDestroy for folder:', folder._title || 'root');
+        // console.log('About to call hookControllerDestroy for folder:', folder._title || 'root');
         this.hookControllerDestroy(folder, standaloneMenu);
         
         // Hook into visibility methods for existing controllers
@@ -745,7 +745,7 @@ export class CCustomManager {
         this.hookFolderVisibility(folder, standaloneMenu, allHookedMethods);
         
         // Recursively hook into existing sub-folders
-        console.log('Processing sub-folders, count:', folder.folders.length);
+        // console.log('Processing sub-folders, count:', folder.folders.length);
         folder.folders.forEach(subfolder => {
             this.hookFolderRecursively(subfolder, standaloneMenu, allHookedMethods);
         });
@@ -770,9 +770,9 @@ export class CCustomManager {
         };
         
         // Hook existing controllers in this folder
-        console.log('hookControllerDestroy: sourceFolder.controllers.length =', sourceFolder.controllers.length);
+        // console.log('hookControllerDestroy: sourceFolder.controllers.length =', sourceFolder.controllers.length);
         sourceFolder.controllers.forEach((controller, index) => {
-            console.log(`Hooking controller ${index}:`, controller);
+            // console.log(`Hooking controller ${index}:`, controller);
             hookController(controller);
         });
         
