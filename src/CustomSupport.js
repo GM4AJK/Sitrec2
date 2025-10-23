@@ -1972,6 +1972,7 @@ export class CCustomManager {
         const SitNeeded = [
             "file",
             "starScale",
+            "planetScale",
             "satScale",
             "flareScale",
             "satCutOff",

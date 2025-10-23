@@ -336,6 +336,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
        // this.addSimpleSerial("starLimit")
 
+        if (Sit.planetScale === undefined)
+            Sit.planetScale = 1; // default to 1 if not set
+
+        guiMenus.view.add(Sit,"planetScale",0,3,0.01).name("Planet Brightness").listen()
+            .tooltip("Scale factor for the brightness of the planets (except Sun and Moon). 1 is normal, 0 is invisible, 2 is twice as bright, etc.")
+
         satGUI.add(Sit,"satScale",0,6,0.01).name("Sat Brightness").listen()
             .tooltip("Scale factor for the brightness of the satellites. 1 is normal, 0 is invisible, 2 is twice as bright, etc.")
        // this.addSimpleSerial("satScale");
@@ -2760,6 +2766,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         if (scale > 1) scale= 1;
         if (planet === "Sun") scale = 1.9;
         if (planet === "Moon") scale = 1.9;
+        
+        // Apply planet brightness scale to all planets except Sun and Moon
+        if (planet !== "Sun" && planet !== "Moon") {
+            scale *= Sit.planetScale;
+        }
 
         sprite.scale.set(scale, scale, 1);
 
