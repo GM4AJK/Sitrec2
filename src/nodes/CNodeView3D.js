@@ -763,7 +763,7 @@ export class CNodeView3D extends CNodeViewCanvas {
             const nightSkyNode = NodeMan.get("NightSkyNode")
             
             if (Globals.renderDebugFlags.dbg_updateStarScales) {
-                nightSkyNode.updateStarScales(this)
+                nightSkyNode.starField.updateStarScales(this)
             }
             
             if (Globals.renderDebugFlags.dbg_updateSatelliteScales) {

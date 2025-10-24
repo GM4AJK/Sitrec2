@@ -63,14 +63,14 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
         this.ctx.textAlign = 'left';
 
         if (this.showStarNames) {
-            for (var HR in this.nightSky.commonNames) {
+            for (var HR in this.nightSky.starField.commonNames) {
 
                 // HR is the HR number, i.e. the index into the BSC + 1
                 // So we sub 1 to get the actual index.
                 const n = HR - 1
 
-                const ra = this.nightSky.BSC_RA[n]
-                const dec = this.nightSky.BSC_DEC[n]
+                const ra = this.nightSky.starField.getStarRA(n)
+                const dec = this.nightSky.starField.getStarDEC(n)
                 const pos = raDec2Celestial(ra, dec, 100) // get equatorial
                 pos.applyMatrix4(this.nightSky.celestialSphere.matrix) // convert equatorial to EUS
                 pos.project(camera) // project using the EUS camera
@@ -84,16 +84,16 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
                     var y = (-zoomedY + 1) * this.heightPx / 2
                     x += 5
                     y -= 5
-                    this.ctx.fillText(this.nightSky.commonNames[HR], x, y)
+                    this.ctx.fillText(this.nightSky.starField.commonNames[HR], x, y)
                 }
             }
 
             // // iterate over ALL the stars, not just the common ones
             // // and lable them with the index
-            //   for (let n = 0; n < this.nightSky.BSC_NumStars; n++) {
-            //       const ra = this.nightSky.BSC_RA[n]
-            //       const dec = this.nightSky.BSC_DEC[n]
-            //       assert(ra !== 0 || dec !== 0, "ra AND dec is 0 for star "+n + " "+this.nightSky.BSC_NAME[n]+" Mag="+this.nightSky.BSC_MAG[n])
+            //   for (let n = 0; n < this.nightSky.starField.getStarCount(); n++) {
+            //       const ra = this.nightSky.starField.getStarRA(n)
+            //       const dec = this.nightSky.starField.getStarDEC(n)
+            //       assert(ra !== 0 || dec !== 0, "ra AND dec is 0 for star "+n)
             //       const pos1 = raDec2Celestial(ra, dec, 100) // get equatorial
             //       pos1.applyMatrix4(this.nightSky.celestialSphere.matrix) // convert equatorial to EUS
             //       pos1.project(camera) // project using the EUS camera

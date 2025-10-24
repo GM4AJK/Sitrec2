@@ -77,6 +77,9 @@ import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 // in the project dir (using terminal in PHPStorm)
 import * as Astronomy from "astronomy-engine";
 
+// Star field rendering system
+import {CStarField} from "./CStarField";
+
 
 // other source of stars, if we need more (for zoomed-in pics)
 // https://www.astronexus.com/hyg
@@ -134,18 +137,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         const satGUI = guiMenus.satellites
 
-
-
-        this.BSC_NumStars = 0;
-        this.BSC_MaxMag = -10000;
-        this.BSC_RA = [];
-        this.BSC_DEC = [];
-        this.BSC_MAG = [];
-        this.BSC_HIP = [];
-        this.BSC_NAME = [];
-        this.commonNames = {};
-
-
         // globe used for collision
         // and specifying the center of the Earth
         this.globe = new Sphere(new Vector3(0,-wgs84.RADIUS,0), wgs84.POLAR_RADIUS)
@@ -155,6 +146,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         this.mainCamera = NodeMan.get("mainCamera").camera;
         assert(this.mainCamera, "CNodeDisplayNightSky needs a main camera")
+
+        // Create star field instance for rendering stars
+        this.starField = new CStarField({
+            starLimit: Sit.starLimit ?? 6.5,
+            starScale: Sit.starScale ?? 1.0,
+            sphereRadius: 100
+        });
 
         satGUI.add(this,"updateLEOSats").name("Load LEO Satellites For Date")
             .onChange(function (x) {this.parent.close()})
@@ -323,6 +321,9 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.guiStarScale = guiMenus.view.add(Sit,"starScale",0,3,0.01).name("Star Brightness").listen()
             .tooltip("Scale factor for the brightness of the stars. 1 is normal, 0 is invisible, 2 is twice as bright, etc.")
             .onChange(() => {
+                setRenderOne(true);
+                // Update star field scale
+                this.starField.updateScale(Sit.starScale);
                 if (Sit.lockStarPlanetBrightness) {
                     Sit.planetScale = Sit.starScale;
                     this.guiPlanetScale.updateDisplay();
@@ -331,14 +332,14 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
        // this.addSimpleSerial("starScale")
 
         if (Sit.starLimit === undefined)
-            Sit.starLimit = 15; // default to 0 if not set
+            Sit.starLimit = 15; // default to 15 if not set
 
 
         guiMenus.view.add(Sit,"starLimit",-2,15,0.01).name("Star Limit").listen()
             .tooltip("Brightness limit for stars to be displayed")
             .onChange(() => {
                 setRenderOne(true);
-                this.createStarSprites(this.celestialSphere);
+                this.starField.updateStarVisibility(Sit.starLimit, this.celestialSphere);
             })
 
        // this.addSimpleSerial("starLimit")
@@ -423,7 +424,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
 //        console.log("Loading stars")
-        this.addStars(this.celestialSphere)
+        this.starField.addToScene(this.celestialSphere)
 
 //        console.log("Loading planets")
         this.addPlanets(this.celestialSphere, this.celestialDaySphere)
@@ -1577,26 +1578,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         }
     }
 
-
-    updateStarScales(view) {
-
-        const camera = view.camera;
-
-        let starScale = Sit.starScale;
-        this.starMaterial.uniforms.cameraFOV.value = camera.fov;
-
-        // scale based on sky brightness at camera location
-        const sunNode = NodeMan.get("theSun",true);
-        const skyBrightness = sunNode.calculateSkyBrightness(camera.position);
-        //console.log("skyBrightness = "+skyBrightness)
-        let attentuation = Math.max(0, 1 - skyBrightness);
-        starScale *= attentuation
-
-        starScale = view.adjustPointScale(starScale)
-        this.starMaterial.uniforms.starScale.value = starScale;
-        //infoDiv.innerHTML += `<br>${view.id}: starScale = ${starScale.toFixed(3)}; skyBrightness = ${skyBrightness.toFixed(3)}<br>`;
-    }
-
     updateSatelliteScales(view) {
 
         const camera = view.camera;
@@ -1904,171 +1885,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         }
     }
 
-
-
-// Bright Star Catalog parsed data
-// Using seperate arrays for speed
-
-
-    loadStarData() {
-        const buffer = FileManager.get("BSC5")
-// https://observablehq.com/@visnup/yale-bright-star-catalog
-
-        const littleEndian = true;
-
-        const utf8decoder = new TextDecoder()
-        const view = new DataView(buffer)
-        let offset = 0
-        const star0 = view.getInt32(offset, littleEndian);
-        offset += 4;
-        const star1 = view.getInt32(offset, littleEndian);
-        offset += 4;
-        const starn = view.getInt32(offset, littleEndian);
-        offset += 4;
-        const stnum = view.getInt32(offset, littleEndian);
-        offset += 4;
-        const mprop = view.getInt32(offset, littleEndian);
-        offset += 4;
-        const nmag = view.getInt32(offset, littleEndian);
-        offset += 4;
-        const nbent = view.getInt32(offset, littleEndian);
-        offset += 4;
-//    const view = new DataView(buffer.slice(28))
-
-        let nInput = 0;
-        while (offset < -starn * nbent - 28) {
-            const xno = view.getInt32(offset, littleEndian);  // HIP number
-            offset += 4
-            const sra0 = view.getFloat64(offset, littleEndian);
-            offset += 8
-            const sdec0 = view.getFloat64(offset, littleEndian);
-            offset += 8
-            // const is = utf8decoder.decode(new Uint8Array([view.getUint8(offset), view.getUint8(offset + 1)]));
-            // offset += 2
-            let mag = view.getInt16(offset, littleEndian) / 100;
-            offset += 2
-            // const xrpm = view.getFloat32(offset, littleEndian);
-            // offset += 4
-            // const xdpm = view.getFloat32(offset, littleEndian);
-            // offset += 4
-
-
-            // LATER we need to accept the full range of magnitudes
-            // but historically we stopped at 8
-            // the problem is that we use the range to calcualte the on-screen size
-            // so we need to scale the stars to fit the screen with the full range of -2 to 15
-           // if (mag > 8) mag = 8;
-
-            // assert mag is within expected range for stars, and not NaN
-            assert(!isNaN(mag) &&  mag >= -2 && mag <= 15, "mag out of range: "+mag +" at nInput = "+nInput)
-
-            if (sra0 === 0 && sdec0 === 0) {
-                // ra and dec of zero indicates a placeholder entry, and is skipped
-//                console.log("Skipping star with ra, dec, 0,0, probably a bad entry, nInput = " + nInput)
-                // setting to 15 will make it invisible
-                // we are not skipping, as we need the numbers in sync to get the names
-                mag = 15;
-            } else {
-                // finding the maximum VALID magnitude
-                // so ignoring that 15
-                if (mag > this.BSC_MaxMag)
-                    this.BSC_MaxMag = mag;
-            }
-
-            this.BSC_RA[this.BSC_NumStars] = sra0;
-            this.BSC_DEC[this.BSC_NumStars] = sdec0;
-            // this.BSC_RA[this.BSC_NumStars] = sra0 * Math.PI / 180;
-            // this.BSC_DEC[this.BSC_NumStars] = sdec0 * Math.PI / 180;
-
-            this.BSC_MAG[this.BSC_NumStars] = mag;
-
-            this.BSC_HIP[this.BSC_NumStars] = xno;
-
-            this.BSC_NumStars++;
-
-
-
-
-            // note the star names depend on the OLD BSC
-
-            nInput++;
-        }
-
-        console.log("Loaded "+this.BSC_NumStars+" stars, max mag = "+this.BSC_MaxMag)
-    }
-
-// Okab              HR 7235      zet   ζ     Aql A    19054+1352  2.99  V  93747 177724 286.352533  13.863477 2018-06-01
-// 7235 17Zet AqlBD+13 3899 177724104461 716I  12026  11724    190048.8+134253190524.6+135148 46.86  3.25 2.99  +0.01 -0.01  0.00   A0Vn               -0.005-0.096 +.045-025SB    331  8.4 158.6AC   3*
-
-
-// load the IAU CSN (Common Star Names)
-// extract those with a HR designation, which is the index into the BSC
-// stor them in an array indexed on that
-//     loadCommonStarNames() {
-//         const lines = FileManager.get("IAUCSN").split('\n');
-//         for (const line of lines) {
-//             if (line[0] == '#') {
-//                 // console.log("Skipping "+line)
-//             } else {
-//                 const name = line.substring(0, 18).trim()
-//                 const designation = line.substring(36, 49).trim()
-//                 if (designation.startsWith("HR")) {
-//                     const hr = parseInt(designation.substring(3))
-//                     this.commonNames[hr] = name;
-//                     // console.log("Found HR "+hr+" "+name)
-//                 }
-//
-//             }
-//         }
-//     }
-
-    // new one as we are using HIP numbers
-    loadCommonStarNames() {
-        const lines = FileManager.get("IAUCSN").split('\n');
-        for (const line of lines) {
-            if (line[0] == '#' || line[0] == '$' || line.trim() === '') continue;
-
-            const name = line.substring(0, 18).trim();
-            let hipStr = line.substring(89, 96).trim();  // column 10 (0-based, fixed width file)
-
-            if (hipStr !== "_") {
-                const hip = parseInt(hipStr);
-               // this.commonNames[hip-1] = name;
-              // need to find the hip number in the BSC_HIP array
-                // and use the index of that to store the name in this.commonNames
-                const index = this.BSC_HIP.indexOf(hip);
-                if (index !== -1) {
-//                    console.log(`Found HIP ${hip} at index ${index}, name: ${name}`);
-                    // index+1 is to maintain compatibility with the BSC based indexing
-                    // as the BSC_HIP starts at 1, not 0
-                    this.commonNames[index+1] = name;
-                }
-            }
-        }
-    }
-
-
-
-// // The text file version with names
-// // File format at http://tdc-www.harvard.edu/catalogs/bsc5.readme
-// function loadStarDataWithNames() {
-//     const lines = FileManager.get("BSC5_DAT").split('\n');
-//     console.log(lines[0]);
-//     console.log(lines[1]);
-//
-//     BSC_NumStars = 0
-//     for (const line of lines) {
-//         const name = line.substring(4,13).trim()
-//         BSC_NAME[BSC_NumStars] = name;
-//       //  console.log(name)
-//
-//
-//         BSC_NumStars++
-//         if (BSC_NumStars > 100) break;
-//     }
-// }
-
-
     addCelestialSphereLines(scene, gap = 15, color = 0x808080) {
 
         const sphereRadius = 100; // Radius of the celestial sphere
@@ -2112,110 +1928,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
     }
 
 
-    addStars(scene) {
-        this.loadStarData();
-        this.loadCommonStarNames();
 
-        // Custom shaders with flux-based scaling
-        const customVertexShader = `
-        varying vec3 vColor;
-        varying float vFlux;
-
-        uniform float cameraFOV;
-        uniform float starScale;
-        
-        attribute float flux;
-
-        void main() {
-            vColor = vec3(1.0);
-            //vFlux = flux;
-
-            // Size proportional to flux
-            float size = flux * starScale;
-
-            vFlux = size;
-
-            vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-            gl_Position = projectionMatrix * mvPosition;
-            gl_PointSize = size;
-        }
-    `;
-
-        const customFragmentShader = `
-        varying vec3 vColor;
-        varying float vFlux;
-        uniform sampler2D starTexture;
-
-        void main() {
-            vec2 uv = gl_PointCoord.xy * 2.0 - 1.0;
-            float alpha = 1.0 - dot(uv, uv);
-            if (alpha < 0.0) discard;
-            
-            vec4 textureColor = texture2D(starTexture, gl_PointCoord);
-            
-            // for flux < 0.01, we want to make it invisible
-            if (vFlux < 0.5) {
-                gl_FragColor = vec4(0.0, 0.0, 0.0, 0.0);
-                return;
-            }
-            
-            
-            //float finalAlpha = alpha * sqrt(vFlux); // Gamma correction for perceptual brightness
-//            gl_FragColor = vec4(vColor, alpha) * textureColor;
-            gl_FragColor = textureColor;
-        }`;
-
-        this.starMaterial = new ShaderMaterial({
-            vertexShader: customVertexShader,
-            fragmentShader: customFragmentShader,
-            uniforms: {
-                starTexture: { value: new TextureLoader().load(SITREC_APP+'data/images/nightsky/MickStar.png') },
-                cameraFOV: { value: 30 },
-                starScale: { value: Sit.starScale / window.devicePixelRatio },
-            },
-            transparent: true,
-            depthTest: true,
-        });
-
-        this.createStarSprites(scene);
-    }
-
-    createStarSprites(scene) {
-        const numStars = this.BSC_NumStars;
-        const sphereRadius = 100;
-
-        if (this.starSprites) {
-            scene.remove(this.starSprites);
-            this.starSprites.geometry.dispose();
-            this.starSprites = null;
-        }
-
-        this.starGeometry = new BufferGeometry();
-
-        let positions = [];
-        let fluxes = [];
-
-        const magRef = -1.5;  // Reference magnitude for normalization
-        //const magLimit = 6.5; // Absolute limiting magnitude (faintest star we bother with)
-
-        for (let i = 0; i < numStars; i++) {
-            const mag = this.BSC_MAG[i];
-            if (mag <= Sit.starLimit) {
-                const equatorial = raDec2Celestial(this.BSC_RA[i], this.BSC_DEC[i], sphereRadius);
-                positions.push(equatorial.x, equatorial.y, equatorial.z);
-
-                // Flux calculation
-                const flux = Math.cbrt(100000000 * Math.pow(10, -0.4 * (mag - magRef))) / 16;
-                fluxes.push(flux);
-            }
-        }
-
-        this.starGeometry.setAttribute('position', new BufferAttribute(new Float32Array(positions), 3));
-        this.starGeometry.setAttribute('flux', new BufferAttribute(new Float32Array(fluxes), 1));
-
-        this.starSprites = new Points(this.starGeometry, this.starMaterial);
-        scene.add(this.starSprites);
-    }
 
 
     addConstellationNames(scene) {
@@ -2303,8 +2016,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     addPlanets(scene, dayScene = null) {
 
-        assert(Sit.lat !== undefined, "addStars needs Sit.lat")
-        assert(Sit.lon !== undefined, "addStars needs Sit.lon")
+        assert(Sit.lat !== undefined, "addPlanets needs Sit.lat")
+        assert(Sit.lon !== undefined, "addPlanets needs Sit.lon")
 
         // Remove existing planet sprites first to prevent duplicates
         this.removePlanets(scene, dayScene);
@@ -2457,7 +2170,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         // Custom shaders
         const customVertexShader = `
     varying vec3 vColor;
-    uniform float maxMagnitude;
     uniform float minSize;
     uniform float maxSize;
     uniform float cameraFOV;
@@ -2509,7 +2221,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             vertexShader: customVertexShader,
             fragmentShader: customFragmentShader,
             uniforms: {
-                maxMagnitude: { value: this.BSC_MaxMag },
                 minSize: { value: 0.0 },  // was 1.0, but we want to scale to zero if needed
                 maxSize: { value: 20.0 },
                 starTexture: { value: new TextureLoader().load(SITREC_APP+'data/images/nightsky/MickStar.png') },
@@ -3009,6 +2720,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
     }
 
     dispose() {
+        // Clean up star field resources
+        if (this.starField) {
+            this.starField.dispose();
+        }
+        
         // Clean up planet sprites before disposing
         this.removePlanets(this.celestialSphere, this.celestialDaySphere);
         super.dispose();
