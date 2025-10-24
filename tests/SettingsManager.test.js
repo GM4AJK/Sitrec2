@@ -226,6 +226,7 @@ describe('SettingsManager', () => {
         });
 
         it('should return false when server save fails', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
             global.fetch.mockResolvedValueOnce({
                 ok: false,
                 status: 500
@@ -233,6 +234,11 @@ describe('SettingsManager', () => {
 
             const result = await saveSettingsToServer({ maxDetails: 15 });
             expect(result).toBe(false);
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Failed to save settings to server, status:',
+                500
+            );
+            consoleSpy.mockRestore();
         });
 
         it('should sanitize settings before sending to server', async () => {
@@ -279,6 +285,7 @@ describe('SettingsManager', () => {
         });
 
         it('should fall back to cookies when server fails', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
             Globals.userID = 99999999;
             
             // Server fails
@@ -293,6 +300,11 @@ describe('SettingsManager', () => {
             await initializeSettings();
             
             expect(Globals.settings.maxDetails).toBe(18);
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Server settings unavailable, status:',
+                500
+            );
+            consoleSpy.mockRestore();
         });
 
         it('should use cookies when user is not logged in', async () => {
@@ -331,6 +343,7 @@ describe('SettingsManager', () => {
         });
 
         it('should fall back to cookies when server fails', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
             Globals.userID = 99999999;
             Globals.settings = { maxDetails: 16 };
             
@@ -342,10 +355,15 @@ describe('SettingsManager', () => {
             const result = await saveSettings(Globals.settings);
             
             expect(result).toBe(true); // Still returns true (saved to cookie)
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Failed to save settings to server, status:',
+                500
+            );
             
             // Should save to cookie
             const loaded = loadSettingsFromCookie();
             expect(loaded.maxDetails).toBe(16);
+            consoleSpy.mockRestore();
         });
 
         it('should save to cookies only when user is not logged in', async () => {
