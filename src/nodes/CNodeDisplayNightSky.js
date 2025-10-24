@@ -1,30 +1,10 @@
 import {CNode3DGroup} from "./CNode3DGroup";
 import {GlobalNightSkyScene, GlobalScene, GlobalSunSkyScene, setupNightSkyScene, setupSunSkyScene} from "../LocalFrame";
-import {
-    BufferAttribute,
-    BufferGeometry,
-    Color,
-    Group,
-    Matrix4,
-    Points,
-    Raycaster,
-    Scene,
-    ShaderMaterial,
-    Sphere,
-    TextureLoader,
-    Vector3
-} from "three";
+import {Color, Group, Matrix4, Raycaster, Scene, Sphere, Vector3} from "three";
 import {degrees, radians} from "../utils";
 import {FileManager, GlobalDateTimeNode, Globals, guiMenus, guiShowHide, NodeMan, setRenderOne, Sit} from "../Globals";
-import {
-    DebugArrow,
-    DebugArrowAB,
-    getPointBelow,
-    propagateLayerMaskObject,
-    removeDebugArrow,
-    setLayerMaskRecursive
-} from "../threeExt";
-import {ECEF2EUS, ECEFToLLAVD_Sphere, EUSToECEF, LLAToEUSRadians, wgs84} from "../LLA-ECEF-ENU";
+import {DebugArrow, DebugArrowAB, propagateLayerMaskObject, setLayerMaskRecursive} from "../threeExt";
+import {ECEF2EUS, ECEFToLLAVD_Sphere, EUSToECEF, wgs84} from "../LLA-ECEF-ENU";
 // npm install three-text2d --save-dev
 // https://github.com/gamestdio/three-text2d
 //import { MeshText2D, textAlign } from 'three-text2d'
@@ -36,18 +16,12 @@ import {CNodeDisplayGlobeCircle} from "./CNodeDisplayGlobeCircle";
 import {assert} from "../assert.js";
 import {intersectSphere2, V3} from "../threeUtils";
 import {calculateGST, celestialToECEF, getSiderealTime} from "../CelestialMath";
-import {DragDropHandler} from "../DragDropHandler";
 import {ViewMan} from "../CViewManager";
-import {bestSat, CTLEData} from "../TLEUtils";
-import {SITREC_APP, SITREC_SERVER} from "../configUtils";
 import {CNodeLabeledArrow} from "./CNodeLabels3D";
 import {CNodeDisplaySkyOverlay} from "./CNodeDisplaySkyOverlay";
-import {EventManager} from "../CEventManager";
 import {CNodeViewUI} from "./CNodeViewUI";
 //import { eci_to_geodetic } from '../../pkg/eci_convert.js';
 // npm install satellite.js --save-dev
-import * as satellite from 'satellite.js';
-import {sharedUniforms} from "../js/map33/material/SharedUniforms";
 
 // installed with
 // npm install astronomy-engine --save-dev
@@ -58,6 +32,7 @@ import * as Astronomy from "astronomy-engine";
 import {CStarField} from "./CStarField";
 import {CCelestialElements} from "./CCelestialElements";
 import {CPlanets} from "./CPlanets";
+import {CSatellite} from "./CSatellite";
 
 
 // other source of stars, if we need more (for zoomed-in pics)
@@ -142,32 +117,39 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             sphereRadius: 100
         });
 
-        satGUI.add(this,"updateLEOSats").name("Load LEO Satellites For Date")
+        // Create satellites instance
+        this.satellites = new CSatellite({
+            showSatelliteTracks: Sit.showSatelliteTracks ?? false,
+            showFlareTracks: Sit.showFlareTracks ?? false,
+            showSatelliteGround: Sit.showSatelliteGround ?? false,
+            flareAngle: 5,
+            penumbraDepth: 5000
+        });
+
+        satGUI.add(this.satellites,"updateLEOSats").name("Load LEO Satellites For Date")
             .onChange(function (x) {this.parent.close()})
             .tooltip("Get the latest LEO Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky.")
 
-        satGUI.add(this,"updateStarlink").name("Load CURRENT Starlink")
+        satGUI.add(this.satellites,"updateStarlink").name("Load CURRENT Starlink")
             .onChange(function (x) {this.parent.close()})
             .tooltip("Get the CURRENT (not historical, now, real time) Starlink satellite positions. This will download the data from the internet, so it may take a few seconds.\n")
 
-        satGUI.add(this,"updateSLOWSats").name("(Experimental) Load SLOW Satellites")
+        satGUI.add(this.satellites,"updateSLOWSats").name("(Experimental) Load SLOW Satellites")
             .onChange(function (x) {this.parent.close()})
             .tooltip("Get the latest SLOW Satellite TLE data for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
 
-        satGUI.add(this,"updateALLSats").name("(Experimental) Load ALL Satellites")
+        satGUI.add(this.satellites,"updateALLSats").name("(Experimental) Load ALL Satellites")
             .onChange(function (x) {this.parent.close()})
             .tooltip("Get the latest Satellite TLE data for ALL the satellites for the set simulator date/time. This will download the data from the internet, so it may take a few seconds.\nWill also enable the satellites to be displayed in the night sky. Might time-out for recent dates")
 
 
-        this.flareAngle = 5
-        satGUI.add(this, 'flareAngle', 0, 20, 0.1).listen().name("Flare Angle Spread").tooltip("Maximum angle of the reflected view vector for a flare to be visible\ni.e. the range of angles between the vector from the satellite to the sun and the vector from the camera to the satellite reflected off the bottom of the satellite (which is parallel to the ground)")
-        this.addSimpleSerial("flareAngle")
+        satGUI.add(this.satellites, 'flareAngle', 0, 20, 0.1).listen().name("Flare Angle Spread").tooltip("Maximum angle of the reflected view vector for a flare to be visible\ni.e. the range of angles between the vector from the satellite to the sun and the vector from the camera to the satellite reflected off the bottom of the satellite (which is parallel to the ground)")
+        this.addSimpleSerial("satellites.flareAngle")
 
 
-        this.penumbraDepth = 5000
-        satGUI.add(this, 'penumbraDepth', 0, 100000, 1).listen().name("Earth's Penumbra Depth")
+        satGUI.add(this.satellites, 'penumbraDepth', 0, 100000, 1).listen().name("Earth's Penumbra Depth")
             .tooltip("Vertical depth in meters over which a satellite fades out as it enters the Earth's shadow")
-        this.addSimpleSerial("penumbraDepth")
+        this.addSimpleSerial("satellites.penumbraDepth")
 
 
 
@@ -254,49 +236,38 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
 
-        this.showSatellites = true;
-        this.showStarlink = true;
-        this.showISS = true;
-        this.showBrightest = true;
-        this.showOtherSatellites = false;
-        this.showSatelliteTracks = Sit.showSatelliteTracks ?? false;
-        this.showSatelliteGround = Sit.showSatelliteGround ?? false;
-        this.showSatelliteNames = false;
-        this.showSatelliteNamesMain = false;
         this.showFlareRegion = Sit.showFlareRegion;
         this.showFlareBand = Sit.showFlareBand;
-        this.showFlareTracks = Sit.showFlareTracks ?? false;
-
 
         this.showAllLabels = false;
 
-        this.showSatelliteList = "";
-
-
         const satelliteOptions = [
-            { key: "showSatellites", name: "Overall Satellites Flag",           action: () => {this.satelliteGroup.visible = this.showSatellites; this.filterSatellites() }},
-            { key: "showStarlink", name: "Starlink",                            action: () => this.filterSatellites() },
-            { key: "showISS", name: "ISS",                                      action: () => this.filterSatellites() },
-            { key: "showBrightest", name: "Celestrack's Brightest",             action: () => this.filterSatellites() },
-            { key: "showOtherSatellites", name: "Other Satellites",             action: () => this.filterSatellites() },
-            { key: "showSatelliteList", name: "List",                           action: () => this.filterSatellites() },
-            { key: "showSatelliteTracks", name: "Satellite Arrows",             action: () => this.satelliteTrackGroup.visible = this.showSatelliteTracks },
-            { key: "showFlareTracks", name: "Flare Lines",                      action: () => this.satelliteFlareTracksGroup.visible = this.showFlareTracks },
-            { key: "showSatelliteGround", name: "Satellite Ground Arrows",      action: () => this.satelliteGroundGroup.visible = this.showSatelliteGround },
-            { key: "showSatelliteNames", name: "Satellite Names (Look View)",   action: () => this.updateSatelliteNamesVisibility() },
-            { key: "showSatelliteNamesMain", name: "Satellite Names (Main View)", action: () => this.updateSatelliteNamesVisibility() },
-            { key: "showAllLabels", name: "Show all Labels",                     action: () => this.flareRegionGroup.visible = this.showFlareRegion},
-            { key: "showFlareRegion", name: "Flare Region",                     action: () => this.flareRegionGroup.visible = this.showFlareRegion},
-            { key: "showFlareBand", name: "Flare Band",                         action: () => this.flareBandGroup.visible = this.showFlareBand},
-
+            { key: "showSatellites", name: "Overall Satellites Flag", object: this.satellites, action: () => {this.satelliteGroup.visible = this.satellites.showSatellites; this.satellites.filterSatellites() }},
+            { key: "showStarlink", name: "Starlink", object: this.satellites, action: () => this.satellites.filterSatellites() },
+            { key: "showISS", name: "ISS", object: this.satellites, action: () => this.satellites.filterSatellites() },
+            { key: "showBrightest", name: "Celestrack's Brightest", object: this.satellites, action: () => this.satellites.filterSatellites() },
+            { key: "showOtherSatellites", name: "Other Satellites", object: this.satellites, action: () => this.satellites.filterSatellites() },
+            { key: "showSatelliteList", name: "List", object: this.satellites, action: () => this.satellites.filterSatellites() },
+            { key: "showSatelliteTracks", name: "Satellite Arrows", object: this.satellites, action: () => this.satelliteTrackGroup.visible = this.satellites.showSatelliteTracks },
+            { key: "showFlareTracks", name: "Flare Lines", object: this.satellites, action: () => this.satelliteFlareTracksGroup.visible = this.satellites.showFlareTracks },
+            { key: "showSatelliteGround", name: "Satellite Ground Arrows", object: this.satellites, action: () => this.satelliteGroundGroup.visible = this.satellites.showSatelliteGround },
+            { key: "showSatelliteNames", name: "Satellite Names (Look View)", object: this.satellites, action: () => this.updateSatelliteNamesVisibility() },
+            { key: "showSatelliteNamesMain", name: "Satellite Names (Main View)", object: this.satellites, action: () => this.updateSatelliteNamesVisibility() },
+            { key: "showAllLabels", name: "Show all Labels", object: this, action: () => this.flareRegionGroup.visible = this.showFlareRegion},
+            { key: "showFlareRegion", name: "Flare Region", object: this, action: () => this.flareRegionGroup.visible = this.showFlareRegion},
+            { key: "showFlareBand", name: "Flare Band", object: this, action: () => this.flareBandGroup.visible = this.showFlareBand},
         ];
 
         satelliteOptions.forEach(option => {
-            satGUI.add(this, option.key).listen().onChange(() => {
+            satGUI.add(option.object, option.key).listen().onChange(() => {
                 setRenderOne(true);
                 option.action();
             }).name(option.name);
-            this.addSimpleSerial(option.key);
+            if (option.object === this.satellites) {
+                this.addSimpleSerial("satellites." + option.key);
+            } else {
+                this.addSimpleSerial(option.key);
+            }
         });
 
         this.flareBandGroup.visible = this.showFlareBand;
@@ -365,20 +336,17 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
        // this.addSimpleSerial("satCutOff");
 
 
-        this.arrowRange = 4000
-        satGUI.add(this,"arrowRange",10,10000,1).name("Display Range (km)").listen()
+        satGUI.add(this.satellites,"arrowRange",10,10000,1).name("Display Range (km)").listen()
             .tooltip("Satellites beyond this distance will not have their names or arrows displayed")
             .onChange(() => {
-                this.filterSatellites();
+                this.satellites.filterSatellites();
                 setRenderOne(true);
             })
-        this.addSimpleSerial("arrowRange");
+        this.addSimpleSerial("satellites.arrowRange");
 
 
 
-        // Sun Direction will get recalculated based on data
-        this.toSun = V3(0,0,1)
-        this.fromSun = V3(0,0,-1)
+        // Sun Direction will get recalculated based on data (in satellites)
 
 
 
@@ -437,7 +405,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         if (v.starLink !== undefined) {
             console.log("parsing starlink "+v.starLink)
             if (FileManager.exists(v.starLink)) {
-                this.replaceTLE(FileManager.get(v.starLink))
+                this.satellites.replaceTLE(FileManager.get(v.starLink))
             } else {
                 if (v.starLink !== "starLink")
                     console.warn("Starlink file/ID "+v.starLink+" does not exist")
@@ -537,7 +505,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
             this.text = "";
 
-            const TLEData = nightSky.TLEData;
+            const TLEData = nightSky.satellites.TLEData;
             if (TLEData !== undefined && TLEData.satData !== undefined && TLEData.satData.length > 0) {
                 // format dates as YYYY-MM-DD HH:MM
                 this.text = "TLEs: "+TLEData.startDate.toISOString().slice(0, 19).replace("T", " ") + " - " +
@@ -624,795 +592,6 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
 
-    brightest = [
-        [
-            "00694",
-            "ATLAS CENTAUR 2"
-        ],
-        [
-            "00733",
-            "THOR AGENA D R/B"
-        ],
-        [
-            "00877",
-            "SL-3 R/B"
-        ],
-        [
-            "02802",
-            "SL-8 R/B"
-        ],
-        [
-            "03230",
-            "SL-8 R/B"
-        ],
-        [
-            "03597",
-            "OAO 2"
-        ],
-        [
-            "03669",
-            "ISIS 1"
-        ],
-        [
-            "04327",
-            "SERT 2"
-        ],
-        [
-            "05118",
-            "SL-3 R/B"
-        ],
-        [
-            "05560",
-            "ASTEX 1"
-        ],
-        [
-            "05730",
-            "SL-8 R/B"
-        ],
-        [
-            "06073",
-            "COSMOS 482 DESCENT CRAFT"
-        ],
-        [
-            "06153",
-            "OAO 3 (COPERNICUS)"
-        ],
-        [
-            "06155",
-            "ATLAS CENTAUR R/B"
-        ],
-        [
-            "08459",
-            "SL-8 R/B"
-        ],
-        [
-            "10114",
-            "SL-3 R/B"
-        ],
-        [
-            "10967",
-            "SEASAT 1"
-        ],
-        [
-            "11267",
-            "SL-14 R/B"
-        ],
-        [
-            "11574",
-            "SL-8 R/B"
-        ],
-        [
-            "11672",
-            "SL-14 R/B"
-        ],
-        [
-            "12139",
-            "SL-8 R/B"
-        ],
-        [
-            "12465",
-            "SL-3 R/B"
-        ],
-        [
-            "12585",
-            "METEOR PRIRODA"
-        ],
-        [
-            "12904",
-            "SL-3 R/B"
-        ],
-        [
-            "13068",
-            "SL-3 R/B"
-        ],
-        [
-            "13154",
-            "SL-3 R/B"
-        ],
-        [
-            "13403",
-            "SL-3 R/B"
-        ],
-        [
-            "13553",
-            "SL-14 R/B"
-        ],
-        [
-            "13819",
-            "SL-3 R/B"
-        ],
-        [
-            "14032",
-            "COSMOS 1455"
-        ],
-        [
-            "14208",
-            "SL-3 R/B"
-        ],
-        [
-            "14372",
-            "COSMOS 1500"
-        ],
-        [
-            "14699",
-            "COSMOS 1536"
-        ],
-        [
-            "14820",
-            "SL-14 R/B"
-        ],
-        [
-            "15483",
-            "SL-8 R/B"
-        ],
-        [
-            "15772",
-            "SL-12 R/B(2)"
-        ],
-        [
-            "15945",
-            "SL-14 R/B"
-        ],
-        [
-            "16182",
-            "SL-16 R/B"
-        ],
-        [
-            "16496",
-            "SL-14 R/B"
-        ],
-        [
-            "16719",
-            "COSMOS 1743"
-        ],
-        [
-            "16792",
-            "SL-14 R/B"
-        ],
-        [
-            "16882",
-            "SL-14 R/B"
-        ],
-        [
-            "16908",
-            "AJISAI (EGS)"
-        ],
-        [
-            "17295",
-            "COSMOS 1812"
-        ],
-        [
-            "17567",
-            "SL-14 R/B"
-        ],
-        [
-            "17589",
-            "COSMOS 1833"
-        ],
-        [
-            "17590",
-            "SL-16 R/B"
-        ],
-        [
-            "17912",
-            "SL-14 R/B"
-        ],
-        [
-            "17973",
-            "COSMOS 1844"
-        ],
-        [
-            "18153",
-            "SL-14 R/B"
-        ],
-        [
-            "18187",
-            "COSMOS 1867"
-        ],
-        [
-            "18421",
-            "COSMOS 1892"
-        ],
-        [
-            "18749",
-            "SL-14 R/B"
-        ],
-        [
-            "18958",
-            "COSMOS 1933"
-        ],
-        [
-            "19046",
-            "SL-3 R/B"
-        ],
-        [
-            "19120",
-            "SL-16 R/B"
-        ],
-        [
-            "19210",
-            "COSMOS 1953"
-        ],
-        [
-            "19257",
-            "SL-8 R/B"
-        ],
-        [
-            "19573",
-            "COSMOS 1975"
-        ],
-        [
-            "19574",
-            "SL-14 R/B"
-        ],
-        [
-            "19650",
-            "SL-16 R/B"
-        ],
-        [
-            "20261",
-            "INTERCOSMOS 24"
-        ],
-        [
-            "20262",
-            "SL-14 R/B"
-        ],
-        [
-            "20323",
-            "DELTA 1 R/B"
-        ],
-        [
-            "20443",
-            "ARIANE 40 R/B"
-        ],
-        [
-            "20453",
-            "DELTA 2 R/B(1)"
-        ],
-        [
-            "20465",
-            "COSMOS 2058"
-        ],
-        [
-            "20466",
-            "SL-14 R/B"
-        ],
-        [
-            "20511",
-            "SL-14 R/B"
-        ],
-        [
-            "20580",
-            "HST"
-        ],
-        [
-            "20625",
-            "SL-16 R/B"
-        ],
-        [
-            "20663",
-            "COSMOS 2084"
-        ],
-        [
-            "20666",
-            "SL-6 R/B(2)"
-        ],
-        [
-            "20775",
-            "SL-8 R/B"
-        ],
-        [
-            "21088",
-            "SL-8 R/B"
-        ],
-        [
-            "21397",
-            "OKEAN-3"
-        ],
-        [
-            "21422",
-            "COSMOS 2151"
-        ],
-        [
-            "21423",
-            "SL-14 R/B"
-        ],
-        [
-            "21574",
-            "ERS-1"
-        ],
-        [
-            "21610",
-            "ARIANE 40 R/B"
-        ],
-        [
-            "21819",
-            "INTERCOSMOS 25"
-        ],
-        [
-            "21876",
-            "SL-8 R/B"
-        ],
-        [
-            "21938",
-            "SL-8 R/B"
-        ],
-        [
-            "21949",
-            "USA 81"
-        ],
-        [
-            "22219",
-            "COSMOS 2219"
-        ],
-        [
-            "22220",
-            "SL-16 R/B"
-        ],
-        [
-            "22236",
-            "COSMOS 2221"
-        ],
-        [
-            "22285",
-            "SL-16 R/B"
-        ],
-        [
-            "22286",
-            "COSMOS 2228"
-        ],
-        [
-            "22566",
-            "SL-16 R/B"
-        ],
-        [
-            "22626",
-            "COSMOS 2242"
-        ],
-        [
-            "22803",
-            "SL-16 R/B"
-        ],
-        [
-            "22830",
-            "ARIANE 40 R/B"
-        ],
-        [
-            "23087",
-            "COSMOS 2278"
-        ],
-        [
-            "23088",
-            "SL-16 R/B"
-        ],
-        [
-            "23343",
-            "SL-16 R/B"
-        ],
-        [
-            "23405",
-            "SL-16 R/B"
-        ],
-        [
-            "23561",
-            "ARIANE 40+ R/B"
-        ],
-        [
-            "23705",
-            "SL-16 R/B"
-        ],
-        [
-            "24298",
-            "SL-16 R/B"
-        ],
-        [
-            "24883",
-            "ORBVIEW 2 (SEASTAR)"
-        ],
-        [
-            "25400",
-            "SL-16 R/B"
-        ],
-        [
-            "25407",
-            "SL-16 R/B"
-        ],
-        [
-            "25544",
-            "ISS (ZARYA)"
-        ],
-        [
-            "25732",
-            "CZ-4B R/B"
-        ],
-        [
-            "25860",
-            "OKEAN-O"
-        ],
-        [
-            "25861",
-            "SL-16 R/B"
-        ],
-        [
-            "25876",
-            "DELTA 2 R/B"
-        ],
-        [
-            "25977",
-            "HELIOS 1B"
-        ],
-        [
-            "25994",
-            "TERRA"
-        ],
-        [
-            "26070",
-            "SL-16 R/B"
-        ],
-        [
-            "26474",
-            "TITAN 4B R/B"
-        ],
-        [
-            "27386",
-            "ENVISAT"
-        ],
-        [
-            "27422",
-            "IDEFIX & ARIANE 42P R/B"
-        ],
-        [
-            "27424",
-            "AQUA"
-        ],
-        [
-            "27432",
-            "CZ-4B R/B"
-        ],
-        [
-            "27597",
-            "MIDORI II (ADEOS-II)"
-        ],
-        [
-            "27601",
-            "H-2A R/B"
-        ],
-        [
-            "28059",
-            "CZ-4B R/B"
-        ],
-        [
-            "28222",
-            "CZ-2C R/B"
-        ],
-        [
-            "28353",
-            "SL-16 R/B"
-        ],
-        [
-            "28415",
-            "CZ-4B R/B"
-        ],
-        [
-            "28480",
-            "CZ-2C R/B"
-        ],
-        [
-            "28499",
-            "ARIANE 5 R/B"
-        ],
-        [
-            "28738",
-            "CZ-2D R/B"
-        ],
-        [
-            "28931",
-            "ALOS (DAICHI)"
-        ],
-        [
-            "28932",
-            "H-2A R/B"
-        ],
-        [
-            "29228",
-            "RESURS-DK 1"
-        ],
-        [
-            "29252",
-            "GENESIS 1"
-        ],
-        [
-            "29507",
-            "CZ-4B R/B"
-        ],
-        [
-            "31114",
-            "CZ-2C R/B"
-        ],
-        [
-            "31598",
-            "COSMO-SKYMED 1"
-        ],
-        [
-            "31789",
-            "GENESIS 2"
-        ],
-        [
-            "31792",
-            "COSMOS 2428"
-        ],
-        [
-            "31793",
-            "SL-16 R/B"
-        ],
-        [
-            "33504",
-            "KORONAS-FOTON"
-        ],
-        [
-            "37731",
-            "CZ-2C R/B"
-        ],
-        [
-            "38341",
-            "H-2A R/B"
-        ],
-        [
-            "39358",
-            "SHIJIAN-16 (SJ-16)"
-        ],
-        [
-            "39679",
-            "SL-4 R/B"
-        ],
-        [
-            "39766",
-            "ALOS-2"
-        ],
-        [
-            "41038",
-            "YAOGAN-29"
-        ],
-        [
-            "41337",
-            "ASTRO-H (HITOMI)"
-        ],
-        [
-            "42758",
-            "HXMT (HUIYAN)"
-        ],
-        [
-            "43521",
-            "CZ-2C R/B"
-        ],
-        [
-            "43641",
-            "SAOCOM 1A"
-        ],
-        [
-            "43682",
-            "H-2A R/B"
-        ],
-        [
-            "46265",
-            "SAOCOM 1B"
-        ],
-        [
-            "48274",
-            "CSS (TIANHE)"
-        ],
-        [
-            "48865",
-            "COSMOS 2550"
-        ],
-        [
-            "52794",
-            "CZ-2C R/B"
-        ],
-        [
-            "54149",
-            "GSLV R/B"
-        ],
-        [
-            "57800",
-            "XRISM"
-        ],
-        [
-            "59588",
-            "ACS3"
-        ]
-    ];
-
-    filterSatellites() {
-        if (this.TLEData === undefined) return;
-
-
-        // first get the satellte list into an array of NORAD numbers
-        const satList = this.showSatelliteList.split(",").map(x => x.trim());
-        const list = [];
-        // this can be names or numbers, convert to numbers
-        for (let i = 0; i < satList.length; i++) {
-            const num = parseInt(satList[i]);
-            if (isNaN(num)) {
-                const matching = this.TLEData.getMatchingRecords(satList[i])
-                // add the "matching" array to the list
-                if (matching.length > 0) {
-                    for (const number of matching) {
-                        // if the number is not already in the list, add it
-                        if (!list.includes(number)) {
-                            list.push(number);
-                        }
-                    }
-                }
-
-            } else {
-                list.push(num);
-            }
-        }
-
-
-
-        // iterate over the satellites and flag visiblity
-        // based on the name and the GUI flags
-        for (const satData of this.TLEData.satData) {
-
-            // this is just a clean time to remove the debug arrows
-            // they will get recreated of all visible satellites
-            this.removeSatelliteArrows(satData);
-
-            satData.visible = false;
-            satData.userFiltered = false;
-            let filterHit = false;
-
-            if (!this.showSatellites)
-                continue;
-
-
-            if (satData.name.startsWith("STARLINK")) {
-                filterHit = true;
-                if (this.showStarlink) {
-                    satData.visible = true;
-                    continue;
-                }
-            }
-
-            if (satData.name.startsWith("ISS (ZARYA)")) {
-                filterHit = true;
-                if (this.showISS) {
-                    satData.visible = true;
-                    satData.userFiltered = true;
-                    continue;
-                }
-            }
-
-            // check the number against the brightest list
-            if (this.showBrightest) {
-                for (const [num, name] of this.brightest) {
-                    if (satData.number === parseInt(num)) {
-                        filterHit = true;
-                            satData.visible = true;
-                            satData.userFiltered = true;
-
-                            continue;
-                        }
-                }
-            }
-
-            // check the number against the user supplied list
-            // comma separated list of names or NORAD numbers
-            if (this.showSatelliteList) {
-                for (const number of list) {
-                    if (satData.number === parseInt(number)) {
-                        filterHit = true;
-                        satData.visible = true;
-                        satData.userFiltered = true;
-
-                        continue;
-                    }
-                }
-            }
-
-
-            if (!filterHit && this.showOtherSatellites) {
-                satData.visible = true;
-                continue;
-            }
-
-
-        }
-    }
-
-
-
-    updateStarlink() {
-        const url=SITREC_SERVER+"proxy.php?request=CURRENT_STARLINK";
-        console.log("Getting starlink from "+url)
-        const id = "starLink_current.tle";
-        this.loadSatellites(url, id);
-    }
-
-    updateLEOSats() {
-        this.updateSats("LEO");
-    }
-
-    updateSLOWSats() {
-        this.updateSats("SLOW");
-    }
-
-    updateALLSats() {
-        this.updateSats("ALL");
-    }
-
-    updateSats(satType) {
-        // get the start time
-        const startTime = GlobalDateTimeNode.dateNow;
-
-        // go back one day so the TLE's are all before the current time
-        // server will add one day to the date to cover things.
-        // Say this is day D, we request D-1
-        // the server will ask for that +2, so we get
-        // D-1 to D+1
-        // but this essentiall gives us D-1 to all of D, which is what we want
-        // this still gives us some times in D that are in the future,
-        // but those are handled by the bestSat function
-        startTime.setDate(startTime.getDate()-1);
-
-        // convert to YYYY-MM-DD
-        const dateStr = startTime.toISOString().split('T')[0];
-        // get the file from the proxyStarlink URL
-        // note this is NOT a dynamic file
-        // it fixed based on the date
-        // so we don't need to rehost it
-//        const url = SITREC_SERVER+"proxyStarlink.php?request="+dateStr+"&type=LEO";
-        const url = SITREC_SERVER+"proxyStarlink.php?request="+dateStr+"&type="+satType;
-
-        // TODO: remove the old starlink from the file manager.
-
-        console.log("Getting satellites from "+url)
-        const id = "starLink_"+dateStr+".tle";
-        this.loadSatellites(url, id);
-
-    }
-
-    loadSatellites(url, id) {
-        FileManager.loadAsset(url, id).then((data) => {
-            // this.replaceTLE(data)
-
-            const fileInfo = FileManager.list[id];
-
-            // give it a proper filename so when it's re-loaded
-            // it can be parsed correctly
-            fileInfo.filename = id;
-
-            // kill the static URL to force a rehost with this name
-            fileInfo.staticURL = null;
-
-            fileInfo.dynamicLink = true;
-
-            DragDropHandler.handleParsedFile(id, fileInfo.data)
-        });
-    }
-
     updateVis() {
 
         this.equatorialSphereGroup.visible = this.showEquatorialGrid;
@@ -1432,11 +611,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.MoonArrowGroup.show(this.showMoonArrow);
         this.flareRegionGroup.visible = this.showFlareRegion;
         this.flareBandGroup.visible = this.showFlareBand;
-        this.satelliteGroup.visible = this.showSatellites;
-        this.satelliteTrackGroup.visible = this.showSatelliteTracks;
-        this.satelliteFlareTracksGroup.visible = this.showSatelliteFlares;
-        this.satelliteGroundGroup.visible = this.showSatelliteGround;
-        this.satelliteTextGroup.visible = this.showSatelliteNames;
+        this.satelliteGroup.visible = this.satellites.showSatellites;
+        this.satelliteTrackGroup.visible = this.satellites.showSatelliteTracks;
+        this.satelliteFlareTracksGroup.visible = this.satellites.showFlareTracks;
+        this.satelliteGroundGroup.visible = this.satellites.showSatelliteGround;
+        this.satelliteTextGroup.visible = this.satellites.showSatelliteNames;
 
 
         propagateLayerMaskObject(this.equatorialSphereGroup)
@@ -1446,7 +625,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         super.modDeserialize(v);
         // a guid value's .listen() only updates the gui, so we need to do it manually
         // perhaps better to flag the gui system to update it?
-        this.filterSatellites();
+        this.satellites.filterSatellites();
         this.updateVis();
         this.updateSatelliteNamesVisibility();
 
@@ -1551,27 +730,31 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             this.updateArrow(name, planetData.ra, planetData.dec, nowDate, observer, 100)
         }
 
-        if (this.showSatellites && this.TLEData) {
+        if (this.satellites.showSatellites && this.satellites.TLEData) {
             // Update satellites to correct position for nowDate
-            // for (const [index, sat] of Object.entries(this.TLEData.satData)) {
-            //     const success = this.updateSatelliteSprite(sat.spriteText, sat, nowDate)
-            // }
-
-            this.updateAllSatellites(nowDate)
+            const satResult = this.satellites.updateAllSatellites(nowDate, {
+                lookCameraPos: this.camera.position,
+                satelliteTrackGroup: this.satelliteTrackGroup,
+                satelliteGroundGroup: this.satelliteGroundGroup
+            });
+            // Calculate percentage of valid satellites
+            if (satResult && this.satellites.TLEData.satData.length > 0) {
+                par.validPct = (satResult.validCount / this.satellites.TLEData.satData.length) * 100;
+            }
         }
 //        console.log (`out of ${numSats}, ${valid} of them are valid`)
 
 
 //        this.updateSatelliteScales(this.camera)
 
-        //const fromSun = this.fromSun
+        //const fromSun = this.satellites.fromSun
 
         if (this.showFlareBand && NodeMan.exists("globeCircle1")) {
             const globeCircle1 = NodeMan.get("globeCircle1")
-            globeCircle1.normal = this.fromSun.clone().normalize();
+            globeCircle1.normal = this.satellites.fromSun.clone().normalize();
             globeCircle1.rebuild();
             const globeCircle2 = NodeMan.get("globeCircle2")
-            globeCircle2.normal = this.fromSun.clone().normalize();
+            globeCircle2.normal = this.satellites.fromSun.clone().normalize();
             globeCircle2.rebuild();
         }
     }
@@ -1591,8 +774,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                 camera.satStartTime = 0;
         }
 
-        const toSun = this.toSun;
-        const fromSun = this.fromSun
+        const toSun = this.satellites.toSun;
+        const fromSun = this.satellites.fromSun
         // For the globe, we position it at the center of a sphere or radius wgs84.RADIUS
         // but for the purposes of occlusion, we use the POLAR_RADIUS
         // erring on not missing things
@@ -1607,12 +790,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         // get the forward vector (-z) of the camera matrix, for perp distance
         const cameraForward = new Vector3(0,0,-1).applyQuaternion(camera.quaternion);
 
-        if ( this.showSatellites && this.TLEData) {
+        if ( this.satellites.showSatellites && this.satellites.TLEData) {
 
 
             // // we scale ALL the text sprites, as it's per camera
-            // for (let i = 0; i < this.TLEData.satData.length; i++) {
-            //     const satData = this.TLEData.satData[i];
+            // for (let i = 0; i < this.satellites.TLEData.satData.length; i++) {
+            //     const satData = this.satellites.TLEData.satData[i];
             //     if (satData.visible) {
             //         const satPosition = satData.eus;
             //         // scaling based on the view camera
@@ -1632,13 +815,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
             let scale= Sit.satScale;
             scale = view.adjustPointScale(scale*2);
-            this.satelliteMaterial.uniforms.satScale.value = scale;
+            this.satellites.satelliteMaterial.uniforms.satScale.value = scale;
 
-            const positions = this.satelliteGeometry.attributes.position.array;
-            const magnitudes = this.satelliteGeometry.attributes.magnitude.array;
+            const positions = this.satellites.satelliteGeometry.attributes.position.array;
+            const magnitudes = this.satellites.satelliteGeometry.attributes.magnitude.array;
 
-            for (let i = camera.satStartTime; i < this.TLEData.satData.length; i++) {
-                const satData = this.TLEData.satData[i];
+            for (let i = camera.satStartTime; i < this.satellites.TLEData.satData.length; i++) {
+                const satData = this.satellites.TLEData.satData[i];
 
                 // bit of a hack for visiblity, just set the scale to 0
                 // and skip the update
@@ -1659,7 +842,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
        //             continue;
                 }
 
-                assert(satData.eus !== undefined, `satData.eus is undefined, i= ${i}, this.TLEData.satData.length = ${this.TLEData.satData.length} `)
+                assert(satData.eus !== undefined, `satData.eus is undefined, i= ${i}, this.satellites.TLEData.satData.length = ${this.satellites.TLEData.satData.length} `)
 
                 const satPosition = satData.eus;
 
@@ -1674,16 +857,16 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                     const midPoint = hitPoint.clone().add(hitPoint2).multiplyScalar(0.5)
                     const originToMid = midPoint.clone().sub(this.globe.center)
                     const occludedMeters = this.globe.radius - originToMid.length()
-                    if (occludedMeters < this.penumbraDepth) {
+                    if (occludedMeters < this.satellites.penumbraDepth) {
 
                         // fade will give us a value from 1 (no fade) to 0 (occluded)
-                        fade = 1 - occludedMeters/this.penumbraDepth
+                        fade = 1 - occludedMeters/this.satellites.penumbraDepth
 
                         scale *= darknessMultiplier + (1 - darknessMultiplier) * fade
                     } else {
                         fade = 0;
                         scale *= darknessMultiplier;
-                        this.removeSatSunArrows(satData);
+                        this.satellites.removeSatSunArrows(satData);
                     }
                 }
 
@@ -1732,7 +915,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                             }
                         }
 
-                        const spread = this.flareAngle
+                        const spread = this.satellites.flareAngle
                         const ramp = spread * 0.25; //
                         const middle  = spread -  ramp;  // angle at which the flare is brightest, constant
                         const glintSize = Sit.flareScale; //
@@ -1763,7 +946,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
                            //     satPosition.clone().add(reflected.clone().multiplyScalar(10000000)), "#00ff00", true, this.sunArrowGroup, 0.025, LAYER.MASK_HELPERS)
 
                             // and maybe one for flare tracks
-                            if (this.showFlareTracks) {
+                            if (this.satellites.showFlareTracks) {
                                 // we use the reflected vector, as that's the one that will be seen by the observer
                                 // so we can see the flare track
                                 let A = satData.eusA.clone()
@@ -1773,7 +956,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
                             satData.hasSunArrow = true;
                         } else {
-                            this.removeSatSunArrows(satData);
+                            this.satellites.removeSatSunArrows(satData);
 
                             // do the scale again to incorporate al
                             // satData.sprite.scale.set(scale, scale, 1);
@@ -1783,7 +966,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
 
-                        this.removeSatSunArrows(satData);
+                        this.satellites.removeSatSunArrows(satData);
                     }
                 }
 
@@ -1800,7 +983,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
                 magnitudes[i] = scale
             }
-            this.satelliteGeometry.attributes.magnitude.needsUpdate = true;
+            this.satellites.satelliteGeometry.attributes.magnitude.needsUpdate = true;
         }
     }
 
@@ -1820,23 +1003,23 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         const viewScale = 0.025 * view.divParent.clientHeight / view.heightPx;
 
-        if (this.TLEData === undefined) {
+        if (this.satellites.TLEData === undefined) {
             console.warn("TLEData is undefined in updateSatelliteText (Not loaded yet?)")
             return;
         }
 
-        assert(this.TLEData !== undefined, "TLEData is undefined in updateSatelliteText")
+        assert(this.satellites.TLEData !== undefined, "TLEData is undefined in updateSatelliteText")
 
         const lookPos = NodeMan.get("lookCamera").camera.position;
-        const numSats = this.TLEData.satData.length;
+        const numSats = this.satellites.TLEData.satData.length;
         for (let i = 0; i < numSats; i++) {
-            const satData = this.TLEData.satData[i];
+            const satData = this.satellites.TLEData.satData[i];
 
             // if the satellite is not visible, skip it
             // user filtered sats are either in the list, or ar e the brightest or the ISS (if those are enabled)
             // if the satellite is not user filtered, skip it
             if (satData.visible
-                && ( satData.userFiltered || satData.eus.distanceTo(lookPos) < this.arrowRange*1000)
+                && ( satData.userFiltered || satData.eus.distanceTo(lookPos) < this.satellites.arrowRange*1000)
                 && ( satData.lastScale > 0 || this.showAllLabels ) // if the scale is 0, we don't show the label, unless showAllLabels is true
             ) {
             //if (satData.visible) {
@@ -1905,401 +1088,22 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
      */
 
 
+    /**
+     * Public wrapper for loading TLE data - called from DragDropHandler and other places
+     * Delegates to this.satellites
+     */
     replaceTLE(tle) {
-        this.removeSatellites()
-        this.TLEData = new CTLEData(tle)
-        this.addSatellites(this.satelliteGroup, this.satelliteTextGroup)
-        this.filterSatellites()
-        EventManager.dispatchEvent("tleLoaded", {})
-        setRenderOne(2); // force a render update after loading the TLE data, allowing two frames for the update to take effect
+        this.satellites.replaceTLE(tle);
+        // Add satellites to the scene
+        this.satellites.addSatellites(this.satelliteGroup, this.satelliteTextGroup, 1);
+        this.satellites.filterSatellites();
     }
 
-    removeSatellites() {
-        if (this.TLEData !== undefined) {
-
-            if (this.satelliteGeometry) {
-                this.satelliteGeometry.dispose();
-                this.satelliteGeometry = null;
-            }
-            if (this.satelliteMaterial) {
-                if (this.satelliteMaterial.uniforms.starTexture.value) {
-                    this.satelliteMaterial.uniforms.starTexture.value.dispose();
-                }
-                this.satelliteMaterial.dispose();
-                this.satelliteMaterial = null;
-            }
-
-            if (this.satellites) {
-                this.satelliteGroup.remove(this.satellites);
-                this.satellites = null;
-            }
-
-            // we no longer use individual sprites for the satellites
-            // but they are still used for text.
-            for (const [index, satData] of Object.entries(this.TLEData.satData)) {
-                // satData.sprite.material.dispose();
-                // this.satelliteGroup.remove(sat.sprite)
-                //sat.sprite = null;
-
-                if (satData.spriteText) {
-                    satData.spriteText.dispose();
-                    this.satelliteTextGroup.remove(satData.spriteText)
-                    satData.spriteText = null;
-                }
-
-                this.removeSatSunArrows(satData);
-                this.removeSatelliteArrows(satData);
-
-                // remove the debug arrows
-
-            }
-            this.satData = undefined;
-        }
-    }
-
-
-
-    addSatellites(scene, textGroup) {
-        assert(Sit.lat !== undefined, "addSatellites needs Sit.lat");
-        assert(Sit.lon !== undefined, "addSatellites needs Sit.lon");
-
-        // Define geometry for satellites
-        this.satelliteGeometry = new BufferGeometry();
-
-
-        const len = this.TLEData.satData.length;
-
-        // Allocate arrays for positions and colors
-        let positions = new Float32Array(len * 3); // x, y, z for each satellite
-        let colors = new Float32Array(len * 3); // r, g, b for each satellite
-        let magnitudes = new Float32Array(len); // magnitude for each satellite
-
-        // Custom shaders
-        const customVertexShader = `
-    varying vec3 vColor;
-    uniform float minSize;
-    uniform float maxSize;
-    uniform float cameraFOV;
-    uniform float satScale;
-    attribute float magnitude;
-    attribute vec3 color;
-    varying float vDepth;
-
-    void main() {
-        vColor = color;
-        
-        // if magnitude is 0 then do not draw it
-        if (magnitude == 0.0) {
-            gl_Position = vec4(0,0,0,0);
-            gl_PointSize = 0.0;
-            return;
-        }
-
-        float size = mix(minSize, maxSize, magnitude);
-        size *= satScale;
-
-        vec4 mvPosition = modelViewMatrix * vec4(position, 1.0);
-        gl_Position = projectionMatrix * mvPosition;
-        gl_PointSize = size;
-        vDepth = gl_Position.w;
-    }`;
-
-        const customFragmentShader = `
-    varying vec3 vColor;
-    uniform float nearPlane;
-    uniform float farPlane;
-    varying float vDepth;
-    uniform sampler2D starTexture;
-
-    void main() {
-        vec2 uv = gl_PointCoord.xy * 2.0 - 1.0;
-        float alpha = 1.0 - dot(uv, uv);
-        if (alpha < 0.0) discard;
-
-        vec4 textureColor = texture2D(starTexture, gl_PointCoord);
-        gl_FragColor = vec4(vColor, 1.0) * textureColor * alpha;
-
-        float z = (log2(max(nearPlane, 1.0 + vDepth)) / log2(1.0 + farPlane)) * 2.0 - 1.0;
-        gl_FragDepthEXT = z * 0.5 + 0.5;
-    }`;
-
-        // Custom material for satellites
-        this.satelliteMaterial = new ShaderMaterial({
-            vertexShader: customVertexShader,
-            fragmentShader: customFragmentShader,
-            uniforms: {
-                minSize: { value: 0.0 },  // was 1.0, but we want to scale to zero if needed
-                maxSize: { value: 20.0 },
-                starTexture: { value: new TextureLoader().load(SITREC_APP+'data/images/nightsky/MickStar.png') },
-                cameraFOV: { value: 30 },
-                satScale: { value: Sit.satScale/window.devicePixelRatio },
-                ...sharedUniforms,
-            },
-            transparent: true,
-            depthTest: true,
-        });
-
-        // uodate colors and add the satellite texst sprites
-        for (let i = 0; i < this.TLEData.satData.length; i++) {
-            const sat = this.TLEData.satData[i];
-
-            // Calculate satellite position
-            const position = V3();
-
-            positions[i * 3] = position.x;
-            positions[i * 3 + 1] = position.y;
-            positions[i * 3 + 2] = position.z;
-
-            magnitudes[i] = 0.1;
-
-
-
-            sat.eus = V3();
-
-
-            // colro of the sprite is based on the name length
-            // TODO: this is for Starlink, but we can generalize it
-            var name = sat.name.replace("0 STARLINK", "SL").replace("STARLINK", "SL");
-            // strip whitespae off the end
-            name = name.replace(/\s+$/, '');
-            // const spriteText = new SpriteText(name, 0.01, "white", {depthTest:true} );
-            // spriteText.layers.mask = LAYER.MASK_LOOK  ;
-            //
-            // sat.spriteText = spriteText;
-            // textGroup.add(spriteText);
-
-            // Assign a color to each satellite (example: random color)
-
-
-            // SL-0000 names have are yellow, SL-00000 are orange
-            // use the length of the name 7 or 8 to determine the color
-            let color = new Color(0xF0F0FF); // default blueish white
-            let length = name.length;
-            if (sat.name.includes("STARLINK")) {
-                color = new Color(0xFFFFC0);
-                if (length > 7) {
-                    color = new Color(0xFFA080);
-                }
-            }
-
-            colors[i * 3] = color.r;
-            colors[i * 3 + 1] = color.g;
-            colors[i * 3 + 2] = color.b;
-
-        }
-
-        // Attach data to geometry
-        this.satelliteGeometry.setAttribute('position', new BufferAttribute(positions, 3));
-        this.satelliteGeometry.setAttribute('color', new BufferAttribute(colors, 3));
-        this.satelliteGeometry.setAttribute('magnitude', new BufferAttribute(magnitudes, 1));
-
-        // Create point cloud for satellites
-        this.satellites = new Points(this.satelliteGeometry, this.satelliteMaterial);
-
-        // Disable frustum culling for satellites
-        this.satellites.frustumCulled = false;
-
-        // Add to scene
-        scene.add(this.satellites);
-    }
-
-
-    // To get the EUS we need to get the LLA position
-    // as the satellite.js library assumes an elliptical Earth
-    // see discussion: https://www.metabunk.org/threads/the-secret-of-skinwalker-ranch-s03e09-uap-disappearing-into-thin-air-satellite-going-behind-cloud-entering-earths-shadow.13469/post-316283
+    /**
+     * Wrapper to get satellite EUS position - delegates to this.satellites
+     */
     calcSatEUS(sat, date) {
-        const positionAndVelocity = satellite.propagate(sat, date);
-        if (positionAndVelocity && positionAndVelocity.position) {
-            const gmst = satellite.gstime(date);
-            // get geodetic (LLA) coordinates directly from satellite.js
-            const GD = satellite.eciToGeodetic(positionAndVelocity.position, gmst);
-            const altitude = GD.height*1000; // convert from km to meters
-
-//            const pv = positionAndVelocity.position;
-//            const GD = eci_to_geodetic(pv.x, pv.y, pv.z, gmst);
-//            const altitude = GD[2]*1000; // convert from km to meters
-
-            // if the altitude is less than 100km, then it's in the atmosphere so we don't show it
-            if (altitude < 100000) {
-                return null;
-            }
-
-            // if it's significantly (10%) greater than geostationary orbit (35,786 km), then it's probably an error
-            // so we don't show it
-            if (altitude > 40000000) {
-                return null;
-            }
-
-            const EUS = LLAToEUSRadians(GD.latitude, GD.longitude, altitude);
-//            const EUS = LLAToEUSRadians(GD[1], GD[0], altitude);
-            return EUS;
-
-
-        } else {
-            return null;
-        }
-    }
-
-    updateAllSatellites(date) {
-
-        const timeMS = date.getTime();
-
-        this.timeStep = 2000
-        const numSats = this.TLEData.satData.length;
-
-        // if there's only a few satellites, use a smaller time step
-        if (numSats < 100) {
-            this.timeStep = 100;
-        } else {
-            this.timeStep = numSats; // scale it by the number of satellites
-        }
-
-        assert (this.satelliteGeometry !== undefined, "updateAllSatellites needs a geometry");
-
-        // Get the position attribute from the geometry
-        const positions = this.satelliteGeometry.attributes.position.array;
-        const magnitudes = this.satelliteGeometry.attributes.magnitude.array;
-
-        const lookPos = NodeMan.get("lookCamera").camera.position;
-
-        let validCount = 0;
-        let visibleCount = 0;
-        for (let i = 0; i < numSats; i++) {
-            const satData = this.TLEData.satData[i];
-            const satrec = bestSat(satData.satrecs, date);
-
-            // Satellites move in nearly straight lines
-            // so interpolate every few seconds
-            if (satData.timeA === undefined || timeMS < satData.timeA || timeMS > satData.timeB) {
-
-                satData.timeA = timeMS;
-                if (satData.timeB === undefined) {
-                    // for the first one we spread it out
-                    // so we end up updating about the same number of satellites per frame
-                    satData.timeB = timeMS + Math.floor(1 + this.timeStep * (i/numSats));
-                } else {
-                    satData.timeB = timeMS + this.timeStep;
-                }
-                const dateB = new Date(satData.timeB)
-                satData.eusA = this.calcSatEUS(satrec, date)
-                satData.eusB = this.calcSatEUS(satrec, dateB)
-            }
-
-
-
-            // if the position can't be calculated then A and/or B will be null
-            // so just skip over this
-            if (satData.eusA !== null && satData.eusB !== null) {
-
-                // calculate the velocity from A to B in m/s
-                const velocity = satData.eusB.clone().sub(satData.eusA).multiplyScalar(1000 / (satData.timeB - satData.timeA)).length();
-
-                // Starlink is typically 7.5 km/s, so if it's much higher than that, then it's probably an error
-                // I use 11,000 as an upper limit to include highly elliptical orbits, see:
-                // https://space.stackexchange.com/questions/48830/what-is-the-fastest-satellite-in-earth-orbit
-                // Geostationary satellites are around 3 km/s, so we can use that as a lower limit
-                //
-                if (velocity < 2500 || velocity > 11000) {
-                    // if the velocity is too high, then we assume it's an error and skip it
-                    satData.invalidPosition = true;
-                } else {
-
-                    // Otherwise, we have a valid A and B, so do a linear interpolation
-                    //satData.eus = satData.eusA.clone().add(satData.eusB.clone().sub(satData.eusA).multiplyScalar(
-                    //    (timeMS - satData.timeA) / (satData.timeB - satData.timeA)
-                    //));
-
-                    // for optimization do this directly
-                    // Calculate the normalized time value
-                    var t = (timeMS - satData.timeA) / (satData.timeB - satData.timeA);
-
-                    // Perform the linear interpolation (lerp)
-                    satData.eus.lerpVectors(satData.eusA, satData.eusB, t);
-
-                    // Update the position in the geometry's attribute
-                    positions[i * 3] = satData.eus.x;
-                    positions[i * 3 + 1] = satData.eus.y;
-                    positions[i * 3 + 2] = satData.eus.z;
-                    satData.invalidPosition = false;
-
-                    satData.currentPosition = satData.eus.clone();
-
-                    if (satData.spriteText) {
-                        satData.spriteText.position.set(satData.eus.x, satData.eus.y, satData.eus.z);
-                    }
-
-
-                    let arrowsDrawn = false;
-                    if (satData.visible && satData.eusA.distanceTo(lookPos) < this.arrowRange*1000) {
-                        // draw an arrow from the satellite in the direction of its velocity (yellow)
-                        if (this.showSatelliteTracks) {
-                            let A = satData.eusA.clone()
-                            let dir = satData.eusB.clone().sub(satData.eusA).normalize()
-                            DebugArrow(satData.name + "_t", dir, satData.eus, 500000, "#FFFF00", true, this.satelliteTrackGroup, 20, LAYER.MASK_LOOKRENDER)
-                            arrowsDrawn = true;
-                            satData.hasArrowsNeedingCleanup = true;
-                        }
-
-                        // Arrow from satellite to ground (red)
-                        if (this.showSatelliteGround) {
-                            let A = satData.eusA.clone()
-                            let B = getPointBelow(A)
-                            DebugArrowAB(satData.name + "_g", A, B, "#00FF00", true, this.satelliteGroundGroup, 20, LAYER.MASK_LOOKRENDER)
-                            arrowsDrawn = true;
-                            satData.hasArrowsNeedingCleanup = true;
-                        }
-                    }
-
-                    if (!arrowsDrawn) {
-                        this.removeSatelliteArrows(satData);
-                    }
-
-
-                }
-            } else {
-                // if the new position is invalid, then we make it invisible
-                // so we will need to flag it as invalid
-                satData.invalidPosition = true;
-            }
-
-            if (satData.invalidPosition || !satData.visible) {
-                this.removeSatSunArrows(satData);
-                // to make it invisible, we set the magnitude to 0 and position to a million km away
-                magnitudes[i] = 0;
-                positions[i * 3] = 1000000000;
-            } else {
-                validCount++
-            }
-
-
-            if (satData.visible) {
-                visibleCount++;
-            }
-
-        }
-
-        par.validPct = validCount / visibleCount * 100;
-
-        // Notify THREE.js that the positions have changed
-        this.satelliteGeometry.attributes.position.needsUpdate = true;
-    }
-
-    removeSatelliteArrows(satData) {
-        if (satData.hasArrowsNeedingCleanup) {
-            removeDebugArrow(satData.name + "_t");
-            removeDebugArrow(satData.name + "_g");
-            satData.hasArrowsNeedingCleanup = false;
-        }
-    }
-
-    removeSatSunArrows(satData)   {
-        if (satData.hasSunArrow) {
-            removeDebugArrow(satData.name)
-            removeDebugArrow(satData.name + "sun")
-            removeDebugArrow(satData.name + "reflected")
-            removeDebugArrow(satData.name + "flare")
-            satData.hasSunArrow = false;
-        }
+        return this.satellites.calcSatEUS(sat, date);
     }
 
 
@@ -2341,8 +1145,8 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             const eusDir = ECEF2EUS(ecef, radians(Sit.lat), radians(Sit.lon), 0, true).normalize();
             
             // Store sun direction vectors for flare calculations
-            this.toSun.copy(eusDir.clone().normalize())
-            this.fromSun.copy(this.toSun.clone().negate())
+            this.satellites.toSun.copy(eusDir.clone().normalize())
+            this.satellites.fromSun.copy(this.satellites.toSun.clone().negate())
         }
     }
 
