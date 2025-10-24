@@ -5,10 +5,6 @@ import {
     BufferGeometry,
     Color,
     Group,
-    Line,
-    LineBasicMaterial,
-    LineSegments,
-    MathUtils,
     Matrix4,
     Points,
     Ray,
@@ -79,6 +75,7 @@ import * as Astronomy from "astronomy-engine";
 
 // Star field rendering system
 import {CStarField} from "./CStarField";
+import {CCelestialElements} from "./CCelestialElements";
 
 
 // other source of stars, if we need more (for zoomed-in pics)
@@ -151,6 +148,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.starField = new CStarField({
             starLimit: Sit.starLimit ?? 6.5,
             starScale: Sit.starScale ?? 1.0,
+            sphereRadius: 100
+        });
+
+        // Create celestial elements instance (grid, constellations)
+        this.celestialElements = new CCelestialElements({
             sphereRadius: 100
         });
 
@@ -452,7 +454,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 //        console.log("Adding celestial grid")
         this.equatorialSphereGroup = new Group();
         this.celestialSphere.add(this.equatorialSphereGroup);
-        this.addCelestialSphereLines(this.equatorialSphereGroup, 10);
+        this.celestialElements.addCelestialSphereLines(this.equatorialSphereGroup, 10);
         this.showEquatorialGrid = (v.showEquatorialGrid !== undefined) ? v.showEquatorialGrid : true;
 
 
@@ -471,7 +473,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             this.updateVis()
         }).name("Constellation Lines")
         this.addSimpleSerial("showConstellations")
-        this.addConstellationLines(this.constellationsGroup)
+        this.celestialElements.addConstellationLines(this.constellationsGroup)
         
         this.showStars = (v.showStars !== undefined) ? v.showStars : true;
         this.celestialGUI.add(this,"showStars" ).listen().onChange(()=>{
@@ -480,7 +482,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         }).name("Render Stars")
         this.addSimpleSerial("showStars")
 
-        this.addConstellationNames(this.constellationsGroup);
+        this.celestialElements.addConstellationNames(this.constellationsGroup);
 
         // For the stars to show up in the lookView
         // we need to enable the layer for everything in the celestial sphere.
@@ -1885,107 +1887,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         }
     }
 
-    addCelestialSphereLines(scene, gap = 15, color = 0x808080) {
-
-        const sphereRadius = 100; // Radius of the celestial sphere
-        const material = new LineBasicMaterial({color: color}); // Line color
-        const materialWhite = new LineBasicMaterial({color: "#FF00FF"}); // WHite Line color
-        const segments = 100; // Number of segments per line
-
-// Function to create a single line
-        function createLine(start, end) {
-            const geometry = new BufferGeometry().setFromPoints([start, end]);
-            return new Line(geometry, material);
-        }
-
-// Adding lines for RA (Right Ascension) these go from celestial N to S poles, like lines of longitude
-        for (let ra = 0; ra < 360; ra += gap) {
-            const raRad = MathUtils.degToRad(ra);
-            const points = [];
-            for (let dec = -90; dec <= 90; dec += 1.8) {
-                const decRad = MathUtils.degToRad(dec);
-                const equatorial = raDec2Celestial(raRad, decRad, sphereRadius)
-                points.push(new Vector3(equatorial.x, equatorial.y, equatorial.z));
-            }
-            const geometry = new BufferGeometry().setFromPoints(points);
-            const line = new Line(geometry, ra === 0 ? materialWhite : material);
-            scene.add(line);
-        }
-
-// Adding lines for Dec (Declination), - these go all the way around, like lines of latitude
-        for (let dec = -90; dec <= 90; dec += gap) {
-            const decRad = MathUtils.degToRad(dec);
-            const points = [];
-            for (let ra = 0; ra <= 360; ra += 1.5) {
-                const raRad = MathUtils.degToRad(ra);
-                const equatorial = raDec2Celestial(raRad, decRad, sphereRadius)
-                points.push(new Vector3(equatorial.x, equatorial.y, equatorial.z));
-            }
-            const geometry = new BufferGeometry().setFromPoints(points);
-            const line = new Line(geometry, (dec === 90 - gap) ? materialWhite : material);
-            scene.add(line);
-        }
-    }
 
 
 
 
 
-    addConstellationNames(scene) {
-        const constellations = FileManager.get("constellations");
-        const features = constellations.features;
-//        console.log(features)
-
-    }
-
-    addConstellationLines(scene) {
-        // we will be adding multiple line segments to the scene
-        // all the same color, so use on object
-        const material = new LineBasicMaterial({color: 0x808080}); // Line color
-
-        const constellationsLines = FileManager.get("constellationsLines");
-        // this is a structured GeoJSON object, get the array of features
-        const features = constellationsLines.features;
-        for (const feature of features) {
-            // feature.geometry.coordinates is an array of arrays of Lon/Lat pairs
-            // we want to convert these to ECEF coordinates
-            // and then create a line segment between each pair
-
-         //   if (feature.id !== "UMi") continue;
-
-            // let's create an array of ECEF coordinates, two each for each line
-            const segments = [];
-            for (let c of feature.geometry.coordinates) {
-
-                // c is now an array of multiple arrays of two Lat/Lon pairs
-                // need to create segments between each of them
-                const p0 = c[0];
-                const ra0 = MathUtils.degToRad(Number(p0[0]));
-                const dec0 = MathUtils.degToRad(Number(p0[1]));
-                let equatorial0 = raDec2Celestial(ra0, dec0, 100);
-                for (let i = 1; i < c.length; i++) {
-                    const p1 = c[i];
-                    // convert to ECEF
-                    const ra1 = MathUtils.degToRad(Number(p1[0]));
-                    const dec1 = MathUtils.degToRad(Number(p1[1]));
-                    const equatorial1 = raDec2Celestial(ra1, dec1, 100);
-                    segments.push(new Vector3(equatorial0.x, equatorial0.y, equatorial0.z));
-                    segments.push(new Vector3(equatorial1.x, equatorial1.y, equatorial1.z));
-                    equatorial0 = equatorial1;
-                }
-            }
-
-            // create the buffer geometry for the line segments
-            const geometry = new BufferGeometry().setFromPoints(segments);
 
 
-            // and create the multi-segment line
-            const line = new LineSegments(geometry, material);
-            scene.add(line);
-        }
-
-
-    }
 
     removePlanets(scene, dayScene = null) {
         // Remove existing planet sprites from scenes to prevent duplicates
