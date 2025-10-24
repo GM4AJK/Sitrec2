@@ -122,9 +122,15 @@ describe('SettingsManager', () => {
         });
 
         it('should handle corrupted cookie data', () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
             mockCookies['sitrecSettings'] = 'invalid-json';
             const loaded = loadSettingsFromCookie();
             expect(loaded).toBeNull();
+            expect(consoleSpy).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to parse settings cookie'),
+                expect.any(Error)
+            );
+            consoleSpy.mockRestore();
         });
 
         it('should sanitize settings when loading from cookie', () => {
@@ -138,6 +144,7 @@ describe('SettingsManager', () => {
 
     describe('Server operations', () => {
         it('should load settings from server successfully', async () => {
+            const consoleSpy = jest.spyOn(console, 'log').mockImplementation();
             const mockSettings = { maxDetails: 18 };
             global.fetch.mockResolvedValueOnce({
                 ok: true,
@@ -151,9 +158,11 @@ describe('SettingsManager', () => {
                 './sitrecServer/settings.php',
                 expect.objectContaining({ method: 'GET' })
             );
+            consoleSpy.mockRestore();
         });
 
         it('should return null when server returns error', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
             global.fetch.mockResolvedValueOnce({
                 ok: true,
                 json: async () => ({ error: 'Not found' })
@@ -161,9 +170,15 @@ describe('SettingsManager', () => {
 
             const loaded = await loadSettingsFromServer();
             expect(loaded).toBeNull();
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Server settings error:',
+                'Not found'
+            );
+            consoleSpy.mockRestore();
         });
 
         it('should return null when server request fails', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
             global.fetch.mockResolvedValueOnce({
                 ok: false,
                 status: 500
@@ -171,13 +186,24 @@ describe('SettingsManager', () => {
 
             const loaded = await loadSettingsFromServer();
             expect(loaded).toBeNull();
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Server settings unavailable, status:',
+                500
+            );
+            consoleSpy.mockRestore();
         });
 
         it('should handle network errors gracefully', async () => {
+            const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
             global.fetch.mockRejectedValueOnce(new Error('Network error'));
 
             const loaded = await loadSettingsFromServer();
             expect(loaded).toBeNull();
+            expect(consoleSpy).toHaveBeenCalledWith(
+                'Failed to load settings from server:',
+                expect.any(Error)
+            );
+            consoleSpy.mockRestore();
         });
 
         it('should save settings to server successfully', async () => {
@@ -533,6 +559,7 @@ describe('SettingsManager', () => {
             });
 
             it('should fall back to cookies when server fails but flag enabled', async () => {
+                const consoleSpy = jest.spyOn(console, 'warn').mockImplementation();
                 Globals.userID = 99999999;
                 
                 // Set cookie
@@ -548,6 +575,7 @@ describe('SettingsManager', () => {
                 
                 // Should fall back to cookie
                 expect(Globals.settings.maxDetails).toBe(16);
+                consoleSpy.mockRestore();
             });
         });
     });
