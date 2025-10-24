@@ -7,13 +7,10 @@ import {
     Group,
     Matrix4,
     Points,
-    Ray,
     Raycaster,
     Scene,
     ShaderMaterial,
     Sphere,
-    Sprite,
-    SpriteMaterial,
     TextureLoader,
     Vector3
 } from "three";
@@ -22,21 +19,12 @@ import {FileManager, GlobalDateTimeNode, Globals, guiMenus, guiShowHide, NodeMan
 import {
     DebugArrow,
     DebugArrowAB,
-    DebugWireframeSphere,
     getPointBelow,
     propagateLayerMaskObject,
     removeDebugArrow,
     setLayerMaskRecursive
 } from "../threeExt";
-import {
-    ECEF2EUS,
-    ECEFToLLAVD_Sphere,
-    EUSToECEF,
-    getLST,
-    LLAToEUSRadians,
-    raDecToAzElRADIANS,
-    wgs84
-} from "../LLA-ECEF-ENU";
+import {ECEF2EUS, ECEFToLLAVD_Sphere, EUSToECEF, LLAToEUSRadians, wgs84} from "../LLA-ECEF-ENU";
 // npm install three-text2d --save-dev
 // https://github.com/gamestdio/three-text2d
 //import { MeshText2D, textAlign } from 'three-text2d'
@@ -47,14 +35,7 @@ import SpriteText from '../js/three-spritetext';
 import {CNodeDisplayGlobeCircle} from "./CNodeDisplayGlobeCircle";
 import {assert} from "../assert.js";
 import {intersectSphere2, V3} from "../threeUtils";
-import {
-    calculateGST,
-    celestialToECEF,
-    getJulianDate,
-    getSiderealTime,
-    raDec2Celestial,
-    raDecToAltAz
-} from "../CelestialMath";
+import {calculateGST, celestialToECEF, getSiderealTime} from "../CelestialMath";
 import {DragDropHandler} from "../DragDropHandler";
 import {ViewMan} from "../CViewManager";
 import {bestSat, CTLEData} from "../TLEUtils";
@@ -76,6 +57,7 @@ import * as Astronomy from "astronomy-engine";
 // Star field rendering system
 import {CStarField} from "./CStarField";
 import {CCelestialElements} from "./CCelestialElements";
+import {CPlanets} from "./CPlanets";
 
 
 // other source of stars, if we need more (for zoomed-in pics)
@@ -120,8 +102,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         //     this.checkInputs(["cloudData", "material"])
         this.addInput("startTime",GlobalDateTimeNode)
 
-        this.planets =      ["Sun",     "Moon",    "Mercury", "Venus",   "Mars",     "Jupiter", "Saturn", "Uranus",  "Neptune", "Pluto"]
-        this.planetColors = ["#FFFF40", "#FFFFFF", "#FFFFFF", "#80ff80", "#ff8080", "#FFFF80", "#FF80FF", "#FFFFFF", "#FFFFFF", "#FFFFFF"]
+
 
         if (GlobalNightSkyScene === undefined) {
             setupNightSkyScene(new Scene())
@@ -153,6 +134,11 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
         // Create celestial elements instance (grid, constellations)
         this.celestialElements = new CCelestialElements({
+            sphereRadius: 100
+        });
+
+        // Create planets instance
+        this.planets = new CPlanets({
             sphereRadius: 100
         });
 
@@ -429,7 +415,14 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         this.starField.addToScene(this.celestialSphere)
 
 //        console.log("Loading planets")
-        this.addPlanets(this.celestialSphere, this.celestialDaySphere)
+        this.planets.addPlanets(this.celestialSphere, this.celestialDaySphere, {
+            date: this.in.startTime.dateNow,
+            cameraPos: this.camera.position,
+            ecefToLla: (pos) => {
+                const ecef = EUSToECEF(pos);
+                return ECEFToLLAVD_Sphere(ecef);
+            }
+        })
 
 
 
@@ -582,7 +575,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             start: "lookCamera",
             direction: V3(0,0,1),
             length: -200,
-            color: this.planetColors[this.planets.indexOf(name)],
+            color: this.planets.planetColors[this.planets.planets.indexOf(name)],
             groupNode: groupName,
             label: name,
             labelPosition: "1",
@@ -601,7 +594,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
     // Update all celestial arrows to use a new start object
     updateCelestialArrowsTo(startObject) {
 
-        this.planets.forEach(name => {
+        this.planets.planets.forEach(name => {
             const obName = name + "ArrowOb";
             if (this[obName]) {
                 // Remove the old input connection and add the new one
@@ -617,7 +610,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
     // Update all celestial arrows to use a new start object
     updateCelestialArrowsMask(mask) {
 
-        this.planets.forEach(name => {
+        this.planets.planets.forEach(name => {
             const groupName = name+"ArrowGroup";
             if (this[groupName]) {
                 this[groupName].group.layers.mask = mask;
@@ -1550,9 +1543,12 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
         const cameraLLA = ECEFToLLAVD_Sphere(cameraEcef);
         let observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
         // update the planets position for the current time
-        for (const [name, planet] of Object.entries(this.planetSprites)) {
+        for (const [name, planet] of Object.entries(this.planets.planetSprites)) {
             // Update both the regular sprite and day sky sprite in one call
-            this.updatePlanetSprite(name, planet.sprite, nowDate, observer, 100, planet.daySkySprite)
+            this.planets.updatePlanetSprite(name, planet.sprite, nowDate, observer, planet.daySkySprite)
+            // Update celestial arrows and Sun-specific calculations
+            const planetData = this.planets.planetSprites[name];
+            this.updateArrow(name, planetData.ra, planetData.dec, nowDate, observer, 100)
         }
 
         if (this.showSatellites && this.TLEData) {
@@ -1895,104 +1891,7 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
 
 
-    removePlanets(scene, dayScene = null) {
-        // Remove existing planet sprites from scenes to prevent duplicates
-        if (this.planetSprites) {
-            for (const [planet, planetData] of Object.entries(this.planetSprites)) {
-                if (planetData.sprite) {
-                    if (scene) scene.remove(planetData.sprite);
-                    if (planetData.sprite.material) {
-                        if (planetData.sprite.material.map) {
-                            planetData.sprite.material.map.dispose();
-                        }
-                        planetData.sprite.material.dispose();
-                    }
-                }
-                if (planetData.daySkySprite && dayScene) {
-                    dayScene.remove(planetData.daySkySprite);
-                    if (planetData.daySkySprite.material) {
-                        if (planetData.daySkySprite.material.map) {
-                            planetData.daySkySprite.material.map.dispose();
-                        }
-                        planetData.daySkySprite.material.dispose();
-                    }
-                }
-            }
-        }
-        this.planetSprites = {};
-    }
 
-    addPlanets(scene, dayScene = null) {
-
-        assert(Sit.lat !== undefined, "addPlanets needs Sit.lat")
-        assert(Sit.lon !== undefined, "addPlanets needs Sit.lon")
-
-        // Remove existing planet sprites first to prevent duplicates
-        this.removePlanets(scene, dayScene);
-
-        // Safety check: if planetSprites already has entries, something went wrong
-        if (this.planetSprites && Object.keys(this.planetSprites).length > 0) {
-            console.warn("CNodeDisplayNightSky: planetSprites not empty after removePlanets, forcing cleanup");
-            this.planetSprites = {};
-        }
-
-        // Setup the sprite material
-
-        const starMap = new TextureLoader().load(SITREC_APP+'data/images/nightsky/MickStar.png'); // Load a star texture
-
-        const sunMap = new TextureLoader().load(SITREC_APP+'data/images/nightsky/MickSun.png'); // Load a star texture
-
-        // alternative way to load a texture, using the file manager, and the "files" list in the Sit
-        //const sunMapImg = FileManager.get("sun");
-        //const sunMap = new Texture(sunMapImg)
-        //sunMap.needsUpdate = true; // Load a star texture
-
-        const moonMap = new TextureLoader().load(SITREC_APP+'data/images/nightsky/MickMoon.png'); // Load a star texture
-//        const spriteMaterial = new SpriteMaterial({map: spriteMap, color: 0x00ff00});
-
-        const sphereRadius = 100; // 100m radius
-
-        let date = this.in.startTime.dateNow;
-
-        // Use lookCamera position for observer instead of fixed Sit coordinates
-        const cameraPos = this.camera.position;
-        const cameraEcef = EUSToECEF(cameraPos);
-        const cameraLLA = ECEFToLLAVD_Sphere(cameraEcef);
-        let observer = new Astronomy.Observer(cameraLLA.x, cameraLLA.y, cameraLLA.z);
-
-        this.planetSprites = {}
-
-        var n = 0;
-        for (const planet of this.planets) {
-
-            var spriteMap = starMap;
-            if (planet === "Sun") spriteMap = sunMap
-            if (planet === "Moon") spriteMap = moonMap
-
-            const color = this.planetColors[n++];
-            const spriteMaterial = new SpriteMaterial({map: spriteMap, color: color});
-            const sprite = new Sprite(spriteMaterial);
-
-            // Create day sky sprite if needed
-            // this is rendered AFTER the atmosphere polygon (with dayScene),
-            // and is the exact same position, etc as the night sprite
-
-            let daySkySprite = null;
-            if ((planet === "Sun" || planet === "Moon") && dayScene) {
-                const sunSpriteMaterial = new SpriteMaterial({map: spriteMap, color: color});
-                daySkySprite = new Sprite(sunSpriteMaterial);
-                dayScene.add(daySkySprite);
-            }
-
-            // Update both sprites at once
-            this.updatePlanetSprite(planet, sprite, date, observer, sphereRadius, daySkySprite);
-            this.planetSprites[planet].color = color;
-
-            // Add sprite to scene
-            scene.add(sprite);
-
-        }
-    }
 
     /*
 // Actual data used.
@@ -2407,203 +2306,13 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
 
     // Note, here we are claculating the ECEF position of planets on the celestial sphere
     // these are NOT the actual positions in space
-    updatePlanetSprite(planet, sprite, date, observer, sphereRadius, daySkySprite = undefined) {
-        //  const celestialInfo = Astronomy.Search(planet, date, observer, 1);
-        const celestialInfo = Astronomy.Equator(planet, date, observer, false, true);
-        const illumination = Astronomy.Illumination(planet, date)
-        const ra = (celestialInfo.ra) / 24 * 2 * Math.PI;   // Right Ascension NOTE, in hours, so 0..24 -> 0..2π
-        const dec = radians(celestialInfo.dec); // Declination
-        const mag = illumination.mag; // Magnitude
-        const equatorial = raDec2Celestial(ra, dec, sphereRadius)
 
-
-        let color = "#FFFFFF";
-        if (this.planetSprites[planet] !== undefined) {
-            color = this.planetSprites[planet].color;
-        }
-
-
-        // Set the position and scale of the sprite
-        sprite.position.set(equatorial.x, equatorial.y, equatorial.z);
-        var scale = 10 * Math.pow(10, -0.4 * (mag - -5));
-        if (scale > 1) scale= 1;
-        if (planet === "Sun") scale = 1.9;
-        if (planet === "Moon") scale = 1.9;
-        
-        // Apply planet brightness scale to all planets except Sun and Moon
-        // Using logarithmic (magnitude-based) scaling for consistent brightness adjustment
-        if (planet !== "Sun" && planet !== "Moon") {
-            scale *= Math.pow(10, 0.4 * Math.log10(Sit.planetScale));
-        }
-
-        sprite.scale.set(scale, scale, 1);
-
-        // If daySkySprite is provided, update it with the same position and scale
-        if (daySkySprite) {
-            daySkySprite.position.set(equatorial.x, equatorial.y, equatorial.z);
-            daySkySprite.scale.set(scale, scale, 1);
-        }
-
-
-        this.updateArrow(planet, ra, dec, date, observer, sphereRadius)
-
-
-        if (planet === "Sun") {
-
-            // const ecef2 = equatorial.clone()
-            // ecef2.applyMatrix4(this.celestialSphere.matrix)
-
-            const gst = calculateGST(date);
-            const ecef = celestialToECEF(ra,dec,wgs84.RADIUS, gst)
-            // ecef for the sun will give us a vector from the cernter to the earth towards the Sun (which, for our purposes
-            // is considered to be infinitely far away
-            // We can use this to find the region where Starlink flares are expected
-
-            const eus = ECEF2EUS(ecef, radians(Sit.lat), radians(Sit.lon), wgs84.RADIUS)
-            const eusDir = ECEF2EUS(ecef, radians(Sit.lat), radians(Sit.lon), 0, true).normalize();
-            // DebugArrow("Sunarrow", eusDir, eus, 2000000,"#FFFFFF")
-
-             // if (Globals.sunLight) {
-             //     Globals.sunLight.position.copy(eusDir)
-             //
-             //
-             //     let toSun2 = getCelestialDirection("Sun", date);
-             //     assert(eusDir.distanceTo(toSun2) < 0.000001, "Sunlight direction mismatch")
-             //
-             // }
-
-             // sunDir is the direction vector FROM the sun. i.e. the direction sunlight is in.
-            this.toSun.copy(eusDir.clone().normalize())
-            this.fromSun.copy(this.toSun.clone().negate())
-
-            if (this.showFlareRegion) {
-
-                const camera = NodeMan.get("lookCamera").camera;
-
-                const cameraPos = camera.position;
-                const cameraEcef = EUSToECEF(cameraPos)
-                const LLA = ECEFToLLAVD_Sphere(cameraEcef)
-
-                const {az: az1, el: el1} = raDecToAzElRADIANS(ra, dec, radians(LLA.x), radians(LLA.y), getLST(date, radians(LLA.y)))
-                const {az, el} = raDecToAltAz(ra, dec, radians(LLA.x), radians(LLA.y), getJulianDate(date))
-                //console.log(`RA version ${planet}, ${degrees(az1)}, ${degrees(el1)}`)
-                //console.log(`raDecToAltAz  ${planet}, ${degrees(az)}, ${degrees(el)}`)
-
-                ///////////////////////////////////////////////////////////////////////
-                // attempt to find the glint position for radius r
-                // i.e. the position on the earth centered sphere, of radius r where
-                // a line from the camera to that point will reflect in the direction of
-                // the sun
-                // This is a non-trivial problem, related to Alhazen's problem, and does not
-                // easily submit to analytical approaches
-                // So here I use an iterative geometric approach
-                // first we simplify the search to two dimensions, as we know the point must lay in
-                // the plane specified by the origin O, the camera position P, and the sun vector v
-                // we could do it all in 2D, or just rotate about the axis perpendicular to this.
-                // 2D seems like it would be fastest, but just rotating maybe simpler
-                // So first calculate the axis perpendicular to OP and v
-                const P = this.camera.position;
-                const O = this.globe.center;
-                const OP = P.clone().sub(O)             // from origin to camera
-                const OPn = OP.clone().normalize();       // normalized for cross product
-                const v = this.toSun                    // toSun is already normalized
-                const axis = V3().crossVectors(v, OPn).normalize()   // axis to rotate the point on
-                const r = wgs84.RADIUS + 550000         // 550 km is approximate starlink altitude
-
-                // We are looking for a point X, at radisu R. Let's just start directly above P
-                // as that's nice and simple
-                const X0 = OPn.clone().multiplyScalar(r).add(O)
-
-                var bestX = X0
-                var bestGlintAngle = 100000; // large value so the first one primes it
-                var bestAngle = 0;
-
-                var start = 0
-                var end = 360
-                var step = 1
-                var attempts = 0
-                const maxAttempts = 6
-
-                do {
-                    //  console.log(`Trying Start = ${start}, end=${end}, step=${step},  bestAngle=${bestAngle}, bestGlintAngle=${bestGlintAngle}`)
-                    // try a simple iteration for now
-                    for (var angle = start; angle <= end; angle += step) {
-                        // the point needs rotating about the globe origin
-                        // (which is not 0,0,0, as we are in EUS)
-                        // so sub O, rotate about the axis, then add O back
-                        const X = X0.clone().sub(O).applyAxisAngle(axis, radians(angle)).add(O)
-
-                        // we now have a potential new position, so calculate the glint angle
-
-                        // only want to do vectors that point tawards the sun
-                        const camToSat = X.clone().sub(P)
-
-                        if (camToSat.dot(v) > 0) {
-
-                            const globeToSat = X.clone().sub(O).normalize()
-                            const reflected = camToSat.clone().reflect(globeToSat).normalize()
-                            const dot = reflected.dot(v)
-                            const glintAngle = (degrees(Math.acos(dot)))
-                            if ((glintAngle >= 0) && (glintAngle < bestGlintAngle)) {
-                                // check if it's obscured by the globe
-                                // this check is more expensive, so only do it
-                                // for potential "best" angles.
-                                const ray = new Ray(X, this.toSun)
-                                if (!intersectSphere2(ray, this.globe)) {
-                                    bestAngle = angle;
-                                    bestGlintAngle = glintAngle;
-                                    bestX = X.clone();
-                                }
-                            }
-                        }
-                    }
-
-
-                    start = bestAngle - step;
-                    end = bestAngle + step;
-                    step /= 10
-                    attempts++;
-
-                } while (bestGlintAngle > 0.0001 && attempts < maxAttempts)
-
-                DebugArrowAB("ToGlint", this.camera.position, bestX, "#FF0000", true, this.flareRegionGroup, 20, LAYER.MASK_HELPERS)
-                DebugArrow("ToSunFromGlint", this.toSun, bestX, 5000000, "#FF0000", true, this.flareRegionGroup, 20, LAYER.MASK_HELPERS)
-                DebugWireframeSphere("ToGlint", bestX, 500000, "#FF0000", 4, this.flareRegionGroup)
-
-            }
-
-        }
-        // add or update planetSprites - only create if it doesn't exist, otherwise just update
-        if (!this.planetSprites[planet]) {
-            this.planetSprites[planet] = {
-                ra: ra,
-                dec: dec,
-                mag: mag,
-                equatorial: equatorial,
-                sprite: sprite,
-                color: color,
-                daySkySprite: daySkySprite,
-            };
-        } else {
-            // Update existing entry
-            this.planetSprites[planet].ra = ra;
-            this.planetSprites[planet].dec = dec;
-            this.planetSprites[planet].mag = mag;
-            this.planetSprites[planet].equatorial = equatorial;
-            this.planetSprites[planet].color = color;
-            // Update daySkySprite if provided
-            if (daySkySprite) {
-                this.planetSprites[planet].daySkySprite = daySkySprite;
-            }
-        }
-
-    }
 
 
     updateArrow(planet, ra, dec, date, observer, sphereRadius) {
 
         // problem with initialization order, so we need to check if the planet sprite is defined
-        if (this.planetSprites[planet] === undefined) {
+        if (this.planets.planetSprites[planet] === undefined) {
             return;
         }
 
@@ -2623,7 +2332,17 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             const eusDir = ECEF2EUS(ecef, radians(Sit.lat), radians(Sit.lon), 0, true);
             eusDir.normalize();
             this[obName].updateDirection(eusDir)
+        }
 
+        // Handle Sun-specific calculations for flare region
+        if (planet === "Sun") {
+            const gst = calculateGST(date);
+            const ecef = celestialToECEF(ra, dec, wgs84.RADIUS, gst)
+            const eusDir = ECEF2EUS(ecef, radians(Sit.lat), radians(Sit.lon), 0, true).normalize();
+            
+            // Store sun direction vectors for flare calculations
+            this.toSun.copy(eusDir.clone().normalize())
+            this.fromSun.copy(this.toSun.clone().negate())
         }
     }
 
@@ -2633,8 +2352,16 @@ export class CNodeDisplayNightSky extends CNode3DGroup {
             this.starField.dispose();
         }
         
-        // Clean up planet sprites before disposing
-        this.removePlanets(this.celestialSphere, this.celestialDaySphere);
+        // Clean up celestial elements
+        if (this.celestialElements) {
+            this.celestialElements.dispose(this.celestialSphere);
+        }
+        
+        // Clean up planets resources
+        if (this.planets) {
+            this.planets.dispose();
+        }
+        
         super.dispose();
     }
 

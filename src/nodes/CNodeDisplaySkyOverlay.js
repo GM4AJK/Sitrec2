@@ -114,7 +114,7 @@ export class CNodeDisplaySkyOverlay extends CNodeViewUI {
 
             // Note this is overlay code, so we use this.nightSky.
             // CNodeDisplayNightSky would use this.planetSprites
-            for (const [name, planet] of Object.entries(this.nightSky.planetSprites)) {
+            for (const [name, planet] of Object.entries(this.nightSky.planets.planetSprites)) {
                 var pos = planet.equatorial.clone()
                 pos.applyMatrix4(this.nightSky.celestialSphere.matrix)
 
