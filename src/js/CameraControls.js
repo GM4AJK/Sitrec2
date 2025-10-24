@@ -173,10 +173,12 @@ class CameraMapControls {
 
 //		console.log("onConrxt")
 
-		if ( this.enabled === false ) return;
-
 		// Always prevent the default browser context menu
+		// This MUST be done for every contextmenu event, regardless of enabled state
 		event.preventDefault();
+		event.stopPropagation();
+		
+		if ( this.enabled === false ) return;
 		
 		// Don't show our context menu - we'll handle it in handleMouseUp instead
 		// This prevents the menu from showing on right-click down
@@ -602,6 +604,10 @@ class CameraMapControls {
 			
 			// If mouse didn't move much, show the context menu
 			if (distance <= this.contextMenuDragThreshold) {
+				// Prevent default context menu and stop propagation
+				event.preventDefault();
+				event.stopPropagation();
+				
 				if (this.view && this.view.onContextMenu) {
 					this.view.onContextMenu(event, event.clientX, event.clientY);
 				}

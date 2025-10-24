@@ -1719,6 +1719,10 @@ export class CNodeView3D extends CNodeViewCanvas {
     }
 
     onContextMenu(event, mouseX, mouseY) {
+        // Prevent the default browser context menu
+        event.preventDefault();
+        event.stopPropagation();
+        
         if (!this.mouseEnabled) return;
         
         // mouseX, mouseY are screen coordinates (event.clientX, event.clientY)

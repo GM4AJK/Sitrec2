@@ -1,8 +1,4 @@
-import {
-	EventDispatcher,
-	Quaternion,
-	Vector3
-} from "three";
+import {EventDispatcher, Quaternion, Vector3} from "three";
 
 const _changeEvent = { type: 'change' };
 
@@ -286,6 +282,7 @@ class FlyControls extends EventDispatcher {
 function contextmenu( event ) {
 
 	event.preventDefault();
+	event.stopPropagation();
 
 }
 

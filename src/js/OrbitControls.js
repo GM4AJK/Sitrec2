@@ -1,13 +1,4 @@
-
-import {
-	EventDispatcher,
-	MOUSE,
-	Quaternion,
-	Spherical,
-	TOUCH,
-	Vector2,
-	Vector3
-} from "three";
+import {EventDispatcher, MOUSE, Quaternion, Spherical, TOUCH, Vector2, Vector3} from "three";
 
 
 // This set of controls performs orbiting, dollying (zooming), and panning.
@@ -1177,9 +1168,12 @@ class OrbitControls extends EventDispatcher {
 
 		function onContextMenu( event ) {
 
-			if ( scope.enabled === false ) return;
-
+			// Always prevent the default browser context menu
+			// This MUST be done for every contextmenu event, regardless of enabled state
 			event.preventDefault();
+			event.stopPropagation();
+			
+			if ( scope.enabled === false ) return;
 
 		}
 

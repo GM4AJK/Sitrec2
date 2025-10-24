@@ -285,11 +285,12 @@ export class CNodeTrackingOverlay extends CNodeActiveOverlay {
 
         this.seperateVisibility = true; // don't propagate visibility to the overlaid view
 
-        document.addEventListener('contextmenu', function (event) {
-            if (event.ctrlKey) {
-                event.preventDefault();
-            }
-        });
+        // Remove the old conditional contextmenu handler to avoid interfering with custom context menu
+        // document.addEventListener('contextmenu', function (event) {
+        //     if (event.ctrlKey) {
+        //         event.preventDefault();
+        //     }
+        // });
 
         this.keyframes = [];
 

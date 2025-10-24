@@ -100,6 +100,15 @@ import {destroyGlobalProfiler, globalProfiler, initGlobalProfiler} from "./Visua
 import {fileSystemFetch} from "./fileSystemFetch";
 import {asyncOperationRegistry} from "./AsyncOperationRegistry";
 
+// CRITICAL: Global context menu blocker - ensures system context menu NEVER appears
+// Uses capture mode (true) so it catches events before other listeners
+// This is a safety net to catch any contextmenu events that escape individual element listeners
+document.addEventListener('contextmenu', (event) => {
+    // ALWAYS block the system context menu
+    // The custom context menu system will show our menu in CMouseHandler/CNodeView3D
+    event.preventDefault();
+    event.stopPropagation();
+}, { capture: true });
 
 console.log ("SITREC START - index.js after imports")
 

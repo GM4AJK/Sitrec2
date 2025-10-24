@@ -106,9 +106,12 @@ export class CMouseHandler {
 
 //		console.log("onConrxt")
 
-        if (this.enabled === false) return;
-
+        // CRITICAL: Prevent default BEFORE any enabled checks
+        // This ensures the browser context menu is ALWAYS blocked
         event.preventDefault();
+        event.stopPropagation();
+
+        if (this.enabled === false) return;
         
         this.newPosition(event);
         if (this.handlers.contextMenu) {
