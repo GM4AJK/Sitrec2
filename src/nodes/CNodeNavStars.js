@@ -1,3 +1,9 @@
+import {NodeMan} from "../Globals";
+import {ECEFToLLAVD_Sphere, EUSToECEF, getLST, raDecToAzElRADIANS, wgs84} from "../LLA-ECEF-ENU";
+//import {camera} from "../core/Globals.js";
+import {radians} from "../utils";
+import {getJulianDate, raDecToAltAz} from "../CelestialMath";
+
 
 
 export class CNodeNavStars {
@@ -5,9 +11,33 @@ export class CNodeNavStars {
         this.enabled = options.enabled ?? true;
     }
 
-
+    /**     
+     * Update the navigation stars if enabled.
+     * @param {Date} deltaTime 
+     */
     update(deltaTime) {
-        // Update navigation stars logic here
+        if (!this.enabled) return;
+        this.do_update(deltaTime);
+    }   
+
+    /**     
+     * do_update the navigation stars.
+     * @param {Date} deltaTime 
+     */
+    do_update(deltaTime) {
+        /**
+         * {CNodeCamera} camera
+         * {number} cameraPos
+         */
+        const camera = NodeMan.get("lookCamera").camera;
+        const cameraPos = camera.position;
+        const cameraEcef = EUSToECEF(cameraPos);
+        const LLA = ECEFToLLAVD_Sphere(cameraEcef);
+        CNodeNavStars.NAVIGATION_STARS.forEach(element => {
+            const ra = element.ra;
+            const dec = element.dec;
+            const {az, el} = raDecToAltAz(ra, dec, radians(LLA.x), radians(LLA.y), getJulianDate(deltaTime));
+        });
     }   
 
     /**
