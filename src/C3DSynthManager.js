@@ -89,6 +89,23 @@ export class C3DSynthManager extends CManager {
         const east = new Vector3(1, 0, 0).cross(localUp).normalize();
         const north = new Vector3().crossVectors(localUp, east).normalize();
         
+        // Apply saved rotation from last building (if any)
+        const savedRotation = Globals.settings?.lastBuildingRotation || 0;
+        if (savedRotation !== 0) {
+            // Rotate the north and east vectors by the saved rotation
+            // Note: Negated to match Three.js applyAxisAngle convention
+            const angle = -savedRotation;
+            const rotatedNorth = north.clone().multiplyScalar(Math.cos(angle))
+                                     .add(east.clone().multiplyScalar(Math.sin(angle)));
+            const rotatedEast = east.clone().multiplyScalar(Math.cos(angle))
+                                    .sub(north.clone().multiplyScalar(Math.sin(angle)));
+            
+            north.copy(rotatedNorth.normalize());
+            east.copy(rotatedEast.normalize());
+            
+            console.log(`Applied saved rotation to new building: ${(savedRotation * 180 / Math.PI).toFixed(1)}°`);
+        }
+        
         // Create a 15x15 meter footprint centered at the point
         const halfSize = 7.5; // Half of 15 meters
         const corners = [

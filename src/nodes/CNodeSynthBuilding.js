@@ -30,6 +30,7 @@ import {CustomManager, Globals, guiMenus, setRenderOne, Synth3DManager, UndoMana
 import {mouseInViewOnly} from "../ViewUtils";
 import {getPointBelow, pointAbove} from "../threeExt";
 import {EventManager} from "../CEventManager";
+import {saveSettings} from "../SettingsManager";
 
 export class CNodeSynthBuilding extends CNode3DGroup {
     constructor(v) {
@@ -95,6 +96,7 @@ export class CNodeSynthBuilding extends CNode3DGroup {
         this.dragLocalUp = null;
         this.hoveredHandle = null;  // Track which handle is being hovered
         this.rotationStartAngle = 0; // Initial angle when rotation starts
+        this.totalRotationThisSession = 0; // Accumulated rotation in radians during this rotation session
         this.buildingCentroid = null; // Center point for rotation
         
         // Raycaster for picking
@@ -1381,6 +1383,8 @@ export class CNodeSynthBuilding extends CNode3DGroup {
                     if (this.isOutsideHandleInPlane(cornerVertexIndex, intersectionPoint)) {
                         this.isRotating = true;
                         this.isDragging = false;
+                        // Start from the previously saved rotation (absolute angle from initial orientation)
+                        this.totalRotationThisSession = Globals.settings?.lastBuildingRotation || 0;
                         
                         // Calculate initial angle in ground plane around building centroid
                         const localUp = getLocalUpVector(this.buildingCentroid);
@@ -1484,6 +1488,9 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             
             // Calculate rotation delta
             const rotationDelta = currentAngle - this.rotationStartAngle;
+            
+            // Accumulate total rotation for this session
+            this.totalRotationThisSession += rotationDelta;
             
             // Rotate all vertices around the centroid
             this.vertices.forEach(vertex => {
@@ -1955,6 +1962,25 @@ export class CNodeSynthBuilding extends CNode3DGroup {
             
             // Clear the stored state
             this.stateBeforeDrag = null;
+        }
+        
+        // If rotation just ended, save the absolute rotation angle to settings
+        if (this.isRotating) {
+            // Normalize rotation to 0-2π range
+            let normalizedRotation = this.totalRotationThisSession % (2 * Math.PI);
+            if (normalizedRotation < 0) {
+                normalizedRotation += 2 * Math.PI;
+            }
+            
+            // Update settings with the absolute rotation angle (invisibly persisted)
+            Globals.settings.lastBuildingRotation = normalizedRotation;
+            
+            // Save settings asynchronously (don't await to avoid blocking UI)
+            saveSettings(Globals.settings).catch(err => {
+                console.warn("Failed to save building rotation to settings:", err);
+            });
+            
+            console.log(`Saved absolute building rotation: ${(normalizedRotation * 180 / Math.PI).toFixed(1)}°`);
         }
         
         this.isDragging = false;
